@@ -648,6 +648,7 @@ struct ScaleAggregate {
     language: String,
     profile_id: String,
     compile_wall_ms: f64,
+    compile_metric_artifacts: BTreeSet<String>,
     runtime_bytes: u64,
     deploy_gas: u64,
     execution_gas: u64,
@@ -670,13 +671,21 @@ fn render_scale_summary(rows: &[serde_json::Value]) -> String {
             family,
             parameter_value,
             language,
-            profile_id,
+            profile_id: profile_id.clone(),
             ..ScaleAggregate::default()
         });
         if str_at(row, "/status").as_deref() == Some("compile_error") {
             entry.compile_failures += 1;
         } else {
-            entry.compile_wall_ms += f64_at(row, "/compile/wall_ms_samples/0");
+            let compile_key = format!(
+                "{}\0{}\0{}",
+                str_at(row, "/benchmark_id").unwrap_or_default(),
+                str_at(row, "/implementation_id").unwrap_or_default(),
+                profile_id
+            );
+            if entry.compile_metric_artifacts.insert(compile_key) {
+                entry.compile_wall_ms += mean_f64_array_at(row, "/compile/wall_ms_samples");
+            }
             entry.runtime_bytes += u64_at(row, "/bytecode/runtime_bytes");
             entry.deploy_gas += u64_at(row, "/gas/deploy_gas");
             entry.execution_gas += u64_at(row, "/gas/execution_gas");
@@ -692,6 +701,7 @@ fn render_scale_summary(rows: &[serde_json::Value]) -> String {
     html.push_str("<table><thead><tr><th>Family</th><th>N</th><th>Language</th><th>Profile</th><th>Avg Compile ms</th><th>Avg Runtime Bytes</th><th>Avg Deploy Gas</th><th>Avg Runtime Gas</th><th>Run Samples</th><th>Compile Failures</th></tr></thead><tbody>");
     for aggregate in groups.values() {
         let samples = aggregate.metric_samples.max(1) as f64;
+        let compile_samples = aggregate.compile_metric_artifacts.len().max(1) as f64;
         html.push_str("<tr><td>");
         html.push_str(&escape(&aggregate.family));
         html.push_str("</td><td>");
@@ -701,7 +711,10 @@ fn render_scale_summary(rows: &[serde_json::Value]) -> String {
         html.push_str("</td><td>");
         html.push_str(&escape(&aggregate.profile_id));
         html.push_str("</td><td>");
-        html.push_str(&format!("{:.2}", aggregate.compile_wall_ms / samples));
+        html.push_str(&format!(
+            "{:.2}",
+            aggregate.compile_wall_ms / compile_samples
+        ));
         html.push_str("</td><td>");
         html.push_str(&((aggregate.runtime_bytes as f64 / samples).round() as u64).to_string());
         html.push_str("</td><td>");
@@ -766,10 +779,19 @@ fn u64_at(row: &serde_json::Value, pointer: &str) -> u64 {
         .unwrap_or(0)
 }
 
-fn f64_at(row: &serde_json::Value, pointer: &str) -> f64 {
-    row.pointer(pointer)
-        .and_then(|value| value.as_f64())
-        .unwrap_or(0.0)
+fn mean_f64_array_at(row: &serde_json::Value, pointer: &str) -> f64 {
+    let Some(values) = row.pointer(pointer).and_then(|value| value.as_array()) else {
+        return 0.0;
+    };
+    let mut total = 0.0;
+    let mut count = 0.0;
+    for value in values {
+        if let Some(sample) = value.as_f64() {
+            total += sample;
+            count += 1.0;
+        }
+    }
+    if count == 0.0 { 0.0 } else { total / count }
 }
 
 fn joined_array_at(row: &serde_json::Value, pointer: &str) -> String {

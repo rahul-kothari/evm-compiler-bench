@@ -1,13 +1,15 @@
 use crate::{
     models::{
-        Benchmark, BytecodeMetrics, CompileFailure, CompileMetrics, CompileSet, CompiledArtifact,
-        CompilerProfile, Language, MetadataMode, Toolchain, Toolchains,
+        Benchmark, BytecodeMetrics, CommandStats, CompileFailure, CompileMetrics, CompileSet,
+        CompiledArtifact, CompilerProfile, Language, MetadataMode, Toolchain, Toolchains,
     },
     util::{byte_len, require_success, run_measured, sha256_bytes, stripped_cbor_len},
 };
 use anyhow::{Context, Result, bail};
 use serde_json::json;
-use std::{fs, path::Path, process::Command};
+use std::{env, fs, path::Path, process::Command};
+
+const DEFAULT_COMPILE_SAMPLES: usize = 3;
 
 pub fn compile_all(
     root: &Path,
@@ -120,14 +122,17 @@ fn compile_solidity(
             }
         }
     });
-    let measured = require_success(
-        run_measured(
-            Command::new(&solc.binary_path).arg("--standard-json"),
-            Some(serde_json::to_string(&input)?.as_bytes()),
-        )?,
+    let input = serde_json::to_vec(&input)?;
+    let measured = repeat_compile_samples(
+        || {
+            let mut command = Command::new(&solc.binary_path);
+            command.arg("--standard-json");
+            command
+        },
+        Some(&input),
         "solc --standard-json",
     )?;
-    let output: serde_json::Value = serde_json::from_slice(&measured.output.stdout)?;
+    let output: serde_json::Value = serde_json::from_slice(&measured.output_stdout)?;
     reject_solc_errors(&output)?;
     let contract = output
         .pointer(&format!(
@@ -157,9 +162,9 @@ fn compile_solidity(
         abi,
         creation,
         runtime,
-        measured.stats.wall_ms,
-        measured.stats.cpu_ms,
-        measured.stats.peak_rss_kib,
+        measured.wall_ms_samples,
+        measured.cpu_ms_samples,
+        measured.peak_rss_kib,
         solidity_compiler_settings(profile, evm_version),
     )
 }
@@ -221,20 +226,26 @@ fn compile_vyper(
 ) -> Result<CompiledArtifact> {
     let source_path = root.join(&benchmark.vyper_path);
     let optimizer_mode = profile.optimizer_mode.as_deref().unwrap_or("gas");
-    let mut command = Command::new(&vyper.binary_path);
-    command
-        .arg("-f")
-        .arg("abi,bytecode,bytecode_runtime")
-        .arg("--evm-version")
-        .arg(evm_version)
-        .arg("-O")
-        .arg(optimizer_mode);
-    if profile.metadata_mode == MetadataMode::Off {
-        command.arg("--no-bytecode-metadata");
-    }
-    command.arg(&source_path);
-    let measured = require_success(run_measured(&mut command, None)?, "vyper compile")?;
-    let stdout = String::from_utf8(measured.output.stdout)?;
+    let measured = repeat_compile_samples(
+        || {
+            let mut command = Command::new(&vyper.binary_path);
+            command
+                .arg("-f")
+                .arg("abi,bytecode,bytecode_runtime")
+                .arg("--evm-version")
+                .arg(evm_version)
+                .arg("-O")
+                .arg(optimizer_mode);
+            if profile.metadata_mode == MetadataMode::Off {
+                command.arg("--no-bytecode-metadata");
+            }
+            command.arg(&source_path);
+            command
+        },
+        None,
+        "vyper compile",
+    )?;
+    let stdout = String::from_utf8(measured.output_stdout)?;
     let mut lines = stdout.lines();
     let abi_line = lines.next().context("missing vyper abi output")?;
     let creation = lines
@@ -254,9 +265,9 @@ fn compile_vyper(
         abi,
         creation,
         runtime,
-        measured.stats.wall_ms,
-        measured.stats.cpu_ms,
-        measured.stats.peak_rss_kib,
+        measured.wall_ms_samples,
+        measured.cpu_ms_samples,
+        measured.peak_rss_kib,
         vyper_compiler_settings(profile, evm_version),
     )
 }
@@ -270,8 +281,8 @@ fn artifact(
     abi: serde_json::Value,
     creation_bytecode: String,
     runtime_bytecode: String,
-    wall_ms: f64,
-    cpu_ms: f64,
+    wall_ms_samples: Vec<f64>,
+    cpu_ms_samples: Vec<f64>,
     peak_rss_kib: u64,
     compiler_settings: serde_json::Value,
 ) -> Result<CompiledArtifact> {
@@ -301,12 +312,63 @@ fn artifact(
         creation_bytecode,
         runtime_bytecode,
         compile: CompileMetrics {
-            wall_ms_samples: vec![wall_ms],
-            cpu_ms_samples: vec![cpu_ms],
+            wall_ms_samples,
+            cpu_ms_samples,
             peak_rss_kib,
         },
         bytecode,
     })
+}
+
+struct CompileSamples {
+    output_stdout: Vec<u8>,
+    wall_ms_samples: Vec<f64>,
+    cpu_ms_samples: Vec<f64>,
+    peak_rss_kib: u64,
+}
+
+fn repeat_compile_samples<F>(
+    mut command_factory: F,
+    stdin: Option<&[u8]>,
+    label: &str,
+) -> Result<CompileSamples>
+where
+    F: FnMut() -> Command,
+{
+    let sample_count = compile_sample_count();
+    let mut output_stdout = Vec::new();
+    let mut wall_ms_samples = Vec::with_capacity(sample_count);
+    let mut cpu_ms_samples = Vec::with_capacity(sample_count);
+    let mut peak_rss_kib = 0;
+    for sample_index in 0..sample_count {
+        let mut command = command_factory();
+        let measured = require_success(run_measured(&mut command, stdin)?, label)?;
+        let CommandStats {
+            wall_ms,
+            cpu_ms,
+            peak_rss_kib: sample_peak_rss_kib,
+        } = measured.stats;
+        wall_ms_samples.push(wall_ms);
+        cpu_ms_samples.push(cpu_ms);
+        peak_rss_kib = peak_rss_kib.max(sample_peak_rss_kib);
+        if sample_index + 1 == sample_count {
+            output_stdout = measured.output.stdout;
+        }
+    }
+    Ok(CompileSamples {
+        output_stdout,
+        wall_ms_samples,
+        cpu_ms_samples,
+        peak_rss_kib,
+    })
+}
+
+fn compile_sample_count() -> usize {
+    env::var("EVM_BENCH_COMPILE_SAMPLES")
+        .ok()
+        .and_then(|value| value.parse::<usize>().ok())
+        .filter(|value| (1..=20).contains(value))
+        .unwrap_or(DEFAULT_COMPILE_SAMPLES)
 }
 
 fn compile_failure(

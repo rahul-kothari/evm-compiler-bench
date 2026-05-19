@@ -2,9 +2,10 @@ use anyhow::{Context, Result, bail};
 use sha2::{Digest, Sha256};
 use std::{
     fs,
-    io::Write,
+    io::{Read, Write},
     path::Path,
     process::{Command, Output, Stdio},
+    thread,
     time::Instant,
 };
 
@@ -16,13 +17,16 @@ pub struct MeasuredOutput {
 }
 
 pub fn run_measured(command: &mut Command, stdin: Option<&[u8]>) -> Result<MeasuredOutput> {
-    let before = usage();
     let start = Instant::now();
     if stdin.is_some() {
         command.stdin(Stdio::piped());
     }
     command.stdout(Stdio::piped()).stderr(Stdio::piped());
     let mut child = command.spawn().context("spawning command")?;
+    let stdout = child.stdout.take().context("opening child stdout")?;
+    let stderr = child.stderr.take().context("opening child stderr")?;
+    let stdout_handle = read_pipe(stdout);
+    let stderr_handle = read_pipe(stderr);
     if let Some(input) = stdin {
         child
             .stdin
@@ -30,16 +34,36 @@ pub fn run_measured(command: &mut Command, stdin: Option<&[u8]>) -> Result<Measu
             .context("opening child stdin")?
             .write_all(input)?;
     }
-    let output = child.wait_with_output()?;
+    drop(child.stdin.take());
+    let (status, usage) = wait_with_usage(child)?;
+    let output = Output {
+        status,
+        stdout: stdout_handle
+            .join()
+            .map_err(|_| anyhow::anyhow!("stdout reader thread panicked"))??,
+        stderr: stderr_handle
+            .join()
+            .map_err(|_| anyhow::anyhow!("stderr reader thread panicked"))??,
+    };
     let wall_ms = start.elapsed().as_secs_f64() * 1000.0;
-    let after = usage();
     Ok(MeasuredOutput {
         output,
         stats: CommandStats {
             wall_ms,
-            cpu_ms: (after.cpu_ms - before.cpu_ms).max(0.0),
-            peak_rss_kib: after.peak_rss_kib.max(before.peak_rss_kib),
+            cpu_ms: usage.cpu_ms,
+            peak_rss_kib: usage.peak_rss_kib,
         },
+    })
+}
+
+fn read_pipe<R>(mut pipe: R) -> thread::JoinHandle<Result<Vec<u8>>>
+where
+    R: Read + Send + 'static,
+{
+    thread::spawn(move || {
+        let mut bytes = Vec::new();
+        pipe.read_to_end(&mut bytes)?;
+        Ok(bytes)
     })
 }
 
@@ -92,7 +116,6 @@ pub fn ensure_dir(path: &Path) -> Result<()> {
     fs::create_dir_all(path).with_context(|| format!("creating {}", path.display()))
 }
 
-#[cfg(unix)]
 #[derive(Clone, Copy)]
 struct Usage {
     cpu_ms: f64,
@@ -100,15 +123,23 @@ struct Usage {
 }
 
 #[cfg(unix)]
-fn usage() -> Usage {
-    use libc::{RUSAGE_CHILDREN, getrusage, rusage};
+fn wait_with_usage(mut child: std::process::Child) -> Result<(std::process::ExitStatus, Usage)> {
+    use libc::{rusage, wait4};
+    use std::os::unix::process::ExitStatusExt;
+
+    let pid = child.id() as libc::pid_t;
+    let mut status = 0;
     let mut raw = std::mem::MaybeUninit::<rusage>::zeroed();
-    let ok = unsafe { getrusage(RUSAGE_CHILDREN, raw.as_mut_ptr()) };
-    if ok != 0 {
-        return Usage {
-            cpu_ms: 0.0,
-            peak_rss_kib: 0,
-        };
+    let waited = unsafe { wait4(pid, &mut status, 0, raw.as_mut_ptr()) };
+    if waited < 0 {
+        let output = child.wait()?;
+        return Ok((
+            output,
+            Usage {
+                cpu_ms: 0.0,
+                peak_rss_kib: 0,
+            },
+        ));
     }
     let raw = unsafe { raw.assume_init() };
     let user_ms = raw.ru_utime.tv_sec as f64 * 1000.0 + raw.ru_utime.tv_usec as f64 / 1000.0;
@@ -118,23 +149,23 @@ fn usage() -> Usage {
     {
         peak /= 1024;
     }
-    Usage {
-        cpu_ms: user_ms + sys_ms,
-        peak_rss_kib: peak,
-    }
+    Ok((
+        ExitStatusExt::from_raw(status),
+        Usage {
+            cpu_ms: user_ms + sys_ms,
+            peak_rss_kib: peak,
+        },
+    ))
 }
 
 #[cfg(not(unix))]
-#[derive(Clone, Copy)]
-struct Usage {
-    cpu_ms: f64,
-    peak_rss_kib: u64,
-}
-
-#[cfg(not(unix))]
-fn usage() -> Usage {
-    Usage {
-        cpu_ms: 0.0,
-        peak_rss_kib: 0,
-    }
+fn wait_with_usage(child: std::process::Child) -> Result<(std::process::ExitStatus, Usage)> {
+    let output = child.wait_with_output()?;
+    Ok((
+        output.status,
+        Usage {
+            cpu_ms: 0.0,
+            peak_rss_kib: 0,
+        },
+    ))
 }
