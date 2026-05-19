@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "EVM Compiler Bench scenario file",
+  "type": "object",
+  "required": ["benchmark_id", "scenarios"],
+  "properties": {
+    "benchmark_id": { "type": "string" },
+    "scenarios": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["name", "measured", "expect_success"],
+        "properties": {
+          "name": { "type": "string" },
+          "state_access_profile": { "enum": ["cold", "warm", "mixed"] },
+          "setup": { "$ref": "#/$defs/calls" },
+          "warmup": { "$ref": "#/$defs/calls" },
+          "measured": { "$ref": "#/$defs/call" },
+          "expect_success": { "type": "boolean" },
+          "observers": { "$ref": "#/$defs/calls" }
+        }
+      }
+    },
+    "randomized": {
+      "type": "object",
+      "required": ["seed"],
+      "properties": {
+        "seed": { "type": "integer", "minimum": 0 },
+        "iterations": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "properties": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name"],
+        "properties": {
+          "name": { "type": "string" },
+          "seed": { "type": "integer", "minimum": 0 }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "call": {
+      "type": "object",
+      "required": ["data"],
+      "properties": {
+        "data": { "type": "string" },
+        "sender": { "type": "string" },
+        "value": { "type": "string" }
+      }
+    },
+    "calls": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/call" }
+    }
+  }
+}

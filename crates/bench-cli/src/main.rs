@@ -6,6 +6,7 @@ mod runner;
 mod scenarios;
 mod toolchain;
 mod util;
+mod validate;
 
 use anyhow::Result;
 use clap::{Parser, Subcommand};
@@ -15,6 +16,7 @@ use runner::run_foundry;
 use scenarios::load_scenario_catalog;
 use std::path::PathBuf;
 use toolchain::resolve_toolchains;
+use validate::validate_all;
 
 #[derive(Debug, Parser)]
 #[command(author, version, about)]
@@ -51,6 +53,8 @@ enum Command {
         #[arg(long)]
         offline: bool,
     },
+    /// Validate checked-in specs, scenarios, and generated outputs if present.
+    Validate,
 }
 
 fn main() -> Result<()> {
@@ -121,6 +125,13 @@ fn main() -> Result<()> {
                 toolchains.vyper.version,
                 toolchains.vyper.binary_path.display(),
                 toolchains.vyper.binary_sha256
+            );
+        }
+        Command::Validate => {
+            let summary = validate_all(&root)?;
+            println!(
+                "validated {} specs, {} scenario files, {} result rows",
+                summary.specs, summary.scenario_files, summary.result_rows
             );
         }
     }

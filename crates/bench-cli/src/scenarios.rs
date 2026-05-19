@@ -18,6 +18,9 @@ impl ScenarioCatalog {
             .with_context(|| format!("missing scenario file for {benchmark_id}"))
     }
 
+    pub fn iter(&self) -> impl Iterator<Item = &ScenarioFile> {
+        self.files.values()
+    }
 }
 
 pub fn load_scenario_catalog(root: &Path, only_benchmark: Option<&str>) -> Result<ScenarioCatalog> {
@@ -55,10 +58,18 @@ pub fn validate_scenario_file(file: &ScenarioFile, path: &Path) -> Result<()> {
             bail!("{} has scenario with empty name", path.display());
         }
         if names.insert(scenario.name.clone(), ()).is_some() {
-            bail!("{} has duplicate scenario {}", path.display(), scenario.name);
+            bail!(
+                "{} has duplicate scenario {}",
+                path.display(),
+                scenario.name
+            );
         }
         if scenario.measured.data.trim().is_empty() {
-            bail!("{} scenario {} has empty measured call", path.display(), scenario.name);
+            bail!(
+                "{} scenario {} has empty measured call",
+                path.display(),
+                scenario.name
+            );
         }
         for (label, calls) in [
             ("setup", &scenario.setup),
@@ -89,7 +100,10 @@ fn yaml_files(dir: &Path) -> Result<Vec<PathBuf>> {
     for entry in fs::read_dir(dir).with_context(|| format!("reading {}", dir.display()))? {
         let entry = entry?;
         let path = entry.path();
-        if matches!(path.extension().and_then(|ext| ext.to_str()), Some("yaml" | "yml")) {
+        if matches!(
+            path.extension().and_then(|ext| ext.to_str()),
+            Some("yaml" | "yml")
+        ) {
             files.push(path);
         }
     }
