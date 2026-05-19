@@ -467,16 +467,51 @@ Acceptance criteria:
 * Compile failures are reported as first-class normalized rows and do not prevent running successfully compiled profiles.
 * The HTML report includes scale-study views and compile-failure visibility for all seven families.
 
-### Milestone 4: native-large-project suite
+### Milestone 4: real-derived equivalent contracts
 
-Add real projects, but label them explicitly as native/non-equivalent. Report:
+Add larger benchmark contracts derived from credible production contracts, but port them into the latest Solidity and Vyper compiler targets used by this harness. Treat the upstream contracts as source material and preserve the important public behavior, storage/accounting shape, and hot paths, rather than trying to compile the exact historical production source. Every benchmark must have a Solidity implementation and a Vyper implementation, with the opposing-language version handwritten.
 
-* clean build time
-* incremental build time
-* peak memory
-* artifact size
-* bytecode size distribution
-* number of contracts near EIP-170 limit
+Keep rows machine-readable about provenance:
+
+* `suite: real_derived`
+* upstream project, repository URL, commit, source contract path, and source language
+* port language and port version
+* equivalence scope describing which production behaviors are included and which are intentionally out of scope
+* scenario coverage for the selected hot paths
+
+Locked first candidates:
+
+* `uniswap_v2_pair`: start from Uniswap V2 Pair. Update the Solidity source shape to the latest Solidity compiler target and handwrite the Vyper counterpart. Cover initialization, mint, burn, swap, sync, cumulative price update behavior, and fee-on/off paths where practical.
+* `curve_stableswap_2coin`: start from Curve Stableswap NG or an equivalent Curve 2-coin pool source. Update the Vyper source shape to the latest Vyper compiler target and handwrite the Solidity counterpart. Cover add/remove liquidity, exchange, invariant math, fees, admin-free pool behavior, and ERC20 share accounting.
+* `yearn_vault_v3`: start from Yearn V3 `VaultV3.vy` in `yearn/yearn-vaults-v3`. Update the Vyper source shape to the latest Vyper compiler target and handwrite the Solidity counterpart. Cover initialization, ERC4626-style deposit/mint/withdraw/redeem flows, share price/accounting views, permit, strategy addition, debt updates, profit/loss reporting through lightweight mock strategies, withdrawal queues, shutdown, and revert-path coverage for limits and permissions.
+
+Yearn evaluation result, checked on 2026-05-19: choose Yearn V3 Vault over Yearn V2 Vault and V3 TokenizedStrategy. V3 Vault is the best fit because it is current, Vyper-native, large enough to stress bytecode and compile behavior, self-contained apart from ERC20 and small strategy/accountant interfaces, and directly exercises vault share accounting. V2 Vault remains useful historical source material, but its repository is archived and the V3 vault gives a cleaner current target. TokenizedStrategy is current and Solidity-native, but it benchmarks strategy proxy/delegatecall plumbing and BaseStrategy integration more than a standalone vault core; keep it as a possible later `yearn_tokenized_strategy` benchmark after the first real-derived vault lands.
+
+Yearn evaluation notes:
+
+| Candidate | Source evidence | Decision |
+| --- | --- | --- |
+| Yearn V3 Vault | `yearn/yearn-vaults-v3`, active repo, `contracts/VaultV3.vy`, default branch commit `104a2b233bc6d43ba40720d68355b04d2dc31795`, source blob `97f4a60dd2485c6400f994e46b442d0424716eed`, 80,546 bytes, `# @version 0.3.7` | Use for `yearn_vault_v3` |
+| Yearn V2 Vault | `yearn/yearn-vaults-v2`, archived repo, `contracts/Vault.vy`, default branch commit `97ca1b2e4fcf20f4be0ff456dabd020bfeb6697b`, source blob `1159912c093b12cf8d758f71d2d568cda69990af`, 68,942 bytes, `# @version 0.3.3` | Defer as historical source material |
+| Yearn V3 TokenizedStrategy | `yearn/tokenized-strategy`, active repo, `src/TokenizedStrategy.sol`, default branch commit `9ef68041bd034353d39941e487499d111c3d3901`, source blob `61e5354d575e59ccac3a3c34793ebc841d66a8e4`, 76,675 bytes, `pragma solidity >=0.8.18` | Defer; better as a future strategy/proxy benchmark than the first vault benchmark |
+
+Explicitly defer Aave for now. Aave V3 Pool remains interesting, but its dependency surface, library graph, oracle/configurator setup, and reserve-token interactions make it a later milestone after the real-derived AMM/vault suite proves out.
+
+Report:
+
+* compile success/failure and compile metrics across existing compiler profiles
+* runtime bytecode size, stripped size, deploy gas, and EIP-170/EIP-3860 margins
+* deterministic runtime gas for each scoped production-like scenario
+* differential correctness status between the Solidity and Vyper ports
+* HTML views grouped by upstream project, contract, source language, port language, scenario, and compiler profile
+
+Acceptance criteria:
+
+* `cargo run -- validate` checks real-derived metadata, provenance fields, scenario coverage, and output rows.
+* `cargo run -- run` compiles fixed, scale, and real-derived suites, runs deterministic scenarios and differential checks, and emits normalized JSON, run manifest, raw gas JSONL, and HTML.
+* The Uniswap V2 Pair, Curve 2-coin Stableswap, and Yearn V3 Vault benchmarks are implemented in both Solidity and Vyper.
+* The Yearn V3 Vault benchmark records the evaluation rationale, upstream repository, source commit, source path, source language, port language, equivalence scope, and mock strategy/accountant assumptions.
+* Normalized rows and the run manifest make source provenance and equivalence scope explicit enough that downstream analysis cannot confuse these ports with unmodified production deployments.
 
 ### Milestone 5: experimental tier
 
