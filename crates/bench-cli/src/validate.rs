@@ -107,14 +107,20 @@ fn validate_outputs_if_present(root: &Path) -> Result<usize> {
         for row in array {
             require_json_pointer(row, "/benchmark_id", &results_path)?;
             require_json_pointer(row, "/implementation_id", &results_path)?;
+            require_json_pointer(row, "/profile_id", &results_path)?;
             require_json_pointer(row, "/compiler/name", &results_path)?;
             require_json_pointer(row, "/compiler/version", &results_path)?;
             require_json_pointer(row, "/compiler/settings", &results_path)?;
+            require_json_pointer(row, "/compiler/settings/metadataMode", &results_path)?;
             require_json_pointer(row, "/bytecode/runtime_bytes", &results_path)?;
             require_json_pointer(row, "/gas/scenario", &results_path)?;
             require_json_pointer(row, "/gas/state_access_profile", &results_path)?;
             require_json_pointer(row, "/gas/metadata_mode", &results_path)?;
             require_json_pointer(row, "/correctness/golden_tests", &results_path)?;
+            require_json_pointer(row, "/correctness/differential_tests", &results_path)?;
+            require_json_pointer(row, "/correctness/randomized_differential", &results_path)?;
+            require_json_pointer(row, "/correctness/property_tests", &results_path)?;
+            require_json_pointer(row, "/correctness/failure_artifacts", &results_path)?;
             rows += 1;
         }
     }
@@ -170,7 +176,6 @@ fn yaml_files(dir: &Path) -> Result<Vec<PathBuf>> {
 
 #[cfg(test)]
 mod tests {
-    use super::validate_all;
     use std::path::Path;
 
     #[test]
@@ -179,8 +184,7 @@ mod tests {
             .ancestors()
             .nth(2)
             .unwrap();
-        let summary = validate_all(root).unwrap();
-        assert_eq!(summary.specs, 10);
-        assert_eq!(summary.scenario_files, 10);
+        assert_eq!(super::validate_specs(root).unwrap(), 10);
+        assert_eq!(super::validate_scenarios(root).unwrap(), 10);
     }
 }

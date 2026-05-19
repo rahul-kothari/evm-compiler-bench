@@ -1,5 +1,6 @@
 use crate::{
-    models::{CompileSet, CompiledArtifact, GasRecord, Toolchains},
+    models::{CompileSet, CompiledArtifact, GasRecord, ScenarioFile, Toolchains},
+    scenarios::ScenarioCatalog,
     util::ensure_dir,
 };
 use anyhow::{Context, Result};
@@ -22,13 +23,14 @@ pub fn write_outputs(
     toolchains: &Toolchains,
     compiled: &CompileSet,
     gas_records: &[GasRecord],
+    scenarios: &ScenarioCatalog,
 ) -> Result<ReportPaths> {
     let normalized_dir = root.join("results/normalized");
     let reports_dir = root.join("results/reports");
     ensure_dir(&normalized_dir)?;
     ensure_dir(&reports_dir)?;
 
-    let rows = normalized_rows(compiled, gas_records)?;
+    let rows = normalized_rows(root, compiled, gas_records, scenarios)?;
     let normalized_results = normalized_dir.join("results.json");
     fs::write(&normalized_results, serde_json::to_string_pretty(&rows)?)?;
 
@@ -55,8 +57,10 @@ pub fn write_outputs(
 }
 
 fn normalized_rows(
+    root: &Path,
     compiled: &CompileSet,
     gas_records: &[GasRecord],
+    scenarios: &ScenarioCatalog,
 ) -> Result<Vec<serde_json::Value>> {
     let mut artifacts = BTreeMap::new();
     for artifact in &compiled.artifacts {
@@ -70,6 +74,7 @@ fn normalized_rows(
         );
     }
 
+    let failure_links = failure_links_by_benchmark(root)?;
     let mut rows = Vec::with_capacity(gas_records.len());
     for gas in gas_records {
         let artifact = artifacts
@@ -84,7 +89,12 @@ fn normalized_rows(
                     gas.benchmark_id, gas.implementation_id, gas.profile_id
                 )
             })?;
-        rows.push(row(artifact, gas));
+        let scenario_file = scenarios.get(&artifact.benchmark_id)?;
+        let failures = failure_links
+            .get(&artifact.benchmark_id)
+            .cloned()
+            .unwrap_or_default();
+        rows.push(row(artifact, gas, scenario_file, failures));
     }
     rows.sort_by(|a, b| {
         let left = sort_key(a);
@@ -94,7 +104,22 @@ fn normalized_rows(
     Ok(rows)
 }
 
-fn row(artifact: &CompiledArtifact, gas: &GasRecord) -> serde_json::Value {
+fn row(
+    artifact: &CompiledArtifact,
+    gas: &GasRecord,
+    scenario_file: &ScenarioFile,
+    failure_links: Vec<String>,
+) -> serde_json::Value {
+    let randomized_status = correctness_status(
+        scenario_file.randomized.is_some(),
+        &failure_links,
+        "randomized_differential",
+    );
+    let property_status = correctness_status(
+        !scenario_file.properties.is_empty(),
+        &failure_links,
+        "property",
+    );
     json!({
         "benchmark_id": gas.benchmark_id,
         "implementation_id": gas.implementation_id,
@@ -123,9 +148,55 @@ fn row(artifact: &CompiledArtifact, gas: &GasRecord) -> serde_json::Value {
         "correctness": {
             "golden_tests": "pass",
             "differential_tests": "pass",
+            "randomized_differential": randomized_status,
+            "property_tests": property_status,
+            "properties": scenario_file.properties.iter().map(|property| property.name.clone()).collect::<Vec<_>>(),
+            "failure_artifacts": failure_links,
             "success": gas.success
         }
     })
+}
+
+fn correctness_status(applicable: bool, failure_links: &[String], kind: &str) -> &'static str {
+    if !applicable {
+        return "not_applicable";
+    }
+    if failure_links.iter().any(|link| link.contains(kind)) {
+        "fail"
+    } else {
+        "pass"
+    }
+}
+
+fn failure_links_by_benchmark(root: &Path) -> Result<BTreeMap<String, Vec<String>>> {
+    let mut links: BTreeMap<String, Vec<String>> = BTreeMap::new();
+    let failure_dir = root.join("results/raw/failures");
+    if !failure_dir.exists() {
+        return Ok(links);
+    }
+    for entry in fs::read_dir(&failure_dir)? {
+        let path = entry?.path();
+        if !path.is_file() {
+            continue;
+        }
+        let Some(file_name) = path.file_name().and_then(|name| name.to_str()) else {
+            continue;
+        };
+        let Some((benchmark_id, _)) = file_name
+            .split_once("-randomized_differential-")
+            .or_else(|| file_name.split_once("-property-"))
+        else {
+            continue;
+        };
+        links
+            .entry(benchmark_id.to_string())
+            .or_default()
+            .push(format!("results/raw/failures/{file_name}"));
+    }
+    for benchmark_links in links.values_mut() {
+        benchmark_links.sort();
+    }
+    Ok(links)
 }
 
 fn render_html(rows: &[serde_json::Value], toolchains: &Toolchains) -> Result<String> {
@@ -204,7 +275,7 @@ fn render_html(rows: &[serde_json::Value], toolchains: &Toolchains) -> Result<St
     }
     html.push_str("</svg></div>");
 
-    html.push_str("<h2>Result Rows</h2><table><thead><tr><th>Benchmark</th><th>Implementation</th><th>Compiler</th><th>Profile</th><th>Metadata</th><th>State</th><th>Scenario</th><th>Runtime Bytes</th><th>Deploy Gas</th><th>Execution Gas</th></tr></thead><tbody>");
+    html.push_str("<h2>Result Rows</h2><table><thead><tr><th>Benchmark</th><th>Implementation</th><th>Compiler</th><th>Profile</th><th>Metadata</th><th>State</th><th>Scenario</th><th>Randomized</th><th>Property</th><th>Failures</th><th>Runtime Bytes</th><th>Deploy Gas</th><th>Execution Gas</th></tr></thead><tbody>");
     for row in rows {
         html.push_str("<tr><td>");
         html.push_str(&escape(&str_at(row, "/benchmark_id").unwrap_or_default()));
@@ -230,6 +301,16 @@ fn render_html(rows: &[serde_json::Value], toolchains: &Toolchains) -> Result<St
         ));
         html.push_str("</td><td>");
         html.push_str(&escape(&str_at(row, "/gas/scenario").unwrap_or_default()));
+        html.push_str("</td><td>");
+        html.push_str(&escape(
+            &str_at(row, "/correctness/randomized_differential").unwrap_or_default(),
+        ));
+        html.push_str("</td><td>");
+        html.push_str(&escape(
+            &str_at(row, "/correctness/property_tests").unwrap_or_default(),
+        ));
+        html.push_str("</td><td>");
+        html.push_str(&failure_links_html(row));
         html.push_str("</td><td>");
         html.push_str(&u64_at(row, "/bytecode/runtime_bytes").to_string());
         html.push_str("</td><td>");
@@ -280,6 +361,27 @@ fn u64_at(row: &serde_json::Value, pointer: &str) -> u64 {
     row.pointer(pointer)
         .and_then(|value| value.as_u64())
         .unwrap_or(0)
+}
+
+fn failure_links_html(row: &serde_json::Value) -> String {
+    let Some(links) = row
+        .pointer("/correctness/failure_artifacts")
+        .and_then(|value| value.as_array())
+    else {
+        return String::new();
+    };
+    if links.is_empty() {
+        return String::new();
+    }
+    links
+        .iter()
+        .filter_map(|link| link.as_str())
+        .map(|link| {
+            let escaped = escape(link);
+            format!("<a href=\"../../{escaped}\">{escaped}</a>")
+        })
+        .collect::<Vec<_>>()
+        .join("<br>")
 }
 
 fn card(label: &str, value: usize) -> String {

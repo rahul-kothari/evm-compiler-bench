@@ -29,7 +29,7 @@ struct Cli {
 
 #[derive(Debug, Subcommand)]
 enum Command {
-    /// Run the full milestone-1 benchmark pipeline.
+    /// Run the benchmark pipeline.
     Run {
         /// Do not download missing compilers.
         #[arg(long)]
@@ -66,7 +66,7 @@ fn main() -> Result<()> {
             let compiled = compile_all(&root, &toolchains, benchmark.as_deref())?;
             let scenarios = load_scenario_catalog(&root, benchmark.as_deref())?;
             let gas_records = run_foundry(&root, &toolchains.evm_version, &compiled, &scenarios)?;
-            let report = write_outputs(&root, &toolchains, &compiled, &gas_records)?;
+            let report = write_outputs(&root, &toolchains, &compiled, &gas_records, &scenarios)?;
             println!("foundry produced {} gas records", gas_records.len());
             println!(
                 "normalized results: {}",

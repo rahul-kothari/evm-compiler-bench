@@ -16,12 +16,67 @@
   "properties": {
     "benchmark_id": { "type": "string" },
     "implementation_id": { "type": "string" },
+    "profile_id": { "type": "string" },
     "language": { "enum": ["solidity", "vyper"] },
-    "compiler": { "type": "object" },
+    "compiler": {
+      "type": "object",
+      "required": ["name", "version", "settings"],
+      "properties": {
+        "name": { "type": "string" },
+        "version": { "type": "string" },
+        "settings": {
+          "type": "object",
+          "required": ["evmVersion", "metadataMode"],
+          "properties": {
+            "evmVersion": { "type": "string" },
+            "metadataMode": { "enum": ["on", "off"] }
+          }
+        }
+      }
+    },
     "source_hash": { "type": "string" },
     "compile": { "type": "object" },
     "bytecode": { "type": "object" },
-    "gas": { "type": "object" },
-    "correctness": { "type": "object" }
+    "gas": {
+      "type": "object",
+      "required": [
+        "scenario",
+        "evm_fork",
+        "state_access_profile",
+        "metadata_mode",
+        "deploy_gas",
+        "execution_gas",
+        "total_tx_gas"
+      ],
+      "properties": {
+        "scenario": { "type": "string" },
+        "evm_fork": { "type": "string" },
+        "state_access_profile": { "enum": ["cold", "warm", "mixed"] },
+        "metadata_mode": { "enum": ["on", "off"] },
+        "deploy_gas": { "type": "integer", "minimum": 0 },
+        "execution_gas": { "type": "integer", "minimum": 0 },
+        "total_tx_gas": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "correctness": {
+      "type": "object",
+      "required": [
+        "golden_tests",
+        "differential_tests",
+        "randomized_differential",
+        "property_tests",
+        "failure_artifacts",
+        "success"
+      ],
+      "properties": {
+        "golden_tests": { "enum": ["pass", "fail"] },
+        "differential_tests": { "enum": ["pass", "fail"] },
+        "randomized_differential": { "enum": ["pass", "fail", "not_applicable"] },
+        "property_tests": { "enum": ["pass", "fail", "not_applicable"] },
+        "properties": { "type": "array", "items": { "type": "string" } },
+        "failure_artifacts": { "type": "array", "items": { "type": "string" } },
+        "success": { "type": "boolean" }
+      }
+    }
   }
 }
