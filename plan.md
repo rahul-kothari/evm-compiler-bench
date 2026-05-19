@@ -395,16 +395,34 @@ Implement:
 * Metrics: compile wall time, peak RSS, creation/runtime size, deploy gas, runtime gas for 5–10 scenarios per contract
 * Outputs: raw machine-readable results, normalized JSON, run manifests, and a static HTML report
 
-### Milestone 2: correctness hardening
+### Milestone 2: correctness and result hardening
 
-Add:
+Keep the language/compiler matrix fixed: Solidity and Vyper only, latest stable compiler versions only, latest mutually supported EVM target only. Do not add Yul, Huff, Fe, historical compiler trends, or native-large-project benchmarks in this milestone.
 
-* Property tests
-* Fuzz seed storage
-* Metadata-on and metadata-off bytecode modes
-* Cold/warm state scenarios
-* Broader randomized differential runner
-* JSON schema hardening for result/report compatibility
+Implement:
+
+* YAML scenario files under `benches/scenarios/*.yaml`. The Rust harness should load hand-authored scenario data from YAML instead of hard-coding benchmark semantics in `catalog.rs`.
+* Scenario schema coverage for setup calls, measured calls, observers, expected success/revert, sender/value overrides, deterministic seeds, and `state_access_profile: cold | warm | mixed`.
+* Strict validation for benchmark specs, scenario files, result rows, and run manifests. Add a `validate` command or equivalent test path that fails on malformed inputs or outputs.
+* Metadata-on and metadata-off compilation variants. Results must expose metadata mode explicitly and keep creation/runtime bytes, stripped bytes, and deployment gas comparable without ambiguity.
+* Explicit cold/warm scenario execution. Warm scenarios must perform declared warmup calls before measurement and report `state_access_profile` in raw and normalized outputs.
+* Seeded randomized differential checks for suitable benchmarks: `counter`, `erc20_minimal`, `vault_deposit_withdraw`, `ownable_pausable`, and `amm_pair_subset`.
+* Failing-seed capture. Persist the RNG seed and call trace for any randomized differential or property failure under `results/raw/failures/` or a similarly clear regression-fixture path.
+* Property checks in the generated Foundry harness:
+  * ERC20 sampled holder balances do not exceed total supply and total supply stays fixed.
+  * Vault sampled balances match total shares after supported deposit/withdraw flows.
+  * AMM reserves and liquidity stay coherent after mint, burn, swap, and sync flows.
+  * Ownable/Pausable authorization and paused-state invariants hold after state transitions.
+  * Counter state matches the accumulated model after randomized increments/adds/resets.
+* Report updates for metadata mode, state access profile, randomized differential status, property status, and failing-seed links when failures exist.
+
+Acceptance criteria:
+
+* `cargo test` validates schemas and unit-level parsing/model logic.
+* `cargo run -- validate` passes on all checked-in specs and scenarios.
+* `cargo run -- run` compiles all profiles, runs golden scenarios, deterministic differential checks, seeded randomized differential checks, and property checks.
+* The run produces raw JSONL, normalized JSON, run manifest, and static HTML with metadata mode and cold/warm profile fields populated.
+* A failing randomized/property test can be reproduced from the saved seed and trace.
 
 ### Milestone 3: scale studies
 
