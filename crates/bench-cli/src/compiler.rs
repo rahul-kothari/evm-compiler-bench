@@ -236,6 +236,7 @@ fn artifact(
         profile_id: profile.id.clone(),
         compiler: toolchain.clone(),
         compiler_settings,
+        metadata_mode: "on".to_string(),
         source_path: source_path.to_path_buf(),
         source_hash: sha256_bytes(&source),
         abi,

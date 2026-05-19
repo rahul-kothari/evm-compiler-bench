@@ -1,0 +1,42 @@
+benchmark_id: counter
+randomized:
+  seed: 12648430
+  iterations: 16
+properties:
+  - name: counter_model_matches
+    seed: 12648430
+scenarios:
+  - name: read_initial
+    state_access_profile: cold
+    measured:
+      data: 'abi.encodeWithSignature("value()")'
+    expect_success: true
+    observers:
+      - data: 'abi.encodeWithSignature("value()")'
+  - name: increment
+    state_access_profile: cold
+    measured:
+      data: 'abi.encodeWithSignature("increment()")'
+    expect_success: true
+    observers:
+      - data: 'abi.encodeWithSignature("value()")'
+  - name: add_five
+    state_access_profile: warm
+    warmup:
+      - data: 'abi.encodeWithSignature("value()")'
+    measured:
+      data: 'abi.encodeWithSignature("add(uint256)", uint256(5))'
+    expect_success: true
+    observers:
+      - data: 'abi.encodeWithSignature("value()")'
+  - name: reset
+    state_access_profile: mixed
+    setup:
+      - data: 'abi.encodeWithSignature("add(uint256)", uint256(11))'
+    warmup:
+      - data: 'abi.encodeWithSignature("value()")'
+    measured:
+      data: 'abi.encodeWithSignature("reset()")'
+    expect_success: true
+    observers:
+      - data: 'abi.encodeWithSignature("value()")'

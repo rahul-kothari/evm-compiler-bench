@@ -1,0 +1,36 @@
+benchmark_id: vault_deposit_withdraw
+randomized:
+  seed: 3735928559
+  iterations: 16
+properties:
+  - name: vault_share_accounting
+    seed: 3735928559
+scenarios:
+  - name: deposit_one_eth
+    state_access_profile: cold
+    measured:
+      data: 'abi.encodeWithSignature("deposit()")'
+      value: 1 ether
+    expect_success: true
+    observers: &vault_observers
+      - data: 'abi.encodeWithSignature("balanceOf(address)", address(this))'
+      - data: 'abi.encodeWithSignature("totalShares()")'
+      - data: 'abi.encodeWithSignature("totalAssets()")'
+  - name: withdraw_half_eth
+    state_access_profile: mixed
+    setup:
+      - data: 'abi.encodeWithSignature("deposit()")'
+        value: 1 ether
+    warmup:
+      - data: 'abi.encodeWithSignature("balanceOf(address)", address(this))'
+      - data: 'abi.encodeWithSignature("totalShares()")'
+    measured:
+      data: 'abi.encodeWithSignature("withdraw(uint256)", uint256(0.5 ether))'
+    expect_success: true
+    observers: *vault_observers
+  - name: withdraw_revert
+    state_access_profile: cold
+    measured:
+      data: 'abi.encodeWithSignature("withdraw(uint256)", uint256(1 ether))'
+    expect_success: false
+    observers: *vault_observers

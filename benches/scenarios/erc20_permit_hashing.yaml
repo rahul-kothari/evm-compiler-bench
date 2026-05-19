@@ -1,0 +1,27 @@
+benchmark_id: erc20_permit_hashing
+scenarios:
+  - name: hash_static
+    state_access_profile: cold
+    measured:
+      data: 'abi.encodeWithSignature("hashPermit(address,address,uint256,uint256,uint256)", address(this), BOB, uint256(1), uint256(0), uint256(999))'
+    expect_success: true
+    observers:
+      - data: 'abi.encodeWithSignature("nonces(address)", address(this))'
+  - name: use_nonce
+    state_access_profile: cold
+    measured:
+      data: 'abi.encodeWithSignature("useNonce(address)", address(this))'
+    expect_success: true
+    observers:
+      - data: 'abi.encodeWithSignature("nonces(address)", address(this))'
+  - name: hash_current_after_nonce
+    state_access_profile: warm
+    setup:
+      - data: 'abi.encodeWithSignature("useNonce(address)", address(this))'
+    warmup:
+      - data: 'abi.encodeWithSignature("nonces(address)", address(this))'
+    measured:
+      data: 'abi.encodeWithSignature("hashCurrentPermit(address,address,uint256,uint256)", address(this), BOB, uint256(1), uint256(999))'
+    expect_success: true
+    observers:
+      - data: 'abi.encodeWithSignature("nonces(address)", address(this))'

@@ -1,0 +1,32 @@
+benchmark_id: scaling_dispatch_N
+scenarios:
+  - name: first_selector
+    state_access_profile: cold
+    measured:
+      data: 'abi.encodeWithSignature("f00()")'
+    expect_success: true
+    observers:
+      - data: 'abi.encodeWithSignature("sink()")'
+  - name: middle_selector
+    state_access_profile: cold
+    measured:
+      data: 'abi.encodeWithSignature("f15()")'
+    expect_success: true
+    observers:
+      - data: 'abi.encodeWithSignature("sink()")'
+  - name: last_selector
+    state_access_profile: cold
+    measured:
+      data: 'abi.encodeWithSignature("f31()")'
+    expect_success: true
+    observers:
+      - data: 'abi.encodeWithSignature("sink()")'
+  - name: set_sink
+    state_access_profile: warm
+    warmup:
+      - data: 'abi.encodeWithSignature("sink()")'
+    measured:
+      data: 'abi.encodeWithSignature("setSink(uint256)", uint256(99))'
+    expect_success: true
+    observers:
+      - data: 'abi.encodeWithSignature("sink()")'

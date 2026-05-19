@@ -113,10 +113,11 @@ fn row(artifact: &CompiledArtifact, gas: &GasRecord) -> serde_json::Value {
         "gas": {
             "scenario": gas.scenario,
             "evm_fork": artifact.compiler_settings.get("evmVersion").cloned().unwrap_or_else(|| json!("unknown")),
+            "state_access_profile": gas.state_access_profile.as_str(),
+            "metadata_mode": gas.metadata_mode,
             "deploy_gas": gas.deploy_gas,
             "execution_gas": gas.execution_gas,
             "total_tx_gas": gas.execution_gas + 21_000,
-            "state_access_profile": "deterministic"
         },
         "correctness": {
             "golden_tests": "pass",

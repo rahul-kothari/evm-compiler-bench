@@ -1,0 +1,48 @@
+benchmark_id: amm_pair_subset
+randomized:
+  seed: 464384013
+  iterations: 16
+properties:
+  - name: amm_reserve_liquidity_coherence
+    seed: 464384013
+scenarios:
+  - name: mint
+    state_access_profile: cold
+    measured:
+      data: 'abi.encodeWithSignature("mint(uint256,uint256)", uint256(100), uint256(200))'
+    expect_success: true
+    observers: &amm_observers
+      - data: 'abi.encodeWithSignature("reserve0()")'
+      - data: 'abi.encodeWithSignature("reserve1()")'
+      - data: 'abi.encodeWithSignature("totalLiquidity()")'
+      - data: 'abi.encodeWithSignature("getReserves()")'
+  - name: burn
+    state_access_profile: mixed
+    setup:
+      - data: 'abi.encodeWithSignature("mint(uint256,uint256)", uint256(100), uint256(200))'
+    warmup:
+      - data: 'abi.encodeWithSignature("getReserves()")'
+      - data: 'abi.encodeWithSignature("totalLiquidity()")'
+    measured:
+      data: 'abi.encodeWithSignature("burn(uint256)", uint256(150))'
+    expect_success: true
+    observers: *amm_observers
+  - name: swap
+    state_access_profile: mixed
+    setup:
+      - data: 'abi.encodeWithSignature("mint(uint256,uint256)", uint256(100), uint256(200))'
+    warmup:
+      - data: 'abi.encodeWithSignature("reserve0()")'
+      - data: 'abi.encodeWithSignature("reserve1()")'
+    measured:
+      data: 'abi.encodeWithSignature("swap(uint256,uint256,uint256,uint256)", uint256(10), uint256(0), uint256(0), uint256(20))'
+    expect_success: true
+    observers: *amm_observers
+  - name: sync
+    state_access_profile: warm
+    warmup:
+      - data: 'abi.encodeWithSignature("getReserves()")'
+    measured:
+      data: 'abi.encodeWithSignature("sync(uint256,uint256)", uint256(5), uint256(9))'
+    expect_success: true
+    observers: *amm_observers

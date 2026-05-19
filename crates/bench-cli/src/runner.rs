@@ -1,6 +1,6 @@
 use crate::{
-    catalog::scenarios,
     models::{CallSpec, CompileSet, CompiledArtifact, GasRecord, Scenario},
+    scenarios::ScenarioCatalog,
     util::{ensure_dir, require_success, run_measured},
 };
 use anyhow::{Context, Result, bail};
@@ -14,10 +14,11 @@ pub fn run_foundry(
     root: &Path,
     evm_version: &str,
     compiled: &CompileSet,
+    scenarios: &ScenarioCatalog,
 ) -> Result<Vec<GasRecord>> {
     ensure_dir(&root.join("results/raw"))?;
     let test_path = root.join("foundry/test/GeneratedBench.t.sol");
-    fs::write(&test_path, generate_test(compiled)?)?;
+    fs::write(&test_path, generate_test(compiled, scenarios)?)?;
     require_success(
         run_measured(
             Command::new("forge")
@@ -49,7 +50,7 @@ pub fn run_foundry(
     Ok(records)
 }
 
-fn generate_test(compiled: &CompileSet) -> Result<String> {
+fn generate_test(compiled: &CompileSet, scenarios: &ScenarioCatalog) -> Result<String> {
     if compiled.artifacts.is_empty() {
         bail!("no compiled artifacts for Foundry runner");
     }
@@ -90,14 +91,14 @@ fn generate_test(compiled: &CompileSet) -> Result<String> {
     }
 
     for (index, artifact) in compiled.artifacts.iter().enumerate() {
-        for scenario in scenarios(&artifact.benchmark_id) {
+        for scenario in &scenarios.get(&artifact.benchmark_id)?.scenarios {
             write_gas_test(&mut out, index, artifact, &scenario);
         }
     }
 
     let baselines = baseline_pairs(&compiled.artifacts);
     for (benchmark_id, (solidity_idx, vyper_idx)) in baselines {
-        for scenario in scenarios(&benchmark_id) {
+        for scenario in &scenarios.get(&benchmark_id)?.scenarios {
             write_diff_test(
                 &mut out,
                 &benchmark_id,
@@ -168,6 +169,8 @@ fn helper_functions() -> &'static str {
         string memory implementationId,
         string memory profileId,
         string memory scenario,
+        string memory stateAccessProfile,
+        string memory metadataMode,
         uint256 deployGas,
         uint256 executionGas,
         bool success
@@ -179,6 +182,8 @@ fn helper_functions() -> &'static str {
                 "\",\"implementation_id\":\"", implementationId,
                 "\",\"profile_id\":\"", profileId,
                 "\",\"scenario\":\"", scenario,
+                "\",\"state_access_profile\":\"", stateAccessProfile,
+                "\",\"metadata_mode\":\"", metadataMode,
                 "\",\"deploy_gas\":", vm.toString(deployGas),
                 ",\"execution_gas\":", vm.toString(executionGas),
                 ",\"success\":", _bool(success),
@@ -217,12 +222,13 @@ fn write_gas_test(
     out.push_str("    function testGas_");
     out.push_str(&index.to_string());
     out.push('_');
-    out.push_str(&sanitize(scenario.name));
+    out.push_str(&sanitize(&scenario.name));
     out.push_str("() public {\n");
     out.push_str("        (address target, uint256 deployGas) = deployArtifact");
     out.push_str(&index.to_string());
     out.push_str("();\n");
     write_setup(out, "target", &scenario.setup);
+    write_setup(out, "target", &scenario.warmup);
     out.push_str("        (bool ok,, uint256 executionGas) = _run(target, ");
     write_call_args(out, &scenario.measured);
     out.push_str(");\n");
@@ -240,7 +246,11 @@ fn write_gas_test(
     out.push_str("\", \"");
     out.push_str(&artifact.profile_id);
     out.push_str("\", \"");
-    out.push_str(scenario.name);
+    out.push_str(&scenario.name);
+    out.push_str("\", \"");
+    out.push_str(scenario.state_access_profile.as_str());
+    out.push_str("\", \"");
+    out.push_str(&artifact.metadata_mode);
     out.push_str("\", deployGas, executionGas, ok);\n");
     out.push_str("    }\n\n");
 }
@@ -257,7 +267,7 @@ fn write_diff_test(
     out.push_str("    function testDiff_");
     out.push_str(&sanitize(benchmark_id));
     out.push('_');
-    out.push_str(&sanitize(scenario.name));
+    out.push_str(&sanitize(&scenario.name));
     out.push_str("() public {\n");
     out.push_str("        (address solTarget,) = deployArtifact");
     out.push_str(&solidity_idx.to_string());
@@ -267,6 +277,8 @@ fn write_diff_test(
     out.push_str("();\n");
     write_setup(out, "solTarget", &scenario.setup);
     write_setup(out, "vyperTarget", &scenario.setup);
+    write_setup(out, "solTarget", &scenario.warmup);
+    write_setup(out, "vyperTarget", &scenario.warmup);
     out.push_str("        (bool solOk, bytes32 solHash,) = _run(solTarget, ");
     write_call_args(out, &scenario.measured);
     out.push_str(");\n");
@@ -287,11 +299,11 @@ fn write_diff_test(
     out.push_str("        require(_observeAll_");
     out.push_str(&sanitize(&solidity.benchmark_id));
     out.push('_');
-    out.push_str(&sanitize(scenario.name));
+    out.push_str(&sanitize(&scenario.name));
     out.push_str("(solTarget) == _observeAll_");
     out.push_str(&sanitize(&vyper.benchmark_id));
     out.push('_');
-    out.push_str(&sanitize(scenario.name));
+    out.push_str(&sanitize(&scenario.name));
     out.push_str("(vyperTarget), \"differential observer mismatch\");\n");
     out.push_str("    }\n\n");
     write_observer_function(out, &solidity.benchmark_id, scenario);
@@ -301,7 +313,7 @@ fn write_observer_function(out: &mut String, benchmark_id: &str, scenario: &Scen
     let name = format!(
         "_observeAll_{}_{}",
         sanitize(benchmark_id),
-        sanitize(scenario.name)
+        sanitize(&scenario.name)
     );
     if out.contains(&format!("function {name}(")) {
         return;
@@ -312,7 +324,7 @@ fn write_observer_function(out: &mut String, benchmark_id: &str, scenario: &Scen
     out.push_str("        observed = bytes32(0);\n");
     for observer in &scenario.observers {
         out.push_str("        observed = keccak256(abi.encode(observed, _observe(target, ");
-        out.push_str(observer.data);
+        out.push_str(&observer.data);
         out.push_str(")));\n");
     }
     out.push_str("    }\n\n");
@@ -329,11 +341,11 @@ fn write_setup(out: &mut String, target: &str, setup: &[CallSpec]) {
 }
 
 fn write_call_args(out: &mut String, call: &CallSpec) {
-    out.push_str(call.data);
+    out.push_str(&call.data);
     out.push_str(", ");
-    out.push_str(call.value);
+    out.push_str(&call.value);
     out.push_str(", ");
-    out.push_str(call.sender.unwrap_or("address(this)"));
+    out.push_str(call.sender.as_deref().unwrap_or("address(this)"));
 }
 
 fn baseline_pairs(artifacts: &[CompiledArtifact]) -> BTreeMap<String, (usize, usize)> {

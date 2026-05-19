@@ -1,0 +1,42 @@
+benchmark_id: ownable_pausable
+randomized:
+  seed: 4207849484
+  iterations: 16
+properties:
+  - name: ownable_authorization
+    seed: 4207849484
+scenarios:
+  - name: guarded_increment
+    state_access_profile: cold
+    measured:
+      data: 'abi.encodeWithSignature("guardedIncrement()")'
+    expect_success: true
+    observers: &ownable_observers
+      - data: 'abi.encodeWithSignature("owner()")'
+      - data: 'abi.encodeWithSignature("paused()")'
+      - data: 'abi.encodeWithSignature("counter()")'
+  - name: pause
+    state_access_profile: warm
+    warmup:
+      - data: 'abi.encodeWithSignature("paused()")'
+    measured:
+      data: 'abi.encodeWithSignature("pause()")'
+    expect_success: true
+    observers: *ownable_observers
+  - name: paused_revert
+    state_access_profile: mixed
+    setup:
+      - data: 'abi.encodeWithSignature("pause()")'
+    warmup:
+      - data: 'abi.encodeWithSignature("paused()")'
+    measured:
+      data: 'abi.encodeWithSignature("guardedIncrement()")'
+    expect_success: false
+    observers: *ownable_observers
+  - name: non_owner_pause_revert
+    state_access_profile: cold
+    measured:
+      data: 'abi.encodeWithSignature("pause()")'
+      sender: BOB
+    expect_success: false
+    observers: *ownable_observers

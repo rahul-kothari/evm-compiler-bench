@@ -25,46 +25,69 @@ pub struct Benchmark {
     pub vyper_path: &'static str,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct CallSpec {
-    pub sender: Option<&'static str>,
-    pub value: &'static str,
-    pub data: &'static str,
+    pub data: String,
+    #[serde(default)]
+    pub sender: Option<String>,
+    #[serde(default = "default_call_value")]
+    pub value: String,
 }
 
-impl CallSpec {
-    pub const fn new(data: &'static str) -> Self {
-        Self {
-            sender: None,
-            value: "0",
-            data,
-        }
-    }
+#[derive(Debug, Clone, Copy, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum StateAccessProfile {
+    Cold,
+    Warm,
+    Mixed,
+}
 
-    pub const fn sender(data: &'static str, sender: &'static str) -> Self {
-        Self {
-            sender: Some(sender),
-            value: "0",
-            data,
-        }
-    }
-
-    pub const fn value(data: &'static str, value: &'static str) -> Self {
-        Self {
-            sender: None,
-            value,
-            data,
+impl StateAccessProfile {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Cold => "cold",
+            Self::Warm => "warm",
+            Self::Mixed => "mixed",
         }
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Scenario {
-    pub name: &'static str,
+    pub name: String,
+    #[serde(default = "default_state_access_profile")]
+    pub state_access_profile: StateAccessProfile,
+    #[serde(default)]
     pub setup: Vec<CallSpec>,
+    #[serde(default)]
+    pub warmup: Vec<CallSpec>,
     pub measured: CallSpec,
     pub expect_success: bool,
+    #[serde(default)]
     pub observers: Vec<CallSpec>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct RandomizedSpec {
+    pub seed: u64,
+    #[serde(default = "default_random_iterations")]
+    pub iterations: usize,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct PropertySpec {
+    pub name: String,
+    pub seed: Option<u64>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct ScenarioFile {
+    pub benchmark_id: String,
+    pub scenarios: Vec<Scenario>,
+    #[serde(default)]
+    pub randomized: Option<RandomizedSpec>,
+    #[serde(default)]
+    pub properties: Vec<PropertySpec>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -136,6 +159,7 @@ pub struct CompiledArtifact {
     pub profile_id: String,
     pub compiler: Toolchain,
     pub compiler_settings: serde_json::Value,
+    pub metadata_mode: String,
     pub source_path: PathBuf,
     pub source_hash: String,
     pub abi: serde_json::Value,
@@ -157,7 +181,21 @@ pub struct GasRecord {
     pub implementation_id: String,
     pub profile_id: String,
     pub scenario: String,
+    pub state_access_profile: StateAccessProfile,
+    pub metadata_mode: String,
     pub deploy_gas: u64,
     pub execution_gas: u64,
     pub success: bool,
+}
+
+fn default_call_value() -> String {
+    "0".to_string()
+}
+
+fn default_state_access_profile() -> StateAccessProfile {
+    StateAccessProfile::Cold
+}
+
+fn default_random_iterations() -> usize {
+    16
 }

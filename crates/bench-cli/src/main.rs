@@ -3,6 +3,7 @@ mod compiler;
 mod models;
 mod report;
 mod runner;
+mod scenarios;
 mod toolchain;
 mod util;
 
@@ -11,6 +12,7 @@ use clap::{Parser, Subcommand};
 use compiler::compile_all;
 use report::write_outputs;
 use runner::run_foundry;
+use scenarios::load_scenario_catalog;
 use std::path::PathBuf;
 use toolchain::resolve_toolchains;
 
@@ -58,7 +60,8 @@ fn main() -> Result<()> {
         Command::Run { offline, benchmark } => {
             let toolchains = resolve_toolchains(&root, offline)?;
             let compiled = compile_all(&root, &toolchains, benchmark.as_deref())?;
-            let gas_records = run_foundry(&root, &toolchains.evm_version, &compiled)?;
+            let scenarios = load_scenario_catalog(&root, benchmark.as_deref())?;
+            let gas_records = run_foundry(&root, &toolchains.evm_version, &compiled, &scenarios)?;
             let report = write_outputs(&root, &toolchains, &compiled, &gas_records)?;
             println!("foundry produced {} gas records", gas_records.len());
             println!(

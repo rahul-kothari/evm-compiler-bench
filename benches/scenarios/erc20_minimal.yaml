@@ -1,0 +1,56 @@
+benchmark_id: erc20_minimal
+randomized:
+  seed: 11259375
+  iterations: 16
+properties:
+  - name: erc20_supply_conservation
+    seed: 11259375
+scenarios:
+  - name: total_supply
+    state_access_profile: cold
+    measured:
+      data: 'abi.encodeWithSignature("totalSupply()")'
+    expect_success: true
+    observers: &erc20_observers
+      - data: 'abi.encodeWithSignature("totalSupply()")'
+      - data: 'abi.encodeWithSignature("balanceOf(address)", address(this))'
+      - data: 'abi.encodeWithSignature("balanceOf(address)", BOB)'
+      - data: 'abi.encodeWithSignature("balanceOf(address)", CAROL)'
+      - data: 'abi.encodeWithSignature("allowance(address,address)", address(this), BOB)'
+  - name: transfer_success
+    state_access_profile: warm
+    warmup:
+      - data: 'abi.encodeWithSignature("balanceOf(address)", address(this))'
+      - data: 'abi.encodeWithSignature("balanceOf(address)", BOB)'
+    measured:
+      data: 'abi.encodeWithSignature("transfer(address,uint256)", BOB, uint256(10 ether))'
+    expect_success: true
+    observers: *erc20_observers
+  - name: approve_success
+    state_access_profile: warm
+    warmup:
+      - data: 'abi.encodeWithSignature("allowance(address,address)", address(this), BOB)'
+    measured:
+      data: 'abi.encodeWithSignature("approve(address,uint256)", BOB, uint256(7 ether))'
+    expect_success: true
+    observers: *erc20_observers
+  - name: transfer_from_success
+    state_access_profile: mixed
+    setup:
+      - data: 'abi.encodeWithSignature("approve(address,uint256)", BOB, uint256(9 ether))'
+    warmup:
+      - data: 'abi.encodeWithSignature("allowance(address,address)", address(this), BOB)'
+      - data: 'abi.encodeWithSignature("balanceOf(address)", address(this))'
+      - data: 'abi.encodeWithSignature("balanceOf(address)", CAROL)'
+    measured:
+      data: 'abi.encodeWithSignature("transferFrom(address,address,uint256)", address(this), CAROL, uint256(5 ether))'
+      sender: BOB
+    expect_success: true
+    observers: *erc20_observers
+  - name: transfer_revert
+    state_access_profile: cold
+    measured:
+      data: 'abi.encodeWithSignature("transfer(address,uint256)", CAROL, uint256(1 ether))'
+      sender: BOB
+    expect_success: false
+    observers: *erc20_observers

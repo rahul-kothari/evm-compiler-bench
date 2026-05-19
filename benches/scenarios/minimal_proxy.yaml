@@ -1,0 +1,27 @@
+benchmark_id: minimal_proxy
+scenarios:
+  - name: proxy_code_hash
+    state_access_profile: cold
+    measured:
+      data: 'abi.encodeWithSignature("proxyCodeHash(address)", IMPLEMENTATION)'
+    expect_success: true
+  - name: clone_and_set
+    state_access_profile: warm
+    warmup:
+      - data: 'abi.encodeWithSignature("cloneValue(bytes32)", SALT)'
+    measured:
+      data: 'abi.encodeWithSignature("cloneAndSet(address,bytes32,uint256)", IMPLEMENTATION, SALT, uint256(42))'
+    expect_success: true
+    observers:
+      - data: 'abi.encodeWithSignature("cloneValue(bytes32)", SALT)'
+  - name: clone_value
+    state_access_profile: mixed
+    setup:
+      - data: 'abi.encodeWithSignature("cloneAndSet(address,bytes32,uint256)", IMPLEMENTATION, SALT, uint256(42))'
+    warmup:
+      - data: 'abi.encodeWithSignature("cloneValue(bytes32)", SALT)'
+    measured:
+      data: 'abi.encodeWithSignature("cloneValue(bytes32)", SALT)'
+    expect_success: true
+    observers:
+      - data: 'abi.encodeWithSignature("cloneValue(bytes32)", SALT)'
