@@ -1,0 +1,31 @@
+id: amm_pair_subset
+title: AMM Pair Subset
+abi:
+  - "reserve0() returns (uint256)"
+  - "reserve1() returns (uint256)"
+  - "totalLiquidity() returns (uint256)"
+  - "mint(uint256,uint256) returns (uint256)"
+  - "burn(uint256) returns (uint256,uint256)"
+  - "swap(uint256,uint256,uint256,uint256) returns (bool)"
+  - "sync(uint256,uint256) returns (bool)"
+  - "getReserves() returns (uint256,uint256)"
+semantics:
+  - "Tracks reserves and simplified additive liquidity."
+  - "Burn returns proportional reserve amounts."
+  - "Swap updates reserves with explicit in/out amounts."
+scenarios:
+  - name: mint
+    call: "mint(100, 200)"
+    expected: "adds reserves and liquidity"
+  - name: burn
+    call: "burn(150) after mint"
+    expected: "removes proportional reserves"
+  - name: swap
+    call: "swap(10, 0, 0, 20) after mint"
+    expected: "updates reserves"
+  - name: sync
+    call: "sync(5, 9)"
+    expected: "sets reserves"
+implementations:
+  solidity: "benches/implementations/amm_pair_subset/solidity/AmmPairSubset.sol"
+  vyper: "benches/implementations/amm_pair_subset/vyper/AmmPairSubset.vy"

@@ -1,0 +1,20 @@
+id: merkle_verifier
+title: Merkle Verifier
+abi:
+  - "verify(bytes32[],bytes32,bytes32) returns (bool)"
+  - "hashPair(bytes32,bytes32) returns (bytes32)"
+semantics:
+  - "Hashes sorted pairs while walking a Merkle proof."
+scenarios:
+  - name: hash_pair
+    call: "hashPair(left, right)"
+    expected: "returns sorted-pair hash"
+  - name: verify_single
+    call: "verify([sibling], root, leaf)"
+    expected: "returns true"
+  - name: verify_empty_false
+    call: "verify([], root, leaf)"
+    expected: "returns false"
+implementations:
+  solidity: "benches/implementations/merkle_verifier/solidity/MerkleVerifier.sol"
+  vyper: "benches/implementations/merkle_verifier/vyper/MerkleVerifier.vy"

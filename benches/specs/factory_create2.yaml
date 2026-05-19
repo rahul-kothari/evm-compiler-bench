@@ -1,0 +1,23 @@
+id: factory_create2
+title: Factory CREATE2
+abi:
+  - "initCodeHash(uint256) returns (bytes32)"
+  - "computeAddress(bytes32,uint256) returns (address)"
+  - "deploy(bytes32,uint256) returns (uint256)"
+  - "deployedValue(bytes32) returns (uint256)"
+semantics:
+  - "Exercises CREATE2-style address hashing and salt-indexed deployment bookkeeping."
+  - "The MVP normalizes deployment to observable salt/value state so Solidity and Vyper remain equivalent."
+scenarios:
+  - name: init_code_hash
+    call: "initCodeHash(7)"
+    expected: "returns bytes32"
+  - name: deploy_value
+    call: "deploy(salt, 7)"
+    expected: "stores salt value"
+  - name: deployed_value
+    call: "deployedValue(salt)"
+    expected: "returns stored value"
+implementations:
+  solidity: "benches/implementations/factory_create2/solidity/FactoryCreate2.sol"
+  vyper: "benches/implementations/factory_create2/vyper/FactoryCreate2.vy"

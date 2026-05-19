@@ -1,0 +1,30 @@
+id: ownable_pausable
+title: Ownable Pausable
+abi:
+  - "owner() returns (address)"
+  - "paused() returns (bool)"
+  - "counter() returns (uint256)"
+  - "transferOwnership(address) returns (bool)"
+  - "pause() returns (bool)"
+  - "unpause() returns (bool)"
+  - "guardedIncrement() returns (uint256)"
+semantics:
+  - "Deployer is owner."
+  - "Only owner can pause, unpause, or transfer ownership."
+  - "guardedIncrement reverts while paused."
+scenarios:
+  - name: guarded_increment
+    call: "guardedIncrement()"
+    expected: "increments counter"
+  - name: pause
+    call: "pause()"
+    expected: "sets paused"
+  - name: paused_revert
+    call: "guardedIncrement() while paused"
+    expected: "reverts"
+  - name: non_owner_pause_revert
+    call: "pause() from non-owner"
+    expected: "reverts"
+implementations:
+  solidity: "benches/implementations/ownable_pausable/solidity/OwnablePausable.sol"
+  vyper: "benches/implementations/ownable_pausable/vyper/OwnablePausable.vy"

@@ -1,0 +1,23 @@
+id: erc20_permit_hashing
+title: ERC20 Permit Hashing
+abi:
+  - "nonces(address) returns (uint256)"
+  - "hashPermit(address,address,uint256,uint256,uint256) returns (bytes32)"
+  - "hashCurrentPermit(address,address,uint256,uint256) returns (bytes32)"
+  - "useNonce(address) returns (uint256)"
+semantics:
+  - "Computes deterministic packed permit-like hashes."
+  - "useNonce returns the previous nonce and increments storage."
+scenarios:
+  - name: hash_static
+    call: "hashPermit(owner, spender, 1, 0, deadline)"
+    expected: "returns deterministic bytes32"
+  - name: use_nonce
+    call: "useNonce(owner)"
+    expected: "returns current nonce"
+  - name: hash_current_after_nonce
+    call: "hashCurrentPermit(owner, spender, 1, deadline)"
+    expected: "uses stored nonce"
+implementations:
+  solidity: "benches/implementations/erc20_permit_hashing/solidity/Erc20PermitHashing.sol"
+  vyper: "benches/implementations/erc20_permit_hashing/vyper/Erc20PermitHashing.vy"

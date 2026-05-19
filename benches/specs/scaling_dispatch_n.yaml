@@ -1,0 +1,26 @@
+id: scaling_dispatch_N
+title: Scaling Dispatch N
+abi:
+  - "sink() returns (uint256)"
+  - "setSink(uint256) returns (uint256)"
+  - "f00() returns (uint256)"
+  - "f15() returns (uint256)"
+  - "f31() returns (uint256)"
+semantics:
+  - "Exposes 32 fixed external functions to exercise selector dispatch."
+scenarios:
+  - name: first_selector
+    call: "f00()"
+    expected: "returns 0"
+  - name: middle_selector
+    call: "f15()"
+    expected: "returns 15"
+  - name: last_selector
+    call: "f31()"
+    expected: "returns 31"
+  - name: set_sink
+    call: "setSink(99)"
+    expected: "stores sink"
+implementations:
+  solidity: "benches/implementations/scaling_dispatch_N/solidity/ScalingDispatchN.sol"
+  vyper: "benches/implementations/scaling_dispatch_N/vyper/ScalingDispatchN.vy"

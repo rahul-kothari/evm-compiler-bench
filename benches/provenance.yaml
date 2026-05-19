@@ -1,0 +1,30 @@
+counter:
+  native_source: "Solidity hand-written from the canonical counter example pattern used in Solidity and Foundry tutorials."
+  opposing_language: "Vyper version hand-written against the same three-method state transition spec."
+erc20_minimal:
+  native_source: "Solidity normalized from the ERC-20 interface and common OpenZeppelin-style balance/allowance mechanics."
+  opposing_language: "Vyper version hand-written with Vyper-native public HashMap getters and event declarations."
+erc20_permit_hashing:
+  native_source: "Solidity normalized from EIP-2612 permit digest ingredients, reduced to deterministic packed hashing and nonce use."
+  opposing_language: "Vyper version hand-written with equivalent bytes32 packing and nonce storage."
+ownable_pausable:
+  native_source: "Solidity normalized from common Ownable and Pausable access-control patterns."
+  opposing_language: "Vyper version hand-written with explicit internal owner checks."
+vault_deposit_withdraw:
+  native_source: "Solidity hand-written from the minimal ETH vault and share-accounting pattern."
+  opposing_language: "Vyper version hand-written with payable deposit, send-based withdrawal, and public share accounting."
+factory_create2:
+  native_source: "Solidity normalized from the CREATE2 address formula in EIP-1014."
+  opposing_language: "Vyper version hand-written against the same CREATE2-style address calculation and salt-indexed storage spec."
+minimal_proxy:
+  native_source: "Solidity normalized from the EIP-1167 minimal proxy bytecode shape and CREATE2 prediction formula."
+  opposing_language: "Vyper version hand-written against the same bytecode-hash and salt-indexed clone bookkeeping spec."
+merkle_verifier:
+  native_source: "Solidity normalized from the common sorted-pair Merkle proof verifier used by OpenZeppelin-style libraries."
+  opposing_language: "Vyper version hand-written with DynArray proof iteration and equivalent pair ordering."
+amm_pair_subset:
+  native_source: "Solidity hand-written from the Uniswap pair state-machine shape, reduced to reserve/liquidity math without ERC-20 transfers."
+  opposing_language: "Vyper version hand-written against the same reserve, mint, burn, swap, and sync spec."
+scaling_dispatch_N:
+  native_source: "Solidity generated-style dispatch family with 32 fixed external functions."
+  opposing_language: "Vyper version hand-written to expose the same 32 selectors and one mutable sink."

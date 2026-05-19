@@ -1,0 +1,24 @@
+id: vault_deposit_withdraw
+title: Vault Deposit Withdraw
+abi:
+  - "balanceOf(address) returns (uint256)"
+  - "totalShares() returns (uint256)"
+  - "totalAssets() returns (uint256)"
+  - "deposit() payable returns (uint256)"
+  - "withdraw(uint256) returns (uint256)"
+semantics:
+  - "ETH deposits mint one share per wei."
+  - "Withdraw burns shares and sends ETH to caller."
+scenarios:
+  - name: deposit_one_eth
+    call: "deposit() with 1 ether"
+    expected: "mints shares"
+  - name: withdraw_half_eth
+    call: "withdraw(0.5 ether) after deposit"
+    expected: "burns shares"
+  - name: withdraw_revert
+    call: "withdraw(1 ether) without shares"
+    expected: "reverts"
+implementations:
+  solidity: "benches/implementations/vault_deposit_withdraw/solidity/VaultDepositWithdraw.sol"
+  vyper: "benches/implementations/vault_deposit_withdraw/vyper/VaultDepositWithdraw.vy"

@@ -1,0 +1,26 @@
+id: counter
+title: Counter
+abi:
+  - "value() returns (uint256)"
+  - "increment() returns (uint256)"
+  - "add(uint256) returns (uint256)"
+  - "reset() returns (uint256)"
+semantics:
+  - "Tracks a single uint256 value initialized by constructor."
+  - "Mutating calls return the new value."
+scenarios:
+  - name: read_initial
+    call: "value()"
+    expected: "returns constructor value"
+  - name: increment
+    call: "increment()"
+    expected: "returns value plus one"
+  - name: add_five
+    call: "add(5)"
+    expected: "returns value plus five"
+  - name: reset
+    call: "reset()"
+    expected: "returns zero"
+implementations:
+  solidity: "benches/implementations/counter/solidity/Counter.sol"
+  vyper: "benches/implementations/counter/vyper/Counter.vy"
