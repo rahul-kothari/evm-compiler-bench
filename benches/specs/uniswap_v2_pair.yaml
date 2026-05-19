@@ -1,0 +1,72 @@
+id: uniswap_v2_pair
+title: Real-Derived Uniswap V2 Pair
+abi:
+  - "initialize(bool) returns (bool)"
+  - "seedBalances(uint256,uint256) returns (bool)"
+  - "mint(address) returns (uint256)"
+  - "stageBurn(uint256) returns (bool)"
+  - "burn(address) returns (uint256,uint256)"
+  - "swap(uint256,uint256,uint256,uint256,address) returns (bool)"
+  - "skim(address) returns (uint256,uint256)"
+  - "sync() returns (bool)"
+  - "setFeeTo(address) returns (bool)"
+  - "advanceTime(uint256) returns (uint256)"
+  - "getReserves() returns (uint112,uint112,uint32)"
+  - "balanceOf(address) returns (uint256)"
+  - "totalSupply() returns (uint256)"
+  - "price0CumulativeLast() returns (uint256)"
+  - "price1CumulativeLast() returns (uint256)"
+  - "kLast() returns (uint256)"
+real_derived:
+  suite: real_derived
+  upstream_project: Uniswap V2 Core
+  repository_url: "https://github.com/Uniswap/v2-core"
+  source_commit: "6a9e7c97860676e0992f22a49665760444c1cdf5"
+  source_path: "contracts/UniswapV2Pair.sol"
+  source_language: solidity
+  source_contract: UniswapV2Pair
+  source_blob: "f87a1db262fba132862eae377d8cdaef74c79f97"
+  upstream_license: GPL-3.0-or-later
+  equivalence_scope:
+    - reserve packing shape and getReserves view
+    - mint, burn, swap, skim, sync state transitions
+    - constant-product fee check with 0.30% LP fee
+    - fee-on protocol liquidity minting through kLast
+    - cumulative price update behavior
+    - ERC20-like liquidity share accounting
+  scenario_coverage:
+    - initialize
+    - mint first and subsequent liquidity
+    - burn liquidity
+    - swap with fee invariant
+    - skim and sync
+    - fee-on mint path
+    - revert paths for locked/uninitialized/invalid swaps
+  mock_assumptions:
+    - token balances are modeled as internal reserves and shadow balances instead of external ERC20 calls
+    - block timestamp is advanced by explicit benchmark calls for deterministic cumulative price math
+semantics:
+  - "Models the Uniswap V2 pair reserve, LP share, fee-on, cumulative price, and invariant hot paths without external token transfers."
+  - "Token transfers into the pair are represented by seedBalances calls before mint, swap, skim, or sync."
+scenarios:
+  - name: initialize
+    call: "initialize(false)"
+    expected: "sets factory and initial timestamp"
+  - name: mint_initial
+    call: "mint(address(this)) after seeding balances"
+    expected: "mints LP supply minus permanent minimum liquidity"
+  - name: swap_fee_invariant
+    call: "swap(0, 100, 200, 0, address(this))"
+    expected: "updates balances and reserves while preserving the adjusted constant-product invariant"
+  - name: burn
+    call: "stageBurn/liquidity then burn(address(this))"
+    expected: "burns staged LP and sends proportional internal balances out"
+  - name: fee_on_mint
+    call: "setFeeTo, mint, sync, mint"
+    expected: "updates kLast and mints protocol liquidity when rootK grows"
+  - name: invalid_swap_reverts
+    call: "swap with zero input"
+    expected: "reverts"
+implementations:
+  solidity: "benches/implementations/uniswap_v2_pair/solidity/UniswapV2PairReal.sol"
+  vyper: "benches/implementations/uniswap_v2_pair/vyper/UniswapV2PairReal.vy"

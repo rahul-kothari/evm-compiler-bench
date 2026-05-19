@@ -188,6 +188,7 @@ pub fn generate_scale_suite(root: &Path, only_benchmark: Option<&str>) -> Result
                     scenario_path: Some(scenario_rel),
                     scenario_hash: Some(scenario_hash),
                     generator_version: Some(SCALE_GENERATOR_VERSION.to_string()),
+                    provenance: None,
                 });
                 scenarios.push(scenario_file);
             }

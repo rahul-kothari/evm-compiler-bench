@@ -1,0 +1,65 @@
+id: curve_stableswap_2coin
+title: Real-Derived Curve Stableswap 2-Coin
+abi:
+  - "initialize(uint256,uint256,uint256) returns (bool)"
+  - "add_liquidity(uint256,uint256,uint256) returns (uint256)"
+  - "exchange(uint256,uint256,uint256,uint256) returns (uint256)"
+  - "remove_liquidity(uint256,uint256,uint256) returns (uint256,uint256)"
+  - "remove_liquidity_one_coin(uint256,uint256,uint256) returns (uint256)"
+  - "get_D(uint256,uint256) returns (uint256)"
+  - "get_virtual_price() returns (uint256)"
+  - "balances(uint256) returns (uint256)"
+  - "admin_balances(uint256) returns (uint256)"
+  - "balanceOf(address) returns (uint256)"
+  - "totalSupply() returns (uint256)"
+real_derived:
+  suite: real_derived
+  upstream_project: Curve Stableswap NG
+  repository_url: "https://github.com/curvefi/stableswap-ng"
+  source_commit: "2abe778f40206a6c0fd108a0a53ad3266cbedeee"
+  source_path: "contracts/main/CurveStableSwapNG.vy"
+  source_language: vyper
+  source_contract: CurveStableSwapNG
+  source_blob: "f192932a22958735acad4ca24c977cc4e058f1aa"
+  upstream_license: "Curve copyright notice; benchmark port is hand-written source material only"
+  equivalence_scope:
+    - 2-coin invariant and get_D/get_y math
+    - add_liquidity, remove_liquidity, remove_liquidity_one_coin, and exchange flows
+    - LP token accounting
+    - admin-free fee accounting with deterministic balances
+    - virtual price and rate-free standard-token path
+  scenario_coverage:
+    - initial and imbalanced add liquidity
+    - exchange both directions
+    - balanced and single-coin withdrawal
+    - fee path
+    - revert paths for slippage and invalid coin index
+  mock_assumptions:
+    - coins are standard 1:1 precision assets with internal pool balances
+    - admin fee balances are tracked but no external token transfers are performed
+    - oracle, rebasing, ERC4626, and external rate paths are intentionally out of scope
+semantics:
+  - "Models the 2-coin standard-token Curve Stableswap NG path with deterministic internal balances."
+  - "Amplification, swap fee, LP supply, admin-fee accounting, invariant, and virtual price are observable."
+scenarios:
+  - name: add_initial_liquidity
+    call: "add_liquidity(1_000_000, 1_000_000, 0)"
+    expected: "mints initial LP shares from D"
+  - name: add_imbalanced_liquidity
+    call: "add_liquidity(100_000, 300_000, 0) after initial liquidity"
+    expected: "mints proportional LP shares"
+  - name: exchange_0_to_1
+    call: "exchange(0, 1, 25_000, 0)"
+    expected: "moves along the invariant and charges fee"
+  - name: remove_liquidity
+    call: "remove_liquidity(10_000, 0, 0)"
+    expected: "burns LP shares for proportional coin balances"
+  - name: remove_one_coin
+    call: "remove_liquidity_one_coin(10_000, 1, 0)"
+    expected: "burns LP shares for one coin with fee"
+  - name: invalid_coin_reverts
+    call: "exchange(0, 2, 1, 0)"
+    expected: "reverts"
+implementations:
+  solidity: "benches/implementations/curve_stableswap_2coin/solidity/CurveStableSwap2CoinReal.sol"
+  vyper: "benches/implementations/curve_stableswap_2coin/vyper/CurveStableSwap2CoinReal.vy"

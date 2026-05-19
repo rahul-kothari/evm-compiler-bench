@@ -29,6 +29,36 @@
         "parameter_value": { "type": "integer", "minimum": 1 }
       }
     },
+    "real_derived": {
+      "type": "object",
+      "required": [
+        "suite",
+        "upstream_project",
+        "repository_url",
+        "source_commit",
+        "source_path",
+        "source_language",
+        "source_contract",
+        "equivalence_scope",
+        "scenario_coverage",
+        "mock_assumptions"
+      ],
+      "properties": {
+        "suite": { "const": "real_derived" },
+        "upstream_project": { "type": "string" },
+        "repository_url": { "type": "string" },
+        "source_commit": { "type": "string" },
+        "source_path": { "type": "string" },
+        "source_language": { "enum": ["solidity", "vyper"] },
+        "source_contract": { "type": "string" },
+        "source_blob": { "type": "string" },
+        "upstream_license": { "type": "string" },
+        "checked_at": { "type": "string" },
+        "equivalence_scope": { "type": "array", "items": { "type": "string" } },
+        "scenario_coverage": { "type": "array", "items": { "type": "string" } },
+        "mock_assumptions": { "type": "array", "items": { "type": "string" } }
+      }
+    },
     "implementations": {
       "type": "object",
       "required": ["solidity", "vyper"],

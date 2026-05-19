@@ -1,7 +1,7 @@
 use crate::{
     models::{
-        BenchmarkSuite, CompileFailure, CompileSet, CompiledArtifact, GasRecord, ScenarioFile,
-        Toolchains,
+        BenchmarkSuite, CompileFailure, CompileSet, CompiledArtifact, GasRecord, Language,
+        Provenance, ScenarioFile, Toolchains,
     },
     scale::ScaleManifest,
     scenarios::ScenarioCatalog,
@@ -55,6 +55,9 @@ pub fn write_outputs(
             "parameter_name": scale_manifest.parameter_name.clone(),
             "values": scale_manifest.values.clone(),
             "benchmarks": scale_manifest.benchmarks.clone()
+        },
+        "real_derived": {
+            "benchmarks": real_derived_manifest(compiled)
         },
         "artifacts": compiled.artifacts.len(),
         "compile_failures": compiled.failures.len(),
@@ -161,6 +164,11 @@ fn row(
             "scenario_path": artifact.scenario_path.clone(),
             "scenario_hash": artifact.scenario_hash.clone()
         },
+        "provenance": provenance_value(
+            artifact.provenance.as_ref(),
+            artifact.language,
+            &artifact.implementation_id
+        ),
         "language": artifact.language.as_str(),
         "compiler": {
             "name": artifact.compiler.name,
@@ -231,6 +239,11 @@ fn failure_row(failure: &CompileFailure) -> serde_json::Value {
             "scenario_path": failure.scenario_path.clone(),
             "scenario_hash": failure.scenario_hash.clone()
         },
+        "provenance": provenance_value(
+            failure.provenance.as_ref(),
+            failure.language,
+            &failure.implementation_id
+        ),
         "language": failure.language.as_str(),
         "compiler": {
             "name": failure.compiler.name,
@@ -256,6 +269,69 @@ fn failure_row(failure: &CompileFailure) -> serde_json::Value {
             "failure_artifacts": [],
             "success": false
         }
+    })
+}
+
+fn real_derived_manifest(compiled: &CompileSet) -> Vec<serde_json::Value> {
+    let mut benchmarks = BTreeMap::new();
+    for artifact in &compiled.artifacts {
+        if let Some(provenance) = &artifact.provenance {
+            benchmarks
+                .entry(artifact.benchmark_id.clone())
+                .or_insert_with(|| provenance_manifest_value(&artifact.benchmark_id, provenance));
+        }
+    }
+    for failure in &compiled.failures {
+        if let Some(provenance) = &failure.provenance {
+            benchmarks
+                .entry(failure.benchmark_id.clone())
+                .or_insert_with(|| provenance_manifest_value(&failure.benchmark_id, provenance));
+        }
+    }
+    benchmarks.into_values().collect()
+}
+
+fn provenance_manifest_value(benchmark_id: &str, provenance: &Provenance) -> serde_json::Value {
+    json!({
+        "benchmark_id": benchmark_id,
+        "upstream_project": &provenance.upstream_project,
+        "repository_url": &provenance.repository_url,
+        "source_commit": &provenance.source_commit,
+        "source_path": &provenance.source_path,
+        "source_language": provenance.source_language.as_str(),
+        "source_contract": &provenance.source_contract,
+        "source_blob": &provenance.source_blob,
+        "upstream_license": &provenance.upstream_license,
+        "checked_at": &provenance.checked_at,
+        "equivalence_scope": &provenance.equivalence_scope,
+        "scenario_coverage": &provenance.scenario_coverage,
+        "mock_assumptions": &provenance.mock_assumptions,
+    })
+}
+
+fn provenance_value(
+    provenance: Option<&Provenance>,
+    port_language: Language,
+    port_version: &str,
+) -> serde_json::Value {
+    let Some(provenance) = provenance else {
+        return serde_json::Value::Null;
+    };
+    json!({
+        "upstream_project": &provenance.upstream_project,
+        "repository_url": &provenance.repository_url,
+        "source_commit": &provenance.source_commit,
+        "source_path": &provenance.source_path,
+        "source_language": provenance.source_language.as_str(),
+        "source_contract": &provenance.source_contract,
+        "source_blob": &provenance.source_blob,
+        "upstream_license": &provenance.upstream_license,
+        "checked_at": &provenance.checked_at,
+        "port_language": port_language.as_str(),
+        "port_version": port_version,
+        "equivalence_scope": &provenance.equivalence_scope,
+        "scenario_coverage": &provenance.scenario_coverage,
+        "mock_assumptions": &provenance.mock_assumptions,
     })
 }
 
@@ -361,6 +437,9 @@ fn render_html(rows: &[serde_json::Value], toolchains: &Toolchains) -> Result<St
     html.push_str("<h2>Scale Studies</h2>");
     html.push_str(&render_scale_summary(rows));
 
+    html.push_str("<h2>Real-Derived Benchmarks</h2>");
+    html.push_str(&render_real_derived_summary(rows));
+
     html.push_str("<h2>Runtime Size vs Runtime Gas</h2><div class=\"chart\"><svg width=\"1080\" height=\"360\" viewBox=\"0 0 1080 360\" role=\"img\">");
     html.push_str("<line x1=\"45\" y1=\"315\" x2=\"1040\" y2=\"315\" stroke=\"#999\"/><line x1=\"45\" y1=\"20\" x2=\"45\" y2=\"315\" stroke=\"#999\"/>");
     let max_size = rows
@@ -441,6 +520,52 @@ fn render_html(rows: &[serde_json::Value], toolchains: &Toolchains) -> Result<St
     }
     html.push_str("</tbody></table></main></body></html>");
     Ok(html)
+}
+
+fn render_real_derived_summary(rows: &[serde_json::Value]) -> String {
+    let mut selected = Vec::new();
+    for row in rows {
+        if str_at(row, "/suite").as_deref() == Some(BenchmarkSuite::RealDerived.as_str()) {
+            selected.push(row);
+        }
+    }
+    if selected.is_empty() {
+        return "<div class=\"card\">No real-derived rows in this report.</div>".to_string();
+    }
+
+    let mut html = String::new();
+    html.push_str("<table><thead><tr><th>Upstream</th><th>Benchmark</th><th>Source</th><th>Port</th><th>Profile</th><th>Status</th><th>Scenario</th><th>Runtime Bytes</th><th>Deploy Gas</th><th>Runtime Gas</th></tr></thead><tbody>");
+    for row in selected {
+        html.push_str("<tr><td>");
+        html.push_str(&escape(
+            &str_at(row, "/provenance/upstream_project").unwrap_or_default(),
+        ));
+        html.push_str("</td><td>");
+        html.push_str(&escape(&str_at(row, "/benchmark_id").unwrap_or_default()));
+        html.push_str("</td><td>");
+        html.push_str(&escape(&format!(
+            "{}:{}",
+            str_at(row, "/provenance/source_language").unwrap_or_default(),
+            str_at(row, "/provenance/source_path").unwrap_or_default()
+        )));
+        html.push_str("</td><td>");
+        html.push_str(&escape(&str_at(row, "/language").unwrap_or_default()));
+        html.push_str("</td><td>");
+        html.push_str(&escape(&str_at(row, "/profile_id").unwrap_or_default()));
+        html.push_str("</td><td>");
+        html.push_str(&escape(&str_at(row, "/status").unwrap_or_default()));
+        html.push_str("</td><td>");
+        html.push_str(&escape(&str_at(row, "/gas/scenario").unwrap_or_default()));
+        html.push_str("</td><td>");
+        html.push_str(&u64_at(row, "/bytecode/runtime_bytes").to_string());
+        html.push_str("</td><td>");
+        html.push_str(&u64_at(row, "/gas/deploy_gas").to_string());
+        html.push_str("</td><td>");
+        html.push_str(&u64_at(row, "/gas/execution_gas").to_string());
+        html.push_str("</td></tr>");
+    }
+    html.push_str("</tbody></table>");
+    html
 }
 
 #[derive(Debug, Default)]

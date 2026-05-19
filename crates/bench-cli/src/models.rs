@@ -22,6 +22,8 @@ impl Language {
 pub enum BenchmarkSuite {
     Fixed,
     Scale,
+    #[serde(rename = "real_derived")]
+    RealDerived,
 }
 
 impl BenchmarkSuite {
@@ -29,8 +31,27 @@ impl BenchmarkSuite {
         match self {
             Self::Fixed => "fixed",
             Self::Scale => "scale",
+            Self::RealDerived => "real_derived",
         }
     }
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct Provenance {
+    pub upstream_project: String,
+    pub repository_url: String,
+    pub source_commit: String,
+    pub source_path: String,
+    pub source_language: Language,
+    pub source_contract: String,
+    #[serde(default)]
+    pub source_blob: Option<String>,
+    pub upstream_license: String,
+    pub checked_at: String,
+    pub equivalence_scope: Vec<String>,
+    pub scenario_coverage: Vec<String>,
+    pub mock_assumptions: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -46,6 +67,7 @@ pub struct Benchmark {
     pub scenario_path: Option<String>,
     pub scenario_hash: Option<String>,
     pub generator_version: Option<String>,
+    pub provenance: Option<Provenance>,
 }
 
 impl Benchmark {
@@ -62,6 +84,30 @@ impl Benchmark {
             scenario_path: None,
             scenario_hash: None,
             generator_version: None,
+            provenance: None,
+        }
+    }
+
+    pub fn real_derived(
+        id: &str,
+        contract_name: &str,
+        solidity_path: &str,
+        vyper_path: &str,
+        provenance: Provenance,
+    ) -> Self {
+        Self {
+            id: id.to_string(),
+            contract_name: contract_name.to_string(),
+            solidity_path: solidity_path.to_string(),
+            vyper_path: vyper_path.to_string(),
+            suite: BenchmarkSuite::RealDerived,
+            family: None,
+            parameter_name: None,
+            parameter_value: None,
+            scenario_path: None,
+            scenario_hash: None,
+            generator_version: None,
+            provenance: Some(provenance),
         }
     }
 }
@@ -226,6 +272,7 @@ pub struct CompiledArtifact {
     pub scenario_path: Option<String>,
     pub scenario_hash: Option<String>,
     pub generator_version: Option<String>,
+    pub provenance: Option<Provenance>,
     pub language: Language,
     pub contract_name: String,
     pub profile_id: String,
@@ -252,6 +299,7 @@ pub struct CompileFailure {
     pub scenario_path: Option<String>,
     pub scenario_hash: Option<String>,
     pub generator_version: Option<String>,
+    pub provenance: Option<Provenance>,
     pub language: Language,
     pub contract_name: String,
     pub profile_id: String,

@@ -1,0 +1,80 @@
+id: yearn_vault_v3
+title: Real-Derived Yearn V3 Vault
+abi:
+  - "initialize(uint256,uint256,uint256) returns (bool)"
+  - "deposit(uint256,address) returns (uint256)"
+  - "mint(uint256,address) returns (uint256)"
+  - "withdraw(uint256,address,address,uint256) returns (uint256)"
+  - "redeem(uint256,address,address,uint256) returns (uint256)"
+  - "add_strategy(address,bool) returns (bool)"
+  - "update_max_debt_for_strategy(address,uint256) returns (bool)"
+  - "update_debt(address,uint256,uint256) returns (uint256)"
+  - "mock_strategy_report(address,uint256,uint256) returns (bool)"
+  - "process_report(address) returns (uint256,uint256)"
+  - "shutdown_vault() returns (bool)"
+  - "permitDigest(address,address,uint256,uint256) returns (bytes32)"
+  - "totalAssets() returns (uint256)"
+  - "pricePerShare() returns (uint256)"
+  - "maxDeposit(address) returns (uint256)"
+  - "maxWithdraw(address,uint256) returns (uint256)"
+  - "strategyState(address) returns (uint256,uint256,uint256,uint256)"
+  - "balanceOf(address) returns (uint256)"
+  - "totalSupply() returns (uint256)"
+  - "nonces(address) returns (uint256)"
+real_derived:
+  suite: real_derived
+  upstream_project: Yearn Vaults V3
+  repository_url: "https://github.com/yearn/yearn-vaults-v3"
+  source_commit: "104a2b233bc6d43ba40720d68355b04d2dc31795"
+  source_path: "contracts/VaultV3.vy"
+  source_language: vyper
+  source_contract: VaultV3
+  source_blob: "97f4a60dd2485c6400f994e46b442d0424716eed"
+  upstream_license: GNU AGPLv3
+  equivalence_scope:
+    - ERC4626-style deposit, mint, withdraw, and redeem
+    - share conversion and profit-unlocking accounting
+    - strategy registry, max debt, debt update, and withdrawal queue
+    - profit/loss report processing with fee/refund hooks simplified to benchmark storage
+    - shutdown and permission checks
+    - permit digest and nonce path
+  scenario_coverage:
+    - initialize
+    - deposit/mint and withdraw/redeem
+    - strategy add and debt update
+    - profit and loss reports
+    - withdrawal from strategy queue
+    - shutdown and permission/limit reverts
+    - permit nonce/digest path
+  mock_assumptions:
+    - asset and strategy balances are deterministic internal ledgers
+    - mock strategy profit/loss is configured through benchmark helper calls
+    - accountant behavior is represented by fee basis points and refund fields
+semantics:
+  - "Models the current Yearn V3 vault accounting hot paths without external ERC20 or ERC4626 strategy contracts."
+  - "Reports, debt updates, profit locking, loss realization, shutdown, and permission checks are kept observable."
+scenarios:
+  - name: initialize
+    call: "initialize(1_000_000, 86400, 1000)"
+    expected: "sets role manager, deposit limit, profit unlock, and fee settings"
+  - name: deposit
+    call: "deposit(100_000, address(this))"
+    expected: "mints shares and increases idle assets"
+  - name: withdraw_idle
+    call: "withdraw(20_000, address(this), address(this), 0)"
+    expected: "burns shares and decreases idle assets"
+  - name: strategy_profit_report
+    call: "process_report after debt allocation and configured profit"
+    expected: "records gain, mints locked profit shares, and updates total assets"
+  - name: strategy_loss_withdraw
+    call: "withdraw through strategy queue with accepted loss"
+    expected: "pulls from strategy debt and accounts loss"
+  - name: shutdown_rejects_deposit
+    call: "deposit after shutdown"
+    expected: "reverts"
+  - name: permit_digest
+    call: "permitDigest(owner, spender, value, deadline)"
+    expected: "returns deterministic EIP-712-like digest"
+implementations:
+  solidity: "benches/implementations/yearn_vault_v3/solidity/YearnVaultV3Real.sol"
+  vyper: "benches/implementations/yearn_vault_v3/vyper/YearnVaultV3Real.vy"

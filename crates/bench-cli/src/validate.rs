@@ -1,5 +1,6 @@
 use crate::{
-    catalog::fixed_benchmarks,
+    catalog::checked_in_benchmarks,
+    models::{Benchmark, BenchmarkSuite, Provenance},
     scale::{SCALE_GENERATOR_VERSION, ScaleConfig, ScaleManifest, load_scale_config},
     scenarios::{load_scenario_catalog, validate_scenario_file},
     util::sha256_file,
@@ -7,7 +8,7 @@ use crate::{
 use anyhow::{Context, Result, bail};
 use serde_json::Value;
 use std::{
-    collections::BTreeSet,
+    collections::{BTreeMap, BTreeSet},
     fs,
     path::{Path, PathBuf},
 };
@@ -39,9 +40,9 @@ pub fn validate_all(root: &Path) -> Result<ValidationSummary> {
 
 fn validate_specs(root: &Path) -> Result<usize> {
     let mut count = 0;
-    let bench_ids: BTreeSet<_> = fixed_benchmarks()
+    let benchmarks: BTreeMap<_, _> = checked_in_benchmarks()
         .into_iter()
-        .map(|bench| bench.id)
+        .map(|bench| (bench.id.clone(), bench))
         .collect();
     for path in yaml_files(&root.join("benches/specs"))? {
         let text = fs::read_to_string(&path)?;
@@ -52,18 +53,19 @@ fn validate_specs(root: &Path) -> Result<usize> {
             .get("id")
             .and_then(|value| value.as_str())
             .with_context(|| format!("{} missing id", path.display()))?;
-        if !bench_ids.contains(id) {
+        let Some(benchmark) = benchmarks.get(id) else {
             bail!(
-                "{} id {id} is not in the fixed benchmark catalog",
+                "{} id {id} is not in the checked-in benchmark catalog",
                 path.display()
             );
-        }
+        };
+        validate_checked_in_spec_metadata(&value, &path, benchmark)?;
         count += 1;
     }
-    if count != bench_ids.len() {
+    if count != benchmarks.len() {
         bail!(
             "expected {} benchmark specs, found {count}",
-            bench_ids.len()
+            benchmarks.len()
         );
     }
     Ok(count)
@@ -71,7 +73,7 @@ fn validate_specs(root: &Path) -> Result<usize> {
 
 fn validate_scenarios(root: &Path) -> Result<usize> {
     let catalog = load_scenario_catalog(root, None, &[])?;
-    let bench_ids: BTreeSet<_> = fixed_benchmarks()
+    let bench_ids: BTreeSet<_> = checked_in_benchmarks()
         .into_iter()
         .map(|bench| bench.id)
         .collect();
@@ -79,7 +81,7 @@ fn validate_scenarios(root: &Path) -> Result<usize> {
     for file in catalog.iter() {
         if !bench_ids.contains(&file.benchmark_id) {
             bail!(
-                "scenario file references unknown fixed benchmark {}",
+                "scenario file references unknown checked-in benchmark {}",
                 file.benchmark_id
             );
         }
@@ -264,6 +266,7 @@ fn validate_outputs_if_present(root: &Path) -> Result<usize> {
             require_json_pointer(row, "/generated/generator_version", &results_path)?;
             require_json_pointer(row, "/generated/scenario_path", &results_path)?;
             require_json_pointer(row, "/generated/scenario_hash", &results_path)?;
+            require_json_pointer(row, "/provenance", &results_path)?;
             require_json_pointer(row, "/compiler/name", &results_path)?;
             require_json_pointer(row, "/compiler/version", &results_path)?;
             require_json_pointer(row, "/compiler/settings", &results_path)?;
@@ -275,7 +278,12 @@ fn validate_outputs_if_present(root: &Path) -> Result<usize> {
             require_json_pointer(row, "/correctness/property_tests", &results_path)?;
             require_json_pointer(row, "/correctness/failure_artifacts", &results_path)?;
             require_enum(row, "/status", &["ok", "compile_error"], &results_path)?;
-            require_enum(row, "/suite", &["fixed", "scale"], &results_path)?;
+            require_enum(
+                row,
+                "/suite",
+                &["fixed", "scale", "real_derived"],
+                &results_path,
+            )?;
             require_enum(
                 row,
                 "/compiler/settings/metadataMode",
@@ -323,6 +331,8 @@ fn validate_outputs_if_present(root: &Path) -> Result<usize> {
             "/scale_generator/parameter_name",
             "/scale_generator/values",
             "/scale_generator/benchmarks",
+            "/real_derived",
+            "/real_derived/benchmarks",
             "/artifacts",
             "/compile_failures",
             "/gas_records",
@@ -335,6 +345,15 @@ fn validate_outputs_if_present(root: &Path) -> Result<usize> {
         {
             bail!(
                 "{} scale_generator.benchmarks must be an array",
+                manifest_path.display()
+            );
+        }
+        if !value
+            .pointer("/real_derived/benchmarks")
+            .is_some_and(|value| value.is_array())
+        {
+            bail!(
+                "{} real_derived.benchmarks must be an array",
                 manifest_path.display()
             );
         }
@@ -362,6 +381,66 @@ fn validate_benchmark_spec(root: &Path, value: &serde_yaml::Value, path: &Path) 
             );
         }
     }
+    Ok(())
+}
+
+fn validate_checked_in_spec_metadata(
+    value: &serde_yaml::Value,
+    path: &Path,
+    benchmark: &Benchmark,
+) -> Result<()> {
+    match benchmark.suite {
+        BenchmarkSuite::Fixed => {
+            if value.get("real_derived").is_some() {
+                bail!(
+                    "{} fixed benchmark must not have real_derived metadata",
+                    path.display()
+                );
+            }
+        }
+        BenchmarkSuite::RealDerived => {
+            let Some(provenance) = benchmark.provenance.as_ref() else {
+                bail!(
+                    "{} real-derived benchmark {} has no catalog provenance",
+                    path.display(),
+                    benchmark.id
+                );
+            };
+            validate_real_derived_spec(value, path, provenance)?;
+        }
+        BenchmarkSuite::Scale => {
+            bail!(
+                "{} scale benchmarks must be generated, not checked in",
+                path.display()
+            );
+        }
+    }
+    Ok(())
+}
+
+fn validate_real_derived_spec(
+    value: &serde_yaml::Value,
+    path: &Path,
+    provenance: &Provenance,
+) -> Result<()> {
+    let real = value
+        .get("real_derived")
+        .with_context(|| format!("{} missing real_derived metadata", path.display()))?;
+    require_yaml_string(real, "suite", path, BenchmarkSuite::RealDerived.as_str())?;
+    require_yaml_string(real, "upstream_project", path, &provenance.upstream_project)?;
+    require_yaml_string(real, "repository_url", path, &provenance.repository_url)?;
+    require_yaml_string(real, "source_commit", path, &provenance.source_commit)?;
+    require_yaml_string(real, "source_path", path, &provenance.source_path)?;
+    require_yaml_string(real, "source_contract", path, &provenance.source_contract)?;
+    require_yaml_string(
+        real,
+        "source_language",
+        path,
+        provenance.source_language.as_str(),
+    )?;
+    require_sequence(real, "equivalence_scope", path)?;
+    require_sequence(real, "scenario_coverage", path)?;
+    require_sequence(real, "mock_assumptions", path)?;
     Ok(())
 }
 
@@ -445,6 +524,7 @@ fn validate_suite_metadata(row: &Value, path: &Path) -> Result<()> {
             require_null(row, "/generated/generator_version", path)?;
             require_null(row, "/generated/scenario_path", path)?;
             require_null(row, "/generated/scenario_hash", path)?;
+            require_null(row, "/provenance", path)?;
         }
         Some("scale") => {
             require_string_pointer(row, "/family", path)?;
@@ -453,6 +533,57 @@ fn validate_suite_metadata(row: &Value, path: &Path) -> Result<()> {
             require_string_pointer(row, "/generated/generator_version", path)?;
             require_string_pointer(row, "/generated/scenario_path", path)?;
             require_string_pointer(row, "/generated/scenario_hash", path)?;
+            require_null(row, "/provenance", path)?;
+        }
+        Some("real_derived") => {
+            require_null(row, "/family", path)?;
+            require_null(row, "/parameter_name", path)?;
+            require_null(row, "/parameter_value", path)?;
+            require_null(row, "/generated/generator_version", path)?;
+            require_null(row, "/generated/scenario_path", path)?;
+            require_null(row, "/generated/scenario_hash", path)?;
+            for pointer in [
+                "/provenance/upstream_project",
+                "/provenance/repository_url",
+                "/provenance/source_commit",
+                "/provenance/source_path",
+                "/provenance/source_language",
+                "/provenance/source_contract",
+                "/provenance/upstream_license",
+                "/provenance/checked_at",
+                "/provenance/port_language",
+                "/provenance/port_version",
+            ] {
+                require_string_pointer(row, pointer, path)?;
+            }
+            require_enum(
+                row,
+                "/provenance/source_language",
+                &["solidity", "vyper"],
+                path,
+            )?;
+            require_enum(
+                row,
+                "/provenance/port_language",
+                &["solidity", "vyper"],
+                path,
+            )?;
+            for pointer in [
+                "/provenance/equivalence_scope",
+                "/provenance/scenario_coverage",
+                "/provenance/mock_assumptions",
+            ] {
+                if !row.pointer(pointer).is_some_and(|value| {
+                    value.as_array().is_some_and(|items| {
+                        !items.is_empty() && items.iter().all(|item| item.is_string())
+                    })
+                }) {
+                    bail!(
+                        "{} JSON pointer {pointer} must be a non-empty string array",
+                        path.display()
+                    );
+                }
+            }
         }
         Some(other) => bail!("{} unsupported suite {other}", path.display()),
         None => bail!("{} missing suite", path.display()),
@@ -564,8 +695,9 @@ mod tests {
             .ancestors()
             .nth(2)
             .unwrap();
-        assert_eq!(super::validate_specs(root).unwrap(), 10);
-        assert_eq!(super::validate_scenarios(root).unwrap(), 10);
+        let checked_in_count = crate::catalog::checked_in_benchmarks().len();
+        assert_eq!(super::validate_specs(root).unwrap(), checked_in_count);
+        assert_eq!(super::validate_scenarios(root).unwrap(), checked_in_count);
         let (config, _) = crate::scale::load_scale_config(root).unwrap();
         assert_eq!(config.families.len(), 7);
         let generated_count = super::validate_generated_outputs_if_present(root, &config).unwrap();

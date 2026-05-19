@@ -1,0 +1,71 @@
+benchmark_id: uniswap_v2_pair
+scenarios:
+  - name: initialize
+    state_access_profile: cold
+    measured:
+      data: 'abi.encodeWithSignature("initialize(bool)", false)'
+    expect_success: true
+    observers: &pair_observers
+      - data: 'abi.encodeWithSignature("getReserves()")'
+      - data: 'abi.encodeWithSignature("totalSupply()")'
+      - data: 'abi.encodeWithSignature("balanceOf(address)", address(this))'
+      - data: 'abi.encodeWithSignature("price0CumulativeLast()")'
+      - data: 'abi.encodeWithSignature("price1CumulativeLast()")'
+      - data: 'abi.encodeWithSignature("kLast()")'
+  - name: mint_initial
+    state_access_profile: mixed
+    setup:
+      - data: 'abi.encodeWithSignature("initialize(bool)", false)'
+      - data: 'abi.encodeWithSignature("seedBalances(uint256,uint256)", uint256(1_000_000), uint256(4_000_000))'
+    measured:
+      data: 'abi.encodeWithSignature("mint(address)", address(this))'
+    expect_success: true
+    observers: *pair_observers
+  - name: swap_fee_invariant
+    state_access_profile: mixed
+    setup:
+      - data: 'abi.encodeWithSignature("initialize(bool)", false)'
+      - data: 'abi.encodeWithSignature("seedBalances(uint256,uint256)", uint256(1_000_000), uint256(1_000_000))'
+      - data: 'abi.encodeWithSignature("mint(address)", address(this))'
+      - data: 'abi.encodeWithSignature("advanceTime(uint256)", uint256(30))'
+    warmup:
+      - data: 'abi.encodeWithSignature("getReserves()")'
+    measured:
+      data: 'abi.encodeWithSignature("swap(uint256,uint256,uint256,uint256,address)", uint256(0), uint256(100), uint256(200), uint256(0), address(this))'
+    expect_success: true
+    observers: *pair_observers
+  - name: burn
+    state_access_profile: mixed
+    setup:
+      - data: 'abi.encodeWithSignature("initialize(bool)", false)'
+      - data: 'abi.encodeWithSignature("seedBalances(uint256,uint256)", uint256(1_000_000), uint256(1_000_000))'
+      - data: 'abi.encodeWithSignature("mint(address)", address(this))'
+      - data: 'abi.encodeWithSignature("stageBurn(uint256)", uint256(10_000))'
+    measured:
+      data: 'abi.encodeWithSignature("burn(address)", address(this))'
+    expect_success: true
+    observers: *pair_observers
+  - name: fee_on_mint
+    state_access_profile: mixed
+    setup:
+      - data: 'abi.encodeWithSignature("initialize(bool)", true)'
+      - data: 'abi.encodeWithSignature("seedBalances(uint256,uint256)", uint256(1_000_000), uint256(1_000_000))'
+      - data: 'abi.encodeWithSignature("mint(address)", address(this))'
+      - data: 'abi.encodeWithSignature("sync()")'
+      - data: 'abi.encodeWithSignature("seedBalances(uint256,uint256)", uint256(500_000), uint256(500_000))'
+      - data: 'abi.encodeWithSignature("sync()")'
+      - data: 'abi.encodeWithSignature("seedBalances(uint256,uint256)", uint256(100_000), uint256(100_000))'
+    measured:
+      data: 'abi.encodeWithSignature("mint(address)", address(this))'
+    expect_success: true
+    observers: *pair_observers
+  - name: invalid_swap_reverts
+    state_access_profile: warm
+    setup:
+      - data: 'abi.encodeWithSignature("initialize(bool)", false)'
+      - data: 'abi.encodeWithSignature("seedBalances(uint256,uint256)", uint256(1_000_000), uint256(1_000_000))'
+      - data: 'abi.encodeWithSignature("mint(address)", address(this))'
+    measured:
+      data: 'abi.encodeWithSignature("swap(uint256,uint256,uint256,uint256,address)", uint256(0), uint256(100), uint256(0), uint256(0), address(this))'
+    expect_success: false
+    observers: *pair_observers

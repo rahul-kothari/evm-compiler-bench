@@ -28,3 +28,12 @@ amm_pair_subset:
 scaling_dispatch_N:
   native_source: "Solidity generated-style dispatch family with 32 fixed external functions."
   opposing_language: "Vyper version hand-written to expose the same 32 selectors and one mutable sink."
+uniswap_v2_pair:
+  native_source: "Solidity hand-written from Uniswap V2 Pair source material at Uniswap/v2-core contracts/UniswapV2Pair.sol, commit 6a9e7c97860676e0992f22a49665760444c1cdf5."
+  opposing_language: "Vyper version hand-written against the same reserve, fee-on, cumulative price, LP-share, mint, burn, swap, skim, and sync spec."
+curve_stableswap_2coin:
+  native_source: "Vyper hand-written from Curve Stableswap NG source material at curvefi/stableswap-ng contracts/main/CurveStableSwapNG.vy, commit 2abe778f40206a6c0fd108a0a53ad3266cbedeee."
+  opposing_language: "Solidity version hand-written against the same 2-coin invariant, exchange, liquidity, fee, admin-balance, and virtual-price spec."
+yearn_vault_v3:
+  native_source: "Vyper hand-written from Yearn V3 Vault source material at yearn/yearn-vaults-v3 contracts/VaultV3.vy, commit 104a2b233bc6d43ba40720d68355b04d2dc31795."
+  opposing_language: "Solidity version hand-written against the same ERC4626-style share accounting, strategy debt, report, profit-locking, shutdown, and permission-path spec."
