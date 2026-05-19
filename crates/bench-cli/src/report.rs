@@ -140,6 +140,16 @@ fn row(
     failure_links: Vec<String>,
     differential_available: bool,
 ) -> serde_json::Value {
+    let scenario = scenario_file
+        .scenarios
+        .iter()
+        .find(|scenario| scenario.name == gas.scenario);
+    let has_observers = scenario.is_some_and(|scenario| !scenario.observers.is_empty());
+    let baseline_status = if differential_available {
+        "baseline_only"
+    } else {
+        "not_applicable"
+    };
     let randomized_status = correctness_status(
         scenario_file.randomized.is_some(),
         &failure_links,
@@ -193,11 +203,19 @@ fn row(
             "metadata_mode": gas.metadata_mode.as_str(),
             "deploy_gas": gas.deploy_gas,
             "execution_gas": gas.execution_gas,
-            "total_tx_gas": gas.execution_gas + 21_000,
+            "intrinsic_gas": gas.intrinsic_gas,
+            "calldata_gas": gas.calldata_gas,
+            "total_tx_gas": gas.total_tx_gas,
         },
         "correctness": {
-            "golden_tests": "pass",
-            "differential_tests": if differential_available { "pass" } else { "not_applicable" },
+            "call_semantics": "pass",
+            "golden_tests": "not_run",
+            "differential_tests": baseline_status,
+            "baseline_differential": baseline_status,
+            "profile_differential": "not_run",
+            "observer_check": if has_observers { baseline_status } else { "not_applicable" },
+            "return_data_check": baseline_status,
+            "log_check": "not_run",
             "randomized_differential": randomized_status,
             "property_tests": property_status,
             "properties": scenario_file.properties.iter().map(|property| property.name.clone()).collect::<Vec<_>>(),
@@ -261,8 +279,14 @@ fn failure_row(failure: &CompileFailure) -> serde_json::Value {
         "bytecode": null,
         "gas": null,
         "correctness": {
+            "call_semantics": "not_applicable",
             "golden_tests": "not_applicable",
             "differential_tests": "not_applicable",
+            "baseline_differential": "not_applicable",
+            "profile_differential": "not_applicable",
+            "observer_check": "not_applicable",
+            "return_data_check": "not_applicable",
+            "log_check": "not_applicable",
             "randomized_differential": "not_applicable",
             "property_tests": "not_applicable",
             "properties": [],
@@ -303,9 +327,17 @@ fn provenance_manifest_value(benchmark_id: &str, provenance: &Provenance) -> ser
         "source_blob": &provenance.source_blob,
         "upstream_license": &provenance.upstream_license,
         "checked_at": &provenance.checked_at,
+        "model_kind": &provenance.model_kind,
+        "production_equivalence": provenance.production_equivalence,
+        "api_compatibility": &provenance.api_compatibility,
+        "storage_layout_compatibility": provenance.storage_layout_compatibility,
+        "external_token_semantics": &provenance.external_token_semantics,
+        "source_derivation": &provenance.source_derivation,
         "equivalence_scope": &provenance.equivalence_scope,
         "scenario_coverage": &provenance.scenario_coverage,
         "mock_assumptions": &provenance.mock_assumptions,
+        "included_features": &provenance.included_features,
+        "excluded_features": &provenance.excluded_features,
     })
 }
 
@@ -327,11 +359,19 @@ fn provenance_value(
         "source_blob": &provenance.source_blob,
         "upstream_license": &provenance.upstream_license,
         "checked_at": &provenance.checked_at,
+        "model_kind": &provenance.model_kind,
+        "production_equivalence": provenance.production_equivalence,
+        "api_compatibility": &provenance.api_compatibility,
+        "storage_layout_compatibility": provenance.storage_layout_compatibility,
+        "external_token_semantics": &provenance.external_token_semantics,
+        "source_derivation": &provenance.source_derivation,
         "port_language": port_language.as_str(),
         "port_version": port_version,
         "equivalence_scope": &provenance.equivalence_scope,
         "scenario_coverage": &provenance.scenario_coverage,
         "mock_assumptions": &provenance.mock_assumptions,
+        "included_features": &provenance.included_features,
+        "excluded_features": &provenance.excluded_features,
     })
 }
 
@@ -407,6 +447,8 @@ fn render_html(rows: &[serde_json::Value], toolchains: &Toolchains) -> Result<St
     html.push_str("table{width:100%;border-collapse:collapse;background:#fff;border:1px solid #ddd;border-radius:8px;overflow:hidden}");
     html.push_str("th,td{font-size:12px;text-align:left;padding:8px 10px;border-bottom:1px solid #ececec}th{background:#efefea}");
     html.push_str(".chart{background:#fff;border:1px solid #ddd;border-radius:8px;padding:12px;overflow:auto}circle{fill:#2563eb;opacity:.68}");
+    html.push_str(".notice{background:#fff7ed;border:1px solid #fdba74;border-radius:8px;padding:12px;margin:12px 0;color:#7c2d12}");
+    html.push_str(".muted{color:#667085}.small{font-size:11px;line-height:1.35}");
     html.push_str("</style></head><body><main>");
     html.push_str("<h1>EVM Compiler Bench</h1>");
     html.push_str(&format!(
@@ -464,7 +506,7 @@ fn render_html(rows: &[serde_json::Value], toolchains: &Toolchains) -> Result<St
     }
     html.push_str("</svg></div>");
 
-    html.push_str("<h2>Result Rows</h2><table><thead><tr><th>Status</th><th>Suite</th><th>Family</th><th>N</th><th>Benchmark</th><th>Implementation</th><th>Compiler</th><th>Profile</th><th>Metadata</th><th>State</th><th>Scenario</th><th>Randomized</th><th>Property</th><th>Failures</th><th>Runtime Bytes</th><th>Deploy Gas</th><th>Execution Gas</th></tr></thead><tbody>");
+    html.push_str("<h2>Result Rows</h2><table><thead><tr><th>Status</th><th>Suite</th><th>Family</th><th>N</th><th>Benchmark</th><th>Implementation</th><th>Compiler</th><th>Profile</th><th>Metadata</th><th>State</th><th>Scenario</th><th>Differential</th><th>Randomized</th><th>Property</th><th>Failures</th><th>Runtime Bytes</th><th>Deploy Gas</th><th>Execution Gas</th><th>Calldata Gas</th><th>Total Tx Gas</th></tr></thead><tbody>");
     for row in rows {
         html.push_str("<tr><td>");
         html.push_str(&escape(&str_at(row, "/status").unwrap_or_default()));
@@ -502,6 +544,10 @@ fn render_html(rows: &[serde_json::Value], toolchains: &Toolchains) -> Result<St
         html.push_str(&escape(&str_at(row, "/gas/scenario").unwrap_or_default()));
         html.push_str("</td><td>");
         html.push_str(&escape(
+            &str_at(row, "/correctness/differential_tests").unwrap_or_default(),
+        ));
+        html.push_str("</td><td>");
+        html.push_str(&escape(
             &str_at(row, "/correctness/randomized_differential").unwrap_or_default(),
         ));
         html.push_str("</td><td>");
@@ -516,6 +562,10 @@ fn render_html(rows: &[serde_json::Value], toolchains: &Toolchains) -> Result<St
         html.push_str(&u64_at(row, "/gas/deploy_gas").to_string());
         html.push_str("</td><td>");
         html.push_str(&u64_at(row, "/gas/execution_gas").to_string());
+        html.push_str("</td><td>");
+        html.push_str(&u64_at(row, "/gas/calldata_gas").to_string());
+        html.push_str("</td><td>");
+        html.push_str(&u64_at(row, "/gas/total_tx_gas").to_string());
         html.push_str("</td></tr>");
     }
     html.push_str("</tbody></table></main></body></html>");
@@ -534,7 +584,8 @@ fn render_real_derived_summary(rows: &[serde_json::Value]) -> String {
     }
 
     let mut html = String::new();
-    html.push_str("<table><thead><tr><th>Upstream</th><th>Benchmark</th><th>Source</th><th>Port</th><th>Profile</th><th>Status</th><th>Scenario</th><th>Runtime Bytes</th><th>Deploy Gas</th><th>Runtime Gas</th></tr></thead><tbody>");
+    html.push_str("<div class=\"notice small\"><strong>Scope note:</strong> real-derived rows are simplified benchmark models, not production-equivalent ports. Read the model kind, mock assumptions, and excluded features before comparing runtime gas.</div>");
+    html.push_str("<table><thead><tr><th>Upstream</th><th>Benchmark</th><th>Model</th><th>Production Equivalent</th><th>Source</th><th>Port</th><th>Profile</th><th>Status</th><th>Scenario</th><th>Assumptions / Exclusions</th><th>Runtime Bytes</th><th>Deploy Gas</th><th>Runtime Gas</th><th>Total Tx Gas</th></tr></thead><tbody>");
     for row in selected {
         html.push_str("<tr><td>");
         html.push_str(&escape(
@@ -542,6 +593,14 @@ fn render_real_derived_summary(rows: &[serde_json::Value]) -> String {
         ));
         html.push_str("</td><td>");
         html.push_str(&escape(&str_at(row, "/benchmark_id").unwrap_or_default()));
+        html.push_str("</td><td>");
+        html.push_str(&escape(
+            &str_at(row, "/provenance/model_kind").unwrap_or_default(),
+        ));
+        html.push_str("</td><td>");
+        html.push_str(&escape(
+            &str_at(row, "/provenance/production_equivalence").unwrap_or_default(),
+        ));
         html.push_str("</td><td>");
         html.push_str(&escape(&format!(
             "{}:{}",
@@ -557,11 +616,25 @@ fn render_real_derived_summary(rows: &[serde_json::Value]) -> String {
         html.push_str("</td><td>");
         html.push_str(&escape(&str_at(row, "/gas/scenario").unwrap_or_default()));
         html.push_str("</td><td>");
+        html.push_str("<div class=\"small\"><span class=\"muted\">assumptions:</span> ");
+        html.push_str(&escape(&joined_array_at(
+            row,
+            "/provenance/mock_assumptions",
+        )));
+        html.push_str("<br><span class=\"muted\">excluded:</span> ");
+        html.push_str(&escape(&joined_array_at(
+            row,
+            "/provenance/excluded_features",
+        )));
+        html.push_str("</div>");
+        html.push_str("</td><td>");
         html.push_str(&u64_at(row, "/bytecode/runtime_bytes").to_string());
         html.push_str("</td><td>");
         html.push_str(&u64_at(row, "/gas/deploy_gas").to_string());
         html.push_str("</td><td>");
         html.push_str(&u64_at(row, "/gas/execution_gas").to_string());
+        html.push_str("</td><td>");
+        html.push_str(&u64_at(row, "/gas/total_tx_gas").to_string());
         html.push_str("</td></tr>");
     }
     html.push_str("</tbody></table>");
@@ -697,6 +770,19 @@ fn f64_at(row: &serde_json::Value, pointer: &str) -> f64 {
     row.pointer(pointer)
         .and_then(|value| value.as_f64())
         .unwrap_or(0.0)
+}
+
+fn joined_array_at(row: &serde_json::Value, pointer: &str) -> String {
+    row.pointer(pointer)
+        .and_then(|value| value.as_array())
+        .map(|items| {
+            items
+                .iter()
+                .filter_map(|item| item.as_str())
+                .collect::<Vec<_>>()
+                .join("; ")
+        })
+        .unwrap_or_default()
 }
 
 fn failure_links_html(row: &serde_json::Value) -> String {

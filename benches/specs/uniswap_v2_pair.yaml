@@ -1,5 +1,5 @@
 id: uniswap_v2_pair
-title: Real-Derived Uniswap V2 Pair
+title: Real-Derived Uniswap V2 Pair Benchmark Model
 abi:
   - "initialize(bool) returns (bool)"
   - "seedBalances(uint256,uint256) returns (bool)"
@@ -19,6 +19,7 @@ abi:
   - "kLast() returns (uint256)"
 real_derived:
   suite: real_derived
+  model_kind: real_derived_model
   upstream_project: Uniswap V2 Core
   repository_url: "https://github.com/Uniswap/v2-core"
   source_commit: "6a9e7c97860676e0992f22a49665760444c1cdf5"
@@ -27,26 +28,50 @@ real_derived:
   source_contract: UniswapV2Pair
   source_blob: "f87a1db262fba132862eae377d8cdaef74c79f97"
   upstream_license: GPL-3.0-or-later
+  checked_at: "2026-05-19"
+  production_equivalence: false
+  api_compatibility: "partial: benchmark helper API replaces token/factory/callback integration"
+  storage_layout_compatibility: false
+  external_token_semantics: "mocked_internal_balances"
+  source_derivation: "clean-room simplified benchmark model from public Uniswap V2 Pair behavior"
   equivalence_scope:
-    - reserve packing shape and getReserves view
-    - mint, burn, swap, skim, sync state transitions
+    - reserve and getReserves accounting shape
+    - internal-balance mint, burn, swap, skim, and sync state transitions
     - constant-product fee check with 0.30% LP fee
-    - fee-on protocol liquidity minting through kLast
-    - cumulative price update behavior
-    - ERC20-like liquidity share accounting
+    - simplified fee-on protocol liquidity minting through kLast
+    - deterministic cumulative price update behavior
+    - ERC20-like LP share accounting
   scenario_coverage:
     - initialize
-    - mint first and subsequent liquidity
-    - burn liquidity
-    - swap with fee invariant
-    - skim and sync
-    - fee-on mint path
-    - revert paths for locked/uninitialized/invalid swaps
+    - mint_initial
+    - mint_subsequent
+    - swap_fee_invariant
+    - burn
+    - sync
+    - skim
+    - fee_on_mint
+    - fee_off_resets_k_last
+    - uninitialized_mint_reverts
+    - invalid_swap_reverts
   mock_assumptions:
     - token balances are modeled as internal reserves and shadow balances instead of external ERC20 calls
     - block timestamp is advanced by explicit benchmark calls for deterministic cumulative price math
+    - swap input amounts are explicit benchmark arguments instead of inferred from post-transfer token balances
+  included_features:
+    - internal reserve/share accounting
+    - first and subsequent mint paths
+    - burn path with staged LP shares
+    - constant-product swap fee invariant
+    - sync and skim internal-balance paths
+    - fee-on and fee-off kLast behavior
+  excluded_features:
+    - external ERC20 transfer and balanceOf integration
+    - token0/token1/factory initialization API
+    - optimistic transfer and flash-swap callback path
+    - INVALID_TO token-address receiver checks
+    - lock reentrancy modifier
 semantics:
-  - "Models the Uniswap V2 pair reserve, LP share, fee-on, cumulative price, and invariant hot paths without external token transfers."
+  - "Models selected Uniswap V2 pair reserve, LP share, fee-on, cumulative price, and invariant hot paths without external token transfers."
   - "Token transfers into the pair are represented by seedBalances calls before mint, swap, skim, or sync."
 scenarios:
   - name: initialize
@@ -55,15 +80,30 @@ scenarios:
   - name: mint_initial
     call: "mint(address(this)) after seeding balances"
     expected: "mints LP supply minus permanent minimum liquidity"
+  - name: mint_subsequent
+    call: "mint(address(this)) after an existing position and additional seeded balances"
+    expected: "mints proportional LP shares"
   - name: swap_fee_invariant
     call: "swap(0, 100, 200, 0, address(this))"
     expected: "updates balances and reserves while preserving the adjusted constant-product invariant"
   - name: burn
     call: "stageBurn/liquidity then burn(address(this))"
     expected: "burns staged LP and sends proportional internal balances out"
+  - name: sync
+    call: "sync() after seeded balance drift and time advance"
+    expected: "updates reserves and cumulative prices from internal balances"
+  - name: skim
+    call: "skim(address(this)) after seeded balance drift"
+    expected: "removes internal balances above reserves"
   - name: fee_on_mint
     call: "setFeeTo, mint, sync, mint"
     expected: "updates kLast and mints protocol liquidity when rootK grows"
+  - name: fee_off_resets_k_last
+    call: "setFeeTo(address(0)) after fee-on liquidity"
+    expected: "resets kLast"
+  - name: uninitialized_mint_reverts
+    call: "mint(address(this)) before initialize"
+    expected: "reverts"
   - name: invalid_swap_reverts
     call: "swap with zero input"
     expected: "reverts"

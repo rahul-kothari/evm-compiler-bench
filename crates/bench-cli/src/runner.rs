@@ -211,6 +211,12 @@ fn helper_functions() -> &'static str {
         return keccak256(abi.encode(ok, ret));
     }
 
+    function _calldataGas(bytes memory data) internal pure returns (uint256 gasCost) {
+        for (uint256 i = 0; i < data.length; i++) {
+            gasCost += data[i] == 0 ? 4 : 16;
+        }
+    }
+
     function _bool(bool value) internal pure returns (string memory) {
         return value ? "true" : "false";
     }
@@ -224,6 +230,9 @@ fn helper_functions() -> &'static str {
         string memory metadataMode,
         uint256 deployGas,
         uint256 executionGas,
+        uint256 intrinsicGas,
+        uint256 calldataGas,
+        uint256 totalTxGas,
         bool success
     ) internal {
         vm.writeLine(
@@ -237,6 +246,9 @@ fn helper_functions() -> &'static str {
                 "\",\"metadata_mode\":\"", metadataMode,
                 "\",\"deploy_gas\":", vm.toString(deployGas),
                 ",\"execution_gas\":", vm.toString(executionGas),
+                ",\"intrinsic_gas\":", vm.toString(intrinsicGas),
+                ",\"calldata_gas\":", vm.toString(calldataGas),
+                ",\"total_tx_gas\":", vm.toString(totalTxGas),
                 ",\"success\":", _bool(success),
                 "}"
             )
@@ -841,8 +853,11 @@ fn write_gas_test(
     out.push_str("        (address target, uint256 deployGas) = deployArtifact");
     out.push_str(&index.to_string());
     out.push_str("();\n");
-    write_setup(out, "target", &scenario.setup);
-    write_setup(out, "target", &scenario.warmup);
+    write_setup(out, "target", &scenario.setup, "setup");
+    write_setup(out, "target", &scenario.warmup, "warmup");
+    out.push_str("        uint256 calldataGas = _calldataGas(");
+    out.push_str(&scenario.measured.data);
+    out.push_str(");\n");
     out.push_str("        (bool ok,, uint256 executionGas) = _run(target, ");
     write_call_args(out, &scenario.measured);
     out.push_str(");\n");
@@ -865,7 +880,7 @@ fn write_gas_test(
     out.push_str(scenario.state_access_profile.as_str());
     out.push_str("\", \"");
     out.push_str(artifact.metadata_mode.as_str());
-    out.push_str("\", deployGas, executionGas, ok);\n");
+    out.push_str("\", deployGas, executionGas, 21000, calldataGas, executionGas + 21000 + calldataGas, ok);\n");
     out.push_str("    }\n\n");
 }
 
@@ -889,10 +904,10 @@ fn write_diff_test(
     out.push_str("        (address vyperTarget,) = deployArtifact");
     out.push_str(&vyper_idx.to_string());
     out.push_str("();\n");
-    write_setup(out, "solTarget", &scenario.setup);
-    write_setup(out, "vyperTarget", &scenario.setup);
-    write_setup(out, "solTarget", &scenario.warmup);
-    write_setup(out, "vyperTarget", &scenario.warmup);
+    write_setup(out, "solTarget", &scenario.setup, "setup");
+    write_setup(out, "vyperTarget", &scenario.setup, "setup");
+    write_setup(out, "solTarget", &scenario.warmup, "warmup");
+    write_setup(out, "vyperTarget", &scenario.warmup, "warmup");
     out.push_str("        (bool solOk, bytes32 solHash,) = _run(solTarget, ");
     write_call_args(out, &scenario.measured);
     out.push_str(");\n");
@@ -1037,13 +1052,16 @@ fn write_observer_function(out: &mut String, benchmark_id: &str, scenario: &Scen
     out.push_str("    }\n\n");
 }
 
-fn write_setup(out: &mut String, target: &str, setup: &[CallSpec]) {
+fn write_setup(out: &mut String, target: &str, setup: &[CallSpec], label: &str) {
     for call in setup {
-        out.push_str("        _run(");
+        out.push_str("        { (bool setupOk,,) = _run(");
         out.push_str(target);
         out.push_str(", ");
         write_call_args(out, call);
         out.push_str(");\n");
+        out.push_str("        require(setupOk, \"");
+        out.push_str(label);
+        out.push_str(" call failed\"); }\n");
     }
 }
 

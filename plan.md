@@ -467,23 +467,28 @@ Acceptance criteria:
 * Compile failures are reported as first-class normalized rows and do not prevent running successfully compiled profiles.
 * The HTML report includes scale-study views and compile-failure visibility for all seven families.
 
-### Milestone 4: real-derived equivalent contracts
+### Milestone 4: real-derived benchmark models
 
 Add larger benchmark contracts derived from credible production contracts, but port them into the latest Solidity and Vyper compiler targets used by this harness. Treat the upstream contracts as source material and preserve the important public behavior, storage/accounting shape, and hot paths, rather than trying to compile the exact historical production source. Every benchmark must have a Solidity implementation and a Vyper implementation, with the opposing-language version handwritten.
+
+These are explicitly benchmark models, not production-equivalent ports. The safe claim is that they are clean-room, simplified Solidity/Vyper models inspired by production contracts and useful for compiler/codegen comparison on selected hot paths. The unsafe claim is that they are drop-in Uniswap, Curve, or Yearn implementations.
 
 Keep rows machine-readable about provenance:
 
 * `suite: real_derived`
+* `model_kind: real_derived_model`
+* `production_equivalence: false`
+* API, storage-layout, external-token, and source-derivation labels
 * upstream project, repository URL, commit, source contract path, and source language
 * port language and port version
-* equivalence scope describing which production behaviors are included and which are intentionally out of scope
-* scenario coverage for the selected hot paths
+* exact scenario coverage IDs for the selected hot paths
+* included features, excluded production features, and mock assumptions
 
 Locked first candidates:
 
-* `uniswap_v2_pair`: start from Uniswap V2 Pair. Update the Solidity source shape to the latest Solidity compiler target and handwrite the Vyper counterpart. Cover initialization, mint, burn, swap, sync, cumulative price update behavior, and fee-on/off paths where practical.
-* `curve_stableswap_2coin`: start from Curve Stableswap NG or an equivalent Curve 2-coin pool source. Update the Vyper source shape to the latest Vyper compiler target and handwrite the Solidity counterpart. Cover add/remove liquidity, exchange, invariant math, fees, admin-free pool behavior, and ERC20 share accounting.
-* `yearn_vault_v3`: start from Yearn V3 `VaultV3.vy` in `yearn/yearn-vaults-v3`. Update the Vyper source shape to the latest Vyper compiler target and handwrite the Solidity counterpart. Cover initialization, ERC4626-style deposit/mint/withdraw/redeem flows, share price/accounting views, permit, strategy addition, debt updates, profit/loss reporting through lightweight mock strategies, withdrawal queues, shutdown, and revert-path coverage for limits and permissions.
+* `uniswap_v2_pair`: start from Uniswap V2 Pair. Update the Solidity source shape to the latest Solidity compiler target and handwrite the Vyper counterpart. Cover initialization, first/subsequent mint, burn, simplified swap invariant, sync, skim, cumulative price update behavior, and fee-on/off paths where practical. Explicitly exclude external ERC20 transfers, token0/token1 initialization, flash callbacks, INVALID_TO checks, and reentrancy locking unless those paths are actually modeled.
+* `curve_stableswap_2coin`: start from Curve Stableswap NG or an equivalent Curve 2-coin pool source. Update the Vyper source shape to the latest Vyper compiler target and handwrite the Solidity counterpart. Cover add/remove liquidity, both exchange directions, invariant math, fees, admin-fee accounting, and slippage/invalid-coin reverts. Explicitly exclude ERC20 transfer/receiver handling, exchange_received, dynamic fees, imbalanced removal, oracle/rate/rebasing/ERC4626 integrations, and nonreentrant lock behavior unless those paths are actually modeled.
+* `yearn_vault_v3`: start from Yearn V3 `VaultV3.vy` in `yearn/yearn-vaults-v3`. Update the Vyper source shape to the latest Vyper compiler target and handwrite the Solidity counterpart. Cover initialization, ERC4626-style deposit/mint/withdraw/redeem flows, share price/accounting views, debt increase/decrease, profit/loss reporting through lightweight mock strategies, simplified profit unlock, shutdown, and revert-path coverage for limits and permissions. Treat permit as digest-only unless a real signature verification, allowance update, and nonce increment path is implemented.
 
 Yearn evaluation result, checked on 2026-05-19: choose Yearn V3 Vault over Yearn V2 Vault and V3 TokenizedStrategy. V3 Vault is the best fit because it is current, Vyper-native, large enough to stress bytecode and compile behavior, self-contained apart from ERC20 and small strategy/accountant interfaces, and directly exercises vault share accounting. V2 Vault remains useful historical source material, but its repository is archived and the V3 vault gives a cleaner current target. TokenizedStrategy is current and Solidity-native, but it benchmarks strategy proxy/delegatecall plumbing and BaseStrategy integration more than a standalone vault core; keep it as a possible later `yearn_tokenized_strategy` benchmark after the first real-derived vault lands.
 
@@ -501,9 +506,10 @@ Report:
 
 * compile success/failure and compile metrics across existing compiler profiles
 * runtime bytecode size, stripped size, deploy gas, and EIP-170/EIP-3860 margins
-* deterministic runtime gas for each scoped production-like scenario
-* differential correctness status between the Solidity and Vyper ports
-* HTML views grouped by upstream project, contract, source language, port language, scenario, and compiler profile
+* deterministic runtime gas for each scoped benchmark-model scenario
+* execution gas, intrinsic gas, calldata gas, and total transaction gas as separate fields
+* correctness status that distinguishes call success, baseline-only differential checks, profile-wide differential checks, observer checks, return-data checks, log checks, randomized checks, and property checks
+* HTML views grouped by upstream project, contract, source language, port language, scenario, and compiler profile, with model-kind, mock assumptions, and excluded production features visible near the gas numbers
 
 Acceptance criteria:
 
@@ -511,7 +517,9 @@ Acceptance criteria:
 * `cargo run -- run` compiles fixed, scale, and real-derived suites, runs deterministic scenarios and differential checks, and emits normalized JSON, run manifest, raw gas JSONL, and HTML.
 * The Uniswap V2 Pair, Curve 2-coin Stableswap, and Yearn V3 Vault benchmarks are implemented in both Solidity and Vyper.
 * The Yearn V3 Vault benchmark records the evaluation rationale, upstream repository, source commit, source path, source language, port language, equivalence scope, and mock strategy/accountant assumptions.
-* Normalized rows and the run manifest make source provenance and equivalence scope explicit enough that downstream analysis cannot confuse these ports with unmodified production deployments.
+* Normalized rows and the run manifest mark the suite as `real_derived_model`, set `production_equivalence: false`, and make source provenance, included features, excluded features, and mock assumptions explicit enough that downstream analysis cannot confuse these models with unmodified production deployments.
+* Scenario coverage is mechanically checked: every real-derived `scenario_coverage` entry must match a checked-in scenario ID, and every checked-in scenario must be listed.
+* Setup and warmup calls are fatal on unexpected failure so measured calls cannot run against unintended state.
 
 ### Milestone 5: experimental tier
 

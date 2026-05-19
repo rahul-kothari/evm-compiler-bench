@@ -1,5 +1,5 @@
 id: yearn_vault_v3
-title: Real-Derived Yearn V3 Vault
+title: Real-Derived Yearn V3 Vault Benchmark Model
 abi:
   - "initialize(uint256,uint256,uint256) returns (bool)"
   - "deposit(uint256,address) returns (uint256)"
@@ -23,6 +23,7 @@ abi:
   - "nonces(address) returns (uint256)"
 real_derived:
   suite: real_derived
+  model_kind: real_derived_model
   upstream_project: Yearn Vaults V3
   repository_url: "https://github.com/yearn/yearn-vaults-v3"
   source_commit: "104a2b233bc6d43ba40720d68355b04d2dc31795"
@@ -31,27 +32,55 @@ real_derived:
   source_contract: VaultV3
   source_blob: "97f4a60dd2485c6400f994e46b442d0424716eed"
   upstream_license: GNU AGPLv3
+  checked_at: "2026-05-19"
+  production_equivalence: false
+  api_compatibility: "partial: ERC4626-style benchmark API with internal asset and strategy ledgers"
+  storage_layout_compatibility: false
+  external_token_semantics: "mocked_internal_asset_and_strategy_balances"
+  source_derivation: "clean-room simplified benchmark model from public Yearn V3 Vault behavior"
   equivalence_scope:
     - ERC4626-style deposit, mint, withdraw, and redeem
-    - share conversion and profit-unlocking accounting
-    - strategy registry, max debt, debt update, and withdrawal queue
-    - profit/loss report processing with fee/refund hooks simplified to benchmark storage
-    - shutdown and permission checks
-    - permit digest and nonce path
+    - simplified share conversion and profit-unlocking accounting
+    - single-queue strategy registry, max debt, and debt update paths
+    - simplified profit/loss report processing with benchmark helper-configured reports
+    - shutdown and manager permission checks
+    - permit digest helper only; no permit state transition
   scenario_coverage:
     - initialize
-    - deposit/mint and withdraw/redeem
-    - strategy add and debt update
-    - profit and loss reports
-    - withdrawal from strategy queue
-    - shutdown and permission/limit reverts
-    - permit nonce/digest path
+    - deposit
+    - mint
+    - withdraw_idle
+    - redeem_idle
+    - update_debt_increase
+    - update_debt_decrease
+    - strategy_profit_report
+    - profit_unlock_after_time
+    - strategy_loss_withdraw
+    - shutdown_rejects_deposit
+    - permission_revert
+    - deposit_limit_reverts
+    - permit_digest_only
   mock_assumptions:
     - asset and strategy balances are deterministic internal ledgers
     - mock strategy profit/loss is configured through benchmark helper calls
     - accountant behavior is represented by fee basis points and refund fields
+  included_features:
+    - ERC4626-style deposit and mint share conversion
+    - idle withdraw and redeem share burning
+    - manager-gated strategy add and debt update
+    - single default strategy queue withdrawal
+    - profit/loss report accounting and simplified locked-profit shares
+    - shutdown and deposit-limit reverts
+    - digest-only permit helper
+  excluded_features:
+    - external ERC20 asset transfers
+    - real ERC4626 strategy contracts
+    - multi-strategy queue traversal
+    - accountant contract calls and refund hooks
+    - actual EIP-2612 permit signature verification, allowance update, and nonce increment
+    - full Yearn role lattice beyond role manager
 semantics:
-  - "Models the current Yearn V3 vault accounting hot paths without external ERC20 or ERC4626 strategy contracts."
+  - "Models selected current Yearn V3 vault accounting hot paths without external ERC20 or ERC4626 strategy contracts."
   - "Reports, debt updates, profit locking, loss realization, shutdown, and permission checks are kept observable."
 scenarios:
   - name: initialize
@@ -60,21 +89,42 @@ scenarios:
   - name: deposit
     call: "deposit(100_000, address(this))"
     expected: "mints shares and increases idle assets"
+  - name: mint
+    call: "mint(50_000, address(this))"
+    expected: "mints requested shares and increases idle assets"
   - name: withdraw_idle
     call: "withdraw(20_000, address(this), address(this), 0)"
     expected: "burns shares and decreases idle assets"
+  - name: redeem_idle
+    call: "redeem(20_000, address(this), address(this), 0)"
+    expected: "burns shares and returns proportional idle assets"
+  - name: update_debt_increase
+    call: "update_debt(strategy, 100_000, 0)"
+    expected: "moves idle assets into strategy debt"
+  - name: update_debt_decrease
+    call: "update_debt(strategy, 40_000, 0) after a higher debt allocation"
+    expected: "returns strategy balance to idle assets"
   - name: strategy_profit_report
     call: "process_report after debt allocation and configured profit"
     expected: "records gain, mints locked profit shares, and updates total assets"
+  - name: profit_unlock_after_time
+    call: "pricePerShare after profit report and time advance"
+    expected: "observes unlocked-profit share accounting"
   - name: strategy_loss_withdraw
     call: "withdraw through strategy queue with accepted loss"
     expected: "pulls from strategy debt and accounts loss"
   - name: shutdown_rejects_deposit
     call: "deposit after shutdown"
     expected: "reverts"
-  - name: permit_digest
+  - name: permission_revert
+    call: "add_strategy from a non-manager sender"
+    expected: "reverts"
+  - name: deposit_limit_reverts
+    call: "deposit above the configured limit"
+    expected: "reverts"
+  - name: permit_digest_only
     call: "permitDigest(owner, spender, value, deadline)"
-    expected: "returns deterministic EIP-712-like digest"
+    expected: "returns deterministic digest without allowance or nonce mutation"
 implementations:
   solidity: "benches/implementations/yearn_vault_v3/solidity/YearnVaultV3Real.sol"
   vyper: "benches/implementations/yearn_vault_v3/vyper/YearnVaultV3Real.vy"

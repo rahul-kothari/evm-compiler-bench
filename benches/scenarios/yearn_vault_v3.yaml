@@ -23,6 +23,14 @@ scenarios:
       data: 'abi.encodeWithSignature("deposit(uint256,address)", uint256(100_000), address(this))'
     expect_success: true
     observers: *yearn_observers
+  - name: mint
+    state_access_profile: mixed
+    setup:
+      - data: 'abi.encodeWithSignature("initialize(uint256,uint256,uint256)", uint256(1_000_000), uint256(86400), uint256(1000))'
+    measured:
+      data: 'abi.encodeWithSignature("mint(uint256,address)", uint256(50_000), address(this))'
+    expect_success: true
+    observers: *yearn_observers
   - name: withdraw_idle
     state_access_profile: mixed
     setup:
@@ -30,6 +38,38 @@ scenarios:
       - data: 'abi.encodeWithSignature("deposit(uint256,address)", uint256(100_000), address(this))'
     measured:
       data: 'abi.encodeWithSignature("withdraw(uint256,address,address,uint256)", uint256(20_000), address(this), address(this), uint256(0))'
+    expect_success: true
+    observers: *yearn_observers
+  - name: redeem_idle
+    state_access_profile: mixed
+    setup:
+      - data: 'abi.encodeWithSignature("initialize(uint256,uint256,uint256)", uint256(1_000_000), uint256(86400), uint256(1000))'
+      - data: 'abi.encodeWithSignature("deposit(uint256,address)", uint256(100_000), address(this))'
+    measured:
+      data: 'abi.encodeWithSignature("redeem(uint256,address,address,uint256)", uint256(20_000), address(this), address(this), uint256(0))'
+    expect_success: true
+    observers: *yearn_observers
+  - name: update_debt_increase
+    state_access_profile: mixed
+    setup:
+      - data: 'abi.encodeWithSignature("initialize(uint256,uint256,uint256)", uint256(1_000_000), uint256(86400), uint256(1000))'
+      - data: 'abi.encodeWithSignature("deposit(uint256,address)", uint256(200_000), address(this))'
+      - data: 'abi.encodeWithSignature("add_strategy(address,bool)", address(0x5151), true)'
+      - data: 'abi.encodeWithSignature("update_max_debt_for_strategy(address,uint256)", address(0x5151), uint256(150_000))'
+    measured:
+      data: 'abi.encodeWithSignature("update_debt(address,uint256,uint256)", address(0x5151), uint256(100_000), uint256(0))'
+    expect_success: true
+    observers: *yearn_observers
+  - name: update_debt_decrease
+    state_access_profile: mixed
+    setup:
+      - data: 'abi.encodeWithSignature("initialize(uint256,uint256,uint256)", uint256(1_000_000), uint256(86400), uint256(1000))'
+      - data: 'abi.encodeWithSignature("deposit(uint256,address)", uint256(200_000), address(this))'
+      - data: 'abi.encodeWithSignature("add_strategy(address,bool)", address(0x5151), true)'
+      - data: 'abi.encodeWithSignature("update_max_debt_for_strategy(address,uint256)", address(0x5151), uint256(150_000))'
+      - data: 'abi.encodeWithSignature("update_debt(address,uint256,uint256)", address(0x5151), uint256(100_000), uint256(0))'
+    measured:
+      data: 'abi.encodeWithSignature("update_debt(address,uint256,uint256)", address(0x5151), uint256(40_000), uint256(0))'
     expect_success: true
     observers: *yearn_observers
   - name: strategy_profit_report
@@ -43,6 +83,21 @@ scenarios:
       - data: 'abi.encodeWithSignature("mock_strategy_report(address,uint256,uint256)", address(0x5151), uint256(10_000), uint256(0))'
     measured:
       data: 'abi.encodeWithSignature("process_report(address)", address(0x5151))'
+    expect_success: true
+    observers: *yearn_observers
+  - name: profit_unlock_after_time
+    state_access_profile: mixed
+    setup:
+      - data: 'abi.encodeWithSignature("initialize(uint256,uint256,uint256)", uint256(1_000_000), uint256(10), uint256(1000))'
+      - data: 'abi.encodeWithSignature("deposit(uint256,address)", uint256(200_000), address(this))'
+      - data: 'abi.encodeWithSignature("add_strategy(address,bool)", address(0x5151), true)'
+      - data: 'abi.encodeWithSignature("update_max_debt_for_strategy(address,uint256)", address(0x5151), uint256(150_000))'
+      - data: 'abi.encodeWithSignature("update_debt(address,uint256,uint256)", address(0x5151), uint256(100_000), uint256(0))'
+      - data: 'abi.encodeWithSignature("mock_strategy_report(address,uint256,uint256)", address(0x5151), uint256(10_000), uint256(0))'
+      - data: 'abi.encodeWithSignature("process_report(address)", address(0x5151))'
+      - data: 'abi.encodeWithSignature("advanceTime(uint256)", uint256(5))'
+    measured:
+      data: 'abi.encodeWithSignature("pricePerShare()")'
     expect_success: true
     observers: *yearn_observers
   - name: strategy_loss_withdraw
@@ -68,7 +123,24 @@ scenarios:
       data: 'abi.encodeWithSignature("deposit(uint256,address)", uint256(1), address(this))'
     expect_success: false
     observers: *yearn_observers
-  - name: permit_digest
+  - name: permission_revert
+    state_access_profile: warm
+    setup:
+      - data: 'abi.encodeWithSignature("initialize(uint256,uint256,uint256)", uint256(1_000_000), uint256(86400), uint256(1000))'
+    measured:
+      data: 'abi.encodeWithSignature("add_strategy(address,bool)", address(0x5151), true)'
+      sender: BOB
+    expect_success: false
+    observers: *yearn_observers
+  - name: deposit_limit_reverts
+    state_access_profile: warm
+    setup:
+      - data: 'abi.encodeWithSignature("initialize(uint256,uint256,uint256)", uint256(1_000), uint256(86400), uint256(1000))'
+    measured:
+      data: 'abi.encodeWithSignature("deposit(uint256,address)", uint256(2_000), address(this))'
+    expect_success: false
+    observers: *yearn_observers
+  - name: permit_digest_only
     state_access_profile: cold
     setup:
       - data: 'abi.encodeWithSignature("initialize(uint256,uint256,uint256)", uint256(1_000_000), uint256(86400), uint256(1000))'

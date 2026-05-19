@@ -1,6 +1,6 @@
 use crate::{
     catalog::checked_in_benchmarks,
-    models::{Benchmark, BenchmarkSuite, Provenance},
+    models::{Benchmark, BenchmarkSuite, Provenance, ScenarioFile},
     scale::{SCALE_GENERATOR_VERSION, ScaleConfig, ScaleManifest, load_scale_config},
     scenarios::{load_scenario_catalog, validate_scenario_file},
     util::sha256_file,
@@ -73,10 +73,11 @@ fn validate_specs(root: &Path) -> Result<usize> {
 
 fn validate_scenarios(root: &Path) -> Result<usize> {
     let catalog = load_scenario_catalog(root, None, &[])?;
-    let bench_ids: BTreeSet<_> = checked_in_benchmarks()
+    let benchmarks: BTreeMap<_, _> = checked_in_benchmarks()
         .into_iter()
-        .map(|bench| bench.id)
+        .map(|bench| (bench.id.clone(), bench))
         .collect();
+    let bench_ids: BTreeSet<_> = benchmarks.keys().cloned().collect();
     let mut count = 0;
     for file in catalog.iter() {
         if !bench_ids.contains(&file.benchmark_id) {
@@ -85,12 +86,39 @@ fn validate_scenarios(root: &Path) -> Result<usize> {
                 file.benchmark_id
             );
         }
+        if let Some(benchmark) = benchmarks.get(&file.benchmark_id)
+            && benchmark.suite == BenchmarkSuite::RealDerived
+        {
+            validate_real_derived_scenario_coverage(file, benchmark)?;
+        }
         count += 1;
     }
     if count != bench_ids.len() {
         bail!("expected {} scenario files, found {count}", bench_ids.len());
     }
     Ok(count)
+}
+
+fn validate_real_derived_scenario_coverage(
+    file: &ScenarioFile,
+    benchmark: &Benchmark,
+) -> Result<()> {
+    let Some(provenance) = benchmark.provenance.as_ref() else {
+        bail!("real-derived benchmark {} has no provenance", benchmark.id);
+    };
+    let covered: BTreeSet<_> = provenance.scenario_coverage.iter().cloned().collect();
+    let actual: BTreeSet<_> = file
+        .scenarios
+        .iter()
+        .map(|scenario| scenario.name.clone())
+        .collect();
+    if covered != actual {
+        bail!(
+            "real-derived scenario coverage for {} must exactly match scenario ids; coverage={covered:?} scenarios={actual:?}",
+            benchmark.id
+        );
+    }
+    Ok(())
 }
 
 fn validate_generated_outputs_if_present(root: &Path, config: &ScaleConfig) -> Result<usize> {
@@ -272,8 +300,14 @@ fn validate_outputs_if_present(root: &Path) -> Result<usize> {
             require_json_pointer(row, "/compiler/settings", &results_path)?;
             require_json_pointer(row, "/compiler/settings/metadataMode", &results_path)?;
             require_json_pointer(row, "/compile/status", &results_path)?;
+            require_json_pointer(row, "/correctness/call_semantics", &results_path)?;
             require_json_pointer(row, "/correctness/golden_tests", &results_path)?;
             require_json_pointer(row, "/correctness/differential_tests", &results_path)?;
+            require_json_pointer(row, "/correctness/baseline_differential", &results_path)?;
+            require_json_pointer(row, "/correctness/profile_differential", &results_path)?;
+            require_json_pointer(row, "/correctness/observer_check", &results_path)?;
+            require_json_pointer(row, "/correctness/return_data_check", &results_path)?;
+            require_json_pointer(row, "/correctness/log_check", &results_path)?;
             require_json_pointer(row, "/correctness/randomized_differential", &results_path)?;
             require_json_pointer(row, "/correctness/property_tests", &results_path)?;
             require_json_pointer(row, "/correctness/failure_artifacts", &results_path)?;
@@ -291,6 +325,23 @@ fn validate_outputs_if_present(root: &Path) -> Result<usize> {
                 &results_path,
             )?;
             validate_row_status(row, &results_path)?;
+            for pointer in [
+                "/correctness/call_semantics",
+                "/correctness/golden_tests",
+                "/correctness/differential_tests",
+                "/correctness/baseline_differential",
+                "/correctness/profile_differential",
+                "/correctness/observer_check",
+                "/correctness/return_data_check",
+                "/correctness/log_check",
+            ] {
+                require_enum(
+                    row,
+                    pointer,
+                    &["pass", "fail", "not_applicable", "not_run", "baseline_only"],
+                    &results_path,
+                )?;
+            }
             require_enum(
                 row,
                 "/correctness/randomized_differential",
@@ -427,6 +478,7 @@ fn validate_real_derived_spec(
         .get("real_derived")
         .with_context(|| format!("{} missing real_derived metadata", path.display()))?;
     require_yaml_string(real, "suite", path, BenchmarkSuite::RealDerived.as_str())?;
+    require_yaml_string(real, "model_kind", path, &provenance.model_kind)?;
     require_yaml_string(real, "upstream_project", path, &provenance.upstream_project)?;
     require_yaml_string(real, "repository_url", path, &provenance.repository_url)?;
     require_yaml_string(real, "source_commit", path, &provenance.source_commit)?;
@@ -438,9 +490,41 @@ fn validate_real_derived_spec(
         path,
         provenance.source_language.as_str(),
     )?;
+    require_yaml_bool(
+        real,
+        "production_equivalence",
+        path,
+        provenance.production_equivalence,
+    )?;
+    require_yaml_string(
+        real,
+        "api_compatibility",
+        path,
+        &provenance.api_compatibility,
+    )?;
+    require_yaml_bool(
+        real,
+        "storage_layout_compatibility",
+        path,
+        provenance.storage_layout_compatibility,
+    )?;
+    require_yaml_string(
+        real,
+        "external_token_semantics",
+        path,
+        &provenance.external_token_semantics,
+    )?;
+    require_yaml_string(
+        real,
+        "source_derivation",
+        path,
+        &provenance.source_derivation,
+    )?;
     require_sequence(real, "equivalence_scope", path)?;
     require_sequence(real, "scenario_coverage", path)?;
     require_sequence(real, "mock_assumptions", path)?;
+    require_sequence(real, "included_features", path)?;
+    require_sequence(real, "excluded_features", path)?;
     Ok(())
 }
 
@@ -452,6 +536,9 @@ fn validate_row_status(row: &Value, path: &Path) -> Result<()> {
             require_json_pointer(row, "/gas/scenario", path)?;
             require_json_pointer(row, "/gas/state_access_profile", path)?;
             require_json_pointer(row, "/gas/metadata_mode", path)?;
+            require_json_pointer(row, "/gas/intrinsic_gas", path)?;
+            require_json_pointer(row, "/gas/calldata_gas", path)?;
+            require_json_pointer(row, "/gas/total_tx_gas", path)?;
             require_enum(
                 row,
                 "/gas/state_access_profile",
@@ -462,26 +549,12 @@ fn validate_row_status(row: &Value, path: &Path) -> Result<()> {
             if row.pointer("/gas/metadata_mode") != row.pointer("/compiler/settings/metadataMode") {
                 bail!("{} metadata mode mismatch in result row", path.display());
             }
-            require_enum(row, "/correctness/golden_tests", &["pass", "fail"], path)?;
-            require_enum(
-                row,
-                "/correctness/differential_tests",
-                &["pass", "fail", "not_applicable"],
-                path,
-            )?;
         }
         Some("compile_error") => {
             require_enum(row, "/compile/status", &["error"], path)?;
             require_string_pointer(row, "/compile/error", path)?;
             require_null(row, "/bytecode", path)?;
             require_null(row, "/gas", path)?;
-            require_enum(row, "/correctness/golden_tests", &["not_applicable"], path)?;
-            require_enum(
-                row,
-                "/correctness/differential_tests",
-                &["not_applicable"],
-                path,
-            )?;
         }
         Some(other) => bail!("{} unsupported row status {other}", path.display()),
         None => bail!("{} missing row status", path.display()),
@@ -543,6 +616,7 @@ fn validate_suite_metadata(row: &Value, path: &Path) -> Result<()> {
             require_null(row, "/generated/scenario_path", path)?;
             require_null(row, "/generated/scenario_hash", path)?;
             for pointer in [
+                "/provenance/model_kind",
                 "/provenance/upstream_project",
                 "/provenance/repository_url",
                 "/provenance/source_commit",
@@ -551,11 +625,16 @@ fn validate_suite_metadata(row: &Value, path: &Path) -> Result<()> {
                 "/provenance/source_contract",
                 "/provenance/upstream_license",
                 "/provenance/checked_at",
+                "/provenance/api_compatibility",
+                "/provenance/external_token_semantics",
+                "/provenance/source_derivation",
                 "/provenance/port_language",
                 "/provenance/port_version",
             ] {
                 require_string_pointer(row, pointer, path)?;
             }
+            require_bool_pointer(row, "/provenance/production_equivalence", path)?;
+            require_bool_pointer(row, "/provenance/storage_layout_compatibility", path)?;
             require_enum(
                 row,
                 "/provenance/source_language",
@@ -572,6 +651,8 @@ fn validate_suite_metadata(row: &Value, path: &Path) -> Result<()> {
                 "/provenance/equivalence_scope",
                 "/provenance/scenario_coverage",
                 "/provenance/mock_assumptions",
+                "/provenance/included_features",
+                "/provenance/excluded_features",
             ] {
                 if !row.pointer(pointer).is_some_and(|value| {
                     value.as_array().is_some_and(|items| {
@@ -621,6 +702,25 @@ fn require_yaml_string(
     Ok(())
 }
 
+fn require_yaml_bool(
+    value: &serde_yaml::Value,
+    key: &str,
+    path: &Path,
+    expected: bool,
+) -> Result<()> {
+    let actual = value
+        .get(key)
+        .and_then(|value| value.as_bool())
+        .with_context(|| format!("{} missing boolean {key}", path.display()))?;
+    if actual != expected {
+        bail!(
+            "{} {key} {actual} does not match expected value {expected}",
+            path.display()
+        );
+    }
+    Ok(())
+}
+
 fn require_json_pointer(value: &Value, pointer: &str, path: &Path) -> Result<()> {
     if value.pointer(pointer).is_none() {
         bail!("{} missing JSON pointer {pointer}", path.display());
@@ -642,6 +742,19 @@ fn require_u64_pointer(value: &Value, pointer: &str, path: &Path) -> Result<()> 
     if !value.pointer(pointer).is_some_and(|value| value.is_u64()) {
         bail!(
             "{} JSON pointer {pointer} must be a positive integer",
+            path.display()
+        );
+    }
+    Ok(())
+}
+
+fn require_bool_pointer(value: &Value, pointer: &str, path: &Path) -> Result<()> {
+    if !value
+        .pointer(pointer)
+        .is_some_and(|value| value.is_boolean())
+    {
+        bail!(
+            "{} JSON pointer {pointer} must be a boolean",
             path.display()
         );
     }

@@ -39,6 +39,7 @@ impl BenchmarkSuite {
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct Provenance {
+    pub model_kind: String,
     pub upstream_project: String,
     pub repository_url: String,
     pub source_commit: String,
@@ -49,9 +50,16 @@ pub struct Provenance {
     pub source_blob: Option<String>,
     pub upstream_license: String,
     pub checked_at: String,
+    pub production_equivalence: bool,
+    pub api_compatibility: String,
+    pub storage_layout_compatibility: bool,
+    pub external_token_semantics: String,
+    pub source_derivation: String,
     pub equivalence_scope: Vec<String>,
     pub scenario_coverage: Vec<String>,
     pub mock_assumptions: Vec<String>,
+    pub included_features: Vec<String>,
+    pub excluded_features: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -328,6 +336,9 @@ pub struct GasRecord {
     pub metadata_mode: MetadataMode,
     pub deploy_gas: u64,
     pub execution_gas: u64,
+    pub intrinsic_gas: u64,
+    pub calldata_gas: u64,
+    pub total_tx_gas: u64,
     pub success: bool,
 }
 

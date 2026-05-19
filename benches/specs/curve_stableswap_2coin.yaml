@@ -1,5 +1,5 @@
 id: curve_stableswap_2coin
-title: Real-Derived Curve Stableswap 2-Coin
+title: Real-Derived Curve Stableswap 2-Coin Benchmark Model
 abi:
   - "initialize(uint256,uint256,uint256) returns (bool)"
   - "add_liquidity(uint256,uint256,uint256) returns (uint256)"
@@ -14,6 +14,7 @@ abi:
   - "totalSupply() returns (uint256)"
 real_derived:
   suite: real_derived
+  model_kind: real_derived_model
   upstream_project: Curve Stableswap NG
   repository_url: "https://github.com/curvefi/stableswap-ng"
   source_commit: "2abe778f40206a6c0fd108a0a53ad3266cbedeee"
@@ -22,24 +23,49 @@ real_derived:
   source_contract: CurveStableSwapNG
   source_blob: "f192932a22958735acad4ca24c977cc4e058f1aa"
   upstream_license: "Curve copyright notice; benchmark port is hand-written source material only"
+  checked_at: "2026-05-19"
+  production_equivalence: false
+  api_compatibility: "partial: internal-balance pool API without ERC20 transfer, receiver, or oracle paths"
+  storage_layout_compatibility: false
+  external_token_semantics: "mocked_internal_balances"
+  source_derivation: "clean-room simplified benchmark model from public Curve Stableswap NG behavior"
   equivalence_scope:
     - 2-coin invariant and get_D/get_y math
-    - add_liquidity, remove_liquidity, remove_liquidity_one_coin, and exchange flows
+    - simplified add_liquidity, remove_liquidity, remove_liquidity_one_coin, and exchange flows
     - LP token accounting
-    - admin-free fee accounting with deterministic balances
+    - deterministic fee and admin-fee balance accounting
     - virtual price and rate-free standard-token path
   scenario_coverage:
-    - initial and imbalanced add liquidity
-    - exchange both directions
-    - balanced and single-coin withdrawal
-    - fee path
-    - revert paths for slippage and invalid coin index
+    - add_initial_liquidity
+    - add_imbalanced_liquidity
+    - add_liquidity_slippage_reverts
+    - exchange_0_to_1
+    - exchange_1_to_0
+    - exchange_slippage_reverts
+    - remove_liquidity
+    - remove_one_coin
+    - remove_one_coin_slippage_reverts
+    - invalid_coin_reverts
   mock_assumptions:
     - coins are standard 1:1 precision assets with internal pool balances
     - admin fee balances are tracked but no external token transfers are performed
     - oracle, rebasing, ERC4626, and external rate paths are intentionally out of scope
+  included_features:
+    - 2-coin invariant iteration
+    - balanced and imbalanced add liquidity
+    - both exchange directions
+    - proportional and one-coin withdrawal
+    - fee and admin-fee accounting in internal balances
+    - slippage and invalid coin reverts
+  excluded_features:
+    - ERC20 transfer and receiver handling
+    - exchange_received flow
+    - dynamic fee calculation
+    - imbalanced removal path
+    - oracle, rate, rebasing, and ERC4626 integrations
+    - nonreentrant lock behavior
 semantics:
-  - "Models the 2-coin standard-token Curve Stableswap NG path with deterministic internal balances."
+  - "Models selected 2-coin standard-token Curve Stableswap NG math and accounting paths with deterministic internal balances."
   - "Amplification, swap fee, LP supply, admin-fee accounting, invariant, and virtual price are observable."
 scenarios:
   - name: add_initial_liquidity
@@ -48,15 +74,27 @@ scenarios:
   - name: add_imbalanced_liquidity
     call: "add_liquidity(100_000, 300_000, 0) after initial liquidity"
     expected: "mints proportional LP shares"
+  - name: add_liquidity_slippage_reverts
+    call: "add_liquidity(1, 1, 10_000_000) after initial liquidity"
+    expected: "reverts"
   - name: exchange_0_to_1
     call: "exchange(0, 1, 25_000, 0)"
     expected: "moves along the invariant and charges fee"
+  - name: exchange_1_to_0
+    call: "exchange(1, 0, 25_000, 0)"
+    expected: "moves along the invariant and charges fee in the opposite direction"
+  - name: exchange_slippage_reverts
+    call: "exchange(0, 1, 25_000, 1_000_000)"
+    expected: "reverts"
   - name: remove_liquidity
     call: "remove_liquidity(10_000, 0, 0)"
     expected: "burns LP shares for proportional coin balances"
   - name: remove_one_coin
     call: "remove_liquidity_one_coin(10_000, 1, 0)"
     expected: "burns LP shares for one coin with fee"
+  - name: remove_one_coin_slippage_reverts
+    call: "remove_liquidity_one_coin(10_000, 1, 1_000_000)"
+    expected: "reverts"
   - name: invalid_coin_reverts
     call: "exchange(0, 2, 1, 0)"
     expected: "reverts"

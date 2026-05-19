@@ -21,6 +21,18 @@ scenarios:
       data: 'abi.encodeWithSignature("mint(address)", address(this))'
     expect_success: true
     observers: *pair_observers
+  - name: mint_subsequent
+    state_access_profile: mixed
+    setup:
+      - data: 'abi.encodeWithSignature("initialize(bool)", false)'
+      - data: 'abi.encodeWithSignature("seedBalances(uint256,uint256)", uint256(1_000_000), uint256(1_000_000))'
+      - data: 'abi.encodeWithSignature("mint(address)", address(this))'
+      - data: 'abi.encodeWithSignature("advanceTime(uint256)", uint256(15))'
+      - data: 'abi.encodeWithSignature("seedBalances(uint256,uint256)", uint256(250_000), uint256(250_000))'
+    measured:
+      data: 'abi.encodeWithSignature("mint(address)", address(this))'
+    expect_success: true
+    observers: *pair_observers
   - name: swap_fee_invariant
     state_access_profile: mixed
     setup:
@@ -45,6 +57,29 @@ scenarios:
       data: 'abi.encodeWithSignature("burn(address)", address(this))'
     expect_success: true
     observers: *pair_observers
+  - name: sync
+    state_access_profile: mixed
+    setup:
+      - data: 'abi.encodeWithSignature("initialize(bool)", false)'
+      - data: 'abi.encodeWithSignature("seedBalances(uint256,uint256)", uint256(1_000_000), uint256(1_000_000))'
+      - data: 'abi.encodeWithSignature("mint(address)", address(this))'
+      - data: 'abi.encodeWithSignature("advanceTime(uint256)", uint256(60))'
+      - data: 'abi.encodeWithSignature("seedBalances(uint256,uint256)", uint256(50_000), uint256(25_000))'
+    measured:
+      data: 'abi.encodeWithSignature("sync()")'
+    expect_success: true
+    observers: *pair_observers
+  - name: skim
+    state_access_profile: mixed
+    setup:
+      - data: 'abi.encodeWithSignature("initialize(bool)", false)'
+      - data: 'abi.encodeWithSignature("seedBalances(uint256,uint256)", uint256(1_000_000), uint256(1_000_000))'
+      - data: 'abi.encodeWithSignature("mint(address)", address(this))'
+      - data: 'abi.encodeWithSignature("seedBalances(uint256,uint256)", uint256(50_000), uint256(25_000))'
+    measured:
+      data: 'abi.encodeWithSignature("skim(address)", address(this))'
+    expect_success: true
+    observers: *pair_observers
   - name: fee_on_mint
     state_access_profile: mixed
     setup:
@@ -58,6 +93,22 @@ scenarios:
     measured:
       data: 'abi.encodeWithSignature("mint(address)", address(this))'
     expect_success: true
+    observers: *pair_observers
+  - name: fee_off_resets_k_last
+    state_access_profile: mixed
+    setup:
+      - data: 'abi.encodeWithSignature("initialize(bool)", true)'
+      - data: 'abi.encodeWithSignature("seedBalances(uint256,uint256)", uint256(1_000_000), uint256(1_000_000))'
+      - data: 'abi.encodeWithSignature("mint(address)", address(this))'
+    measured:
+      data: 'abi.encodeWithSignature("setFeeTo(address)", address(0))'
+    expect_success: true
+    observers: *pair_observers
+  - name: uninitialized_mint_reverts
+    state_access_profile: cold
+    measured:
+      data: 'abi.encodeWithSignature("mint(address)", address(this))'
+    expect_success: false
     observers: *pair_observers
   - name: invalid_swap_reverts
     state_access_profile: warm
