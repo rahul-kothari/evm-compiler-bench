@@ -20,14 +20,23 @@ use std::{
 const SOL_BASELINE: &str = "solc-latest-legacy-runs200-metadata-on";
 const VYPER_BASELINE: &str = "vyper-latest-gas-metadata-on";
 const SOL_CODEGEN_BASELINE: &str = "solc-latest-legacy-runs200-metadata-off";
+const SOL_NOOPT_CODEGEN: &str = "solc-latest-noopt-metadata-off";
 const SOL_VIAIR_CODEGEN: &str = "solc-latest-viair-runs200-metadata-off";
 const VYPER_GAS_CODEGEN: &str = "vyper-latest-gas-metadata-off";
 const VYPER_CODESIZE_CODEGEN: &str = "vyper-latest-codesize-metadata-off";
+const VYPER_NONE_CODEGEN: &str = "vyper-latest-none-metadata-off";
 const PRIMARY_CODEGEN_PROFILES: [&str; 4] = [
     SOL_CODEGEN_BASELINE,
     SOL_VIAIR_CODEGEN,
     VYPER_GAS_CODEGEN,
     VYPER_CODESIZE_CODEGEN,
+];
+const SOL_CODEGEN_PROFILES: [&str; 3] =
+    [SOL_CODEGEN_BASELINE, SOL_VIAIR_CODEGEN, SOL_NOOPT_CODEGEN];
+const VYPER_CODEGEN_PROFILES: [&str; 3] = [
+    VYPER_GAS_CODEGEN,
+    VYPER_CODESIZE_CODEGEN,
+    VYPER_NONE_CODEGEN,
 ];
 
 pub struct ReportPaths {
@@ -196,7 +205,7 @@ pub fn write_outputs(
     fs::write(&run_manifest, serde_json::to_string_pretty(&manifest)?)?;
 
     let html_report = reports_dir.join("index.html");
-    fs::write(&html_report, render_html(&rows, toolchains)?)?;
+    fs::write(&html_report, render_html(&rows, toolchains, &manifest)?)?;
 
     Ok(ReportPaths {
         normalized_results,
@@ -603,7 +612,11 @@ fn failure_links_by_benchmark(root: &Path) -> Result<BTreeMap<String, Vec<String
     Ok(links)
 }
 
-fn render_html(rows: &[serde_json::Value], toolchains: &Toolchains) -> Result<String> {
+fn render_html(
+    rows: &[serde_json::Value],
+    toolchains: &Toolchains,
+    manifest: &serde_json::Value,
+) -> Result<String> {
     let summary = ReportSummary::from_rows(rows);
 
     let mut html = String::new();
@@ -617,22 +630,17 @@ fn render_html(rows: &[serde_json::Value], toolchains: &Toolchains) -> Result<St
     html.push_str(".two{display:grid;grid-template-columns:1fr 1fr;gap:14px}.three{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}.card{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:14px}.k{font-size:12px;color:var(--muted);line-height:1.3}.v{font-size:23px;font-weight:700;margin-top:3px}.subv{font-size:12px;color:var(--muted);margin-top:3px}");
     html.push_str("nav{display:flex;flex-wrap:wrap;gap:8px;margin:18px 0 4px}nav a{font-size:12px;text-decoration:none;color:#1d4ed8;background:#e8eefc;border:1px solid #c7d2fe;border-radius:999px;padding:6px 10px}");
     html.push_str("table{width:100%;border-collapse:collapse;background:var(--panel);border:1px solid var(--line);border-radius:8px;overflow:hidden}th,td{font-size:12px;text-align:left;padding:8px 10px;border-bottom:1px solid #edf0f4;vertical-align:top}th{background:#eef1f5;color:#2c3444}tbody tr:hover{background:#fbfcff}");
-    html.push_str(".chart{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:12px;overflow:auto}.notice{background:#fff7ed;border:1px solid #fdba74;border-radius:8px;padding:12px;margin:12px 0;color:#7c2d12}.info{background:#eff6ff;border-color:#bfdbfe;color:#1e3a8a}.muted{color:var(--muted)}.small{font-size:11px;line-height:1.35}.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace}");
+    html.push_str(".chart{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:12px;overflow:auto}.notice{background:#fff7ed;border:1px solid #fdba74;border-radius:8px;padding:12px;margin:12px 0;color:#7c2d12}.info{background:#eff6ff;border-color:#bfdbfe;color:#1e3a8a}.critical{background:#fff7ed;border-color:#fb923c;color:#7c2d12}.muted{color:var(--muted)}.small{font-size:11px;line-height:1.35}.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace}");
     html.push_str(".pill{display:inline-flex;align-items:center;border-radius:999px;padding:3px 8px;font-size:11px;border:1px solid var(--line);background:#f9fafb;white-space:nowrap}.pass{background:#ecfdf5;color:#065f46;border-color:#a7f3d0}.warn{background:#fffbeb;color:#92400e;border-color:#fde68a}.fail{background:#fef2f2;color:#991b1b;border-color:#fecaca}.na{background:#f4f4f5;color:#52525b;border-color:#e4e4e7}");
     html.push_str(".bar{height:9px;background:#e5e7eb;border-radius:999px;min-width:92px;position:relative;overflow:hidden}.bar span{display:block;height:100%;border-radius:999px;background:var(--blue)}.bar.good span{background:var(--green)}.bar.warn span{background:var(--amber)}.bar.fail span{background:var(--red)}.ratio{display:grid;grid-template-columns:58px 1fr;gap:8px;align-items:center;min-width:160px}");
-    html.push_str(".heat-ok{background:#dcfce7;color:#166534;text-align:center}.heat-fail{background:#fee2e2;color:#991b1b;text-align:center}.heat-na{background:#f4f4f5;color:#71717a;text-align:center}.legend{display:flex;gap:12px;align-items:center;font-size:12px;color:var(--muted);margin:8px 0}.dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:4px}.sol{background:var(--blue)}.vy{background:var(--green)}details{margin-top:12px}details>summary{cursor:pointer;font-weight:700;margin:12px 0}");
-    html.push_str(".brief{display:grid;grid-template-columns:1.35fr .65fr;gap:14px;align-items:start}.takeaways{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:12px}.takeaway{background:#f8fafc;border:1px solid var(--line);border-radius:8px;padding:12px}.takeaway strong{display:block;margin-bottom:5px}.answer{font-size:18px;font-weight:700;margin:0 0 6px}.section-lede{font-size:13px;color:var(--muted);max-width:900px}.mini-table td,.mini-table th{font-size:12px}.callout{background:#f8fafc;border:1px solid var(--line);border-radius:8px;padding:12px;margin:10px 0}");
-    html.push_str("@media(max-width:900px){.grid,.three,.two,.scope,.brief,.takeaways{grid-template-columns:1fr}main{padding:20px 14px}.v{font-size:20px}}");
+    html.push_str(".heat-ok{background:#dcfce7;color:#166534;text-align:center}.heat-fail{background:#fee2e2;color:#991b1b;text-align:center}.heat-na{background:#f4f4f5;color:#71717a;text-align:center}.heat-warn{background:#fef3c7;color:#92400e;text-align:center}.heat-info{background:#dbeafe;color:#1e40af;text-align:center}.legend{display:flex;flex-wrap:wrap;gap:12px;align-items:center;font-size:12px;color:var(--muted);margin:8px 0}.dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:4px}.sol{background:var(--blue)}.vy{background:var(--green)}details{margin-top:12px}details>summary{cursor:pointer;font-weight:700;margin:12px 0}");
+    html.push_str(".brief{display:grid;grid-template-columns:1.25fr .75fr;gap:14px;align-items:start}.scope-cards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-top:12px}.scope-card{border:1px solid var(--line);border-radius:8px;padding:12px;background:#f8fafc}.scope-card strong{display:block;margin-bottom:4px}.findings{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-top:12px}.finding{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:12px}.finding strong{display:block;margin-bottom:5px}.takeaways{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:12px}.takeaway{background:#f8fafc;border:1px solid var(--line);border-radius:8px;padding:12px}.takeaway strong{display:block;margin-bottom:5px}.answer{font-size:18px;font-weight:700;margin:0 0 6px}.section-lede{font-size:13px;color:var(--muted);max-width:900px}.mini-table td,.mini-table th{font-size:12px}.callout{background:#f8fafc;border:1px solid var(--line);border-radius:8px;padding:12px;margin:10px 0}.strip{display:flex;height:22px;border-radius:999px;overflow:hidden;border:1px solid var(--line);background:#eef2f7;margin:8px 0}.seg{display:flex;align-items:center;justify-content:center;min-width:2px;color:#fff;font-size:10px;white-space:nowrap}.seg-fuzz{background:#0f8a5f}.seg-baseline{background:#2563eb}.seg-status{background:#b45309}.seg-fail{background:#b91c1c}.seg-na{background:#6b7280}.chart-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}.svg-card{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:12px;overflow:auto}.tag{display:inline-flex;border-radius:999px;border:1px solid var(--line);padding:2px 7px;font-size:10px;background:#f9fafb;color:#374151}");
+    html.push_str("@media(max-width:900px){.grid,.three,.two,.scope,.brief,.takeaways,.scope-cards,.findings,.chart-grid{grid-template-columns:1fr}main{padding:20px 14px}.v{font-size:20px}}");
     html.push_str("</style></head><body><main>");
     html.push_str("<h1>EVM Compiler Bench</h1>");
-    html.push_str(&format!(
-        "<div class=\"meta\">Behaviorally matched Solidity/Vyper compiler-profile evaluation. EVM: {} &middot; solc {} &middot; Vyper {}.</div>",
-        escape(&toolchains.evm_version),
-        escape(&toolchains.solc.version),
-        escape(&toolchains.vyper.version)
-    ));
+    html.push_str(&render_run_identity(toolchains, manifest, &summary));
     html.push_str(&render_overview(rows, &summary));
-    html.push_str("<nav><a href=\"#validity\">Validity</a><a href=\"#reliability\">Reliability</a><a href=\"#fixed\">Fixed Suite</a><a href=\"#profiles\">Profiles</a><a href=\"#metadata\">Metadata</a><a href=\"#compile\">Compile Resources</a><a href=\"#scale\">Scale Studies</a><a href=\"#real\">Real-Derived Models</a><a href=\"#raw\">Raw Rows</a></nav>");
+    html.push_str("<nav><a href=\"#validity\">Validity</a><a href=\"#reliability\">Reliability</a><a href=\"#fixed\">Fixed Suite</a><a href=\"#scale\">Scale Suite</a><a href=\"#real\">Real-Derived</a><a href=\"#profiles\">Profiles</a><a href=\"#benchmarks\">Benchmarks</a><a href=\"#metadata\">Metadata</a><a href=\"#compile\">Compile Resources</a><a href=\"#methodology\">Methodology</a><a href=\"#raw\">Data Export</a></nav>");
 
     html.push_str("<section id=\"validity\"><h2>Correctness And Measurement Scope</h2>");
     html.push_str(&render_validity_brief(rows));
@@ -646,8 +654,20 @@ fn render_html(rows: &[serde_json::Value], toolchains: &Toolchains) -> Result<St
     html.push_str(&render_fixed_suite_brief(rows));
     html.push_str("</section>");
 
+    html.push_str("<section id=\"scale\"><h2>Generated Scale Studies</h2>");
+    html.push_str(&render_scale_brief(rows));
+    html.push_str("</section>");
+
+    html.push_str("<section id=\"real\"><h2>Real-Derived Benchmark Models</h2>");
+    html.push_str(&render_real_derived_summary(rows));
+    html.push_str("</section>");
+
     html.push_str("<section id=\"profiles\"><h2>Compiler Profile Tradeoffs</h2>");
     html.push_str(&render_profile_brief(rows));
+    html.push_str("</section>");
+
+    html.push_str("<section id=\"benchmarks\"><h2>Per-Benchmark Summary</h2>");
+    html.push_str(&render_benchmark_summary(rows));
     html.push_str("</section>");
 
     html.push_str("<section id=\"metadata\"><h2>Metadata Overhead</h2>");
@@ -658,31 +678,58 @@ fn render_html(rows: &[serde_json::Value], toolchains: &Toolchains) -> Result<St
     html.push_str(&render_compile_brief(rows));
     html.push_str("</section>");
 
-    html.push_str("<section id=\"scale\"><h2>Generated Scale Studies</h2>");
-    html.push_str(&render_scale_brief(rows));
+    html.push_str("<section id=\"methodology\"><h2>Methodology And Limitations</h2>");
+    html.push_str(&render_methodology(rows, toolchains, manifest));
     html.push_str("</section>");
 
-    html.push_str("<section id=\"real\"><h2>Real-Derived Benchmark Models</h2>");
-    html.push_str(&render_real_derived_summary(rows));
-    html.push_str("</section>");
-
-    html.push_str("<section id=\"raw\"><h2>Raw Rows</h2><details><summary>Show normalized result rows</summary>");
-    html.push_str(&render_raw_rows_table(rows));
-    html.push_str("</details></section></main></body></html>");
+    html.push_str("<section id=\"raw\"><h2>Data Export</h2>");
+    html.push_str(&render_data_export(rows));
+    html.push_str("</section></main></body></html>");
     Ok(html)
+}
+
+fn render_run_identity(
+    toolchains: &Toolchains,
+    manifest: &serde_json::Value,
+    summary: &ReportSummary,
+) -> String {
+    let commit = str_at(manifest, "/environment/git/commit")
+        .map(|value| short_hash(&value))
+        .unwrap_or_else(|| "unknown".to_string());
+    let host = str_at(manifest, "/environment/host/cpu").unwrap_or_else(|| "unknown host".into());
+    let started = str_at(manifest, "/started_at").unwrap_or_else(|| "unknown start".into());
+    let solc_hash = short_hash(&toolchains.solc.binary_sha256);
+    let vyper_hash = short_hash(&toolchains.vyper.binary_sha256);
+    format!(
+        "<div class=\"meta\">commit <span class=\"mono\">{}</span> &middot; {} &middot; started {} &middot; EVM {} &middot; solc {} (<span class=\"mono\">{}</span>) &middot; Vyper {} (<span class=\"mono\">{}</span>) &middot; {} profiles &middot; {} benchmarks &middot; {} rows</div>",
+        escape(&commit),
+        escape(&host),
+        escape(&started),
+        escape(&toolchains.evm_version),
+        escape(&toolchains.solc.version),
+        escape(&solc_hash),
+        escape(&toolchains.vyper.version),
+        escape(&vyper_hash),
+        summary.profiles.len(),
+        summary.benchmarks.len(),
+        summary.ok_rows + summary.compile_failures,
+    )
 }
 
 fn render_overview(rows: &[serde_json::Value], summary: &ReportSummary) -> String {
     let mut html = String::new();
     html.push_str("<section class=\"hero brief\"><div>");
     html.push_str("<div class=\"pill info\">Eval brief</div>");
-    html.push_str("<p class=\"lede\">This run compares compiler profiles across behaviorally matched workloads. The useful question is not which language wins globally; it is where compiler/profile choices change reliability, bytecode size, deployment cost, runtime gas, and compile resources.</p>");
-    html.push_str(&render_takeaways(rows, summary));
+    html.push_str("<p class=\"lede\">This report is a validity-bounded compiler-profile evaluation. It varies optimizer/profile, metadata mode, and generated scale size across pinned solc, Vyper, and Prague EVM settings. It is not a global language ranking and it is not production transaction gas.</p>");
+    html.push_str(&render_scope_cards(rows, summary));
+    html.push_str(&render_coverage_strip(rows));
+    html.push_str(&render_signature_findings(rows, summary));
     html.push_str("</div><div class=\"card\">");
     html.push_str(
-        "<div class=\"k\">Safe reading</div><div class=\"v\">Tradeoffs, not a leaderboard</div>",
+        "<div class=\"k\">Gas scope</div><div class=\"v\">Harness call, not transaction gas</div>",
     );
-    html.push_str("<div class=\"subv\">Default comparisons use metadata-off codegen profiles and scenario-level ratios. Full matrices and raw rows remain available as drilldowns.</div>");
+    html.push_str("<div class=\"subv\">The headline gas number is the Foundry internal target call. End-user cost also includes intrinsic gas and calldata pricing; the schema keeps <span class=\"mono\">total_tx_gas</span> null until a top-level transaction runner exists.</div>");
+    html.push_str("<div class=\"notice small critical\"><strong>Read before comparing:</strong> baseline ratios are within a language. Solidity rows use solc legacy metadata-off as their baseline; Vyper rows use Vyper gas metadata-off. Cross-language rows are shown side by side, not collapsed into a score.</div>");
     html.push_str("</div></section>");
 
     html.push_str("<section class=\"grid\">");
@@ -757,67 +804,80 @@ fn render_overview(rows: &[serde_json::Value], summary: &ReportSummary) -> Strin
     html
 }
 
-fn render_takeaways(rows: &[serde_json::Value], summary: &ReportSummary) -> String {
-    let metadata = metadata_overhead_summary(rows);
-    let fixed_deltas = collect_scenario_deltas(
-        rows,
-        "fixed",
-        &[SOL_VIAIR_CODEGEN, VYPER_GAS_CODEGEN, VYPER_CODESIZE_CODEGEN],
-    );
-    let largest_delta = fixed_deltas.iter().max_by(|left, right| {
-        left.ratio
-            .ln()
-            .abs()
-            .partial_cmp(&right.ratio.ln().abs())
-            .unwrap_or(std::cmp::Ordering::Equal)
-    });
-    let failure = compile_failure_story(rows);
+fn render_scope_cards(rows: &[serde_json::Value], summary: &ReportSummary) -> String {
+    let strong_fixed = behavior_fuzz_benchmark_count(rows, "fixed");
+    let fixed_count = summary.fixed_benchmarks.len();
+    let metadata = metadata_overhead_by_language(rows);
 
     let mut html = String::new();
-    html.push_str("<div class=\"takeaways\">");
-    html.push_str("<div class=\"takeaway\"><strong>Reliability</strong><span class=\"small\">");
-    html.push_str(&escape(&failure));
-    html.push_str("</span></div>");
-    html.push_str(
-        "<div class=\"takeaway\"><strong>Correctness coverage</strong><span class=\"small\">",
-    );
+    html.push_str("<div class=\"scope-cards\">");
+    html.push_str("<div class=\"scope-card critical\"><strong>Measurement</strong><span class=\"small\">Runtime gas is <span class=\"mono\">harness_call_gas</span>, not signed transaction gas. Calldata and intrinsic estimates are separate columns; EIP-7623 effects are not folded into the headline.</span></div>");
+    html.push_str("<div class=\"scope-card\"><strong>Correctness</strong><span class=\"small\">");
     html.push_str(&format!(
-        "{} scenario rows matched expected success/revert; {} rows have randomized checks and {} rows have property checks. Golden/log checks are not yet run.",
-        summary.scenario_status_pass, summary.randomized_rows, summary.property_rows
+        "{strong_fixed}/{fixed_count} fixed benchmarks have fuzz+property checks. The rest of the successful rows are status/baseline-smoke coverage; golden and log checks are not run."
     ));
-    html.push_str("</span></div>");
-    html.push_str(
-        "<div class=\"takeaway\"><strong>Runtime comparisons</strong><span class=\"small\">",
-    );
-    if let Some(delta) = largest_delta {
-        html.push_str(&format!(
-            "Largest fixed-suite headline delta is {} at {} ({:+} gas vs baseline). Ratios are scenario-level, metadata-off internal-call measurements.",
-            ratio_text(delta.ratio),
-            escape(&format!("{} / {}", delta.label, profile_short(&delta.profile))),
-            delta.delta
-        ));
-    } else {
-        html.push_str("No fixed-suite runtime ratios were available for the headline profiles.");
-    }
-    html.push_str("</span></div>");
-    html.push_str(
-        "<div class=\"takeaway\"><strong>Metadata is separate</strong><span class=\"small\">",
-    );
+    html.push_str("</span></div><div class=\"scope-card\"><strong>Metadata mode</strong><span class=\"small\">");
     html.push_str(&format!(
-        "Across {} paired artifacts, metadata-on changes creation bytecode by about {} bytes on average; codegen views default to metadata-off.",
-        metadata.pairs,
-        signed(metadata.avg_creation_delta)
+        "Solidity metadata-on changes runtime bytecode by {} bytes on average. Vyper metadata-on/off runtime bytecode delta is {} bytes across paired artifacts, so Vyper metadata modes are flagged as parity-pending.",
+        signed(metadata.solidity_avg_runtime_delta),
+        signed(metadata.vyper_avg_runtime_delta)
     ));
     html.push_str("</span></div>");
     html.push_str("</div>");
     html
 }
 
+fn render_coverage_strip(rows: &[serde_json::Value]) -> String {
+    let mut html = String::new();
+    html.push_str("<div class=\"callout\"><strong>Coverage by workload class</strong>");
+    for suite in ["fixed", "scale", "real_derived"] {
+        html.push_str("<div class=\"small muted\">");
+        html.push_str(&escape(suite));
+        html.push_str("</div>");
+        html.push_str(&coverage_strip_for_suite(rows, suite));
+    }
+    html.push_str("<div class=\"legend\"><span><span class=\"dot seg-fuzz\"></span>fuzz+property</span><span><span class=\"dot seg-baseline\"></span>baseline-smoke</span><span><span class=\"dot seg-status\"></span>status-only</span><span><span class=\"dot seg-fail\"></span>compile-fail/fail</span></div>");
+    html.push_str("</div>");
+    html
+}
+
+fn render_signature_findings(rows: &[serde_json::Value], summary: &ReportSummary) -> String {
+    let metadata = metadata_overhead_by_language(rows);
+    let dispatch = dispatch_signature(rows);
+    let mut html = String::new();
+    html.push_str("<div class=\"findings\">");
+    html.push_str("<div class=\"finding\"><strong>Codegen cliff</strong><span class=\"small\">");
+    html.push_str(&escape(&compile_failure_story(rows)));
+    html.push_str("</span></div>");
+    html.push_str("<div class=\"finding\"><strong>Scale behavior</strong><span class=\"small\">");
+    html.push_str(&escape(&dispatch));
+    html.push_str("</span></div>");
+    html.push_str("<div class=\"finding\"><strong>Metadata caveat</strong><span class=\"small\">");
+    html.push_str(&format!(
+        "{} paired Vyper artifacts have {} runtime-byte delta between metadata modes; Solidity averages {} runtime bytes. Treat Vyper metadata columns as parity-pending until diagnosed.",
+        metadata.vyper_pairs,
+        signed(metadata.vyper_avg_runtime_delta),
+        signed(metadata.solidity_avg_runtime_delta)
+    ));
+    html.push_str("</span></div>");
+    html.push_str("</div>");
+    html.push_str(&format!(
+        "<p class=\"small muted\">Inventory: {} successful scenario rows, {} compile failures, {} profiles. No composite score is computed.</p>",
+        summary.ok_rows, summary.compile_failures, summary.profiles.len()
+    ));
+    html
+}
+
 fn render_validity_brief(rows: &[serde_json::Value]) -> String {
     let summary = ReportSummary::from_rows(rows);
+    let fixed_fuzz = behavior_fuzz_benchmark_count(rows, "fixed");
     let mut html = String::new();
     html.push_str("<p class=\"answer\">Can I trust the rows enough to compare gas and size?</p>");
-    html.push_str("<p class=\"section-lede\">Enough for scoped compiler-profile tradeoffs, not enough for a global language or production-protocol claim. Scenario status checks are broad; deeper semantic checks are layered and currently limited.</p>");
+    html.push_str(&format!(
+        "<p class=\"section-lede\">Enough for scoped compiler-profile tradeoffs, not enough for a global language or production-protocol claim. Cross-language behavioral confidence is strongest for {}/{} fixed benchmarks with fuzz+property coverage; other successful rows are status or baseline-smoke checks and should be read with lower claim strength.</p>",
+        fixed_fuzz,
+        summary.fixed_benchmarks.len()
+    ));
     html.push_str("<section class=\"grid\">");
     html.push_str(&metric_card(
         "Scenario status",
@@ -844,6 +904,8 @@ fn render_validity_brief(rows: &[serde_json::Value]) -> String {
     ));
     html.push_str("</section>");
     html.push_str(&render_measurement_scope());
+    html.push_str("<h3>Correctness Heatmap</h3>");
+    html.push_str(&render_correctness_heatmap(rows));
     html.push_str("<details><summary>Show correctness coverage matrix</summary>");
     html.push_str(&render_correctness_matrix(rows));
     html.push_str("</details>");
@@ -886,13 +948,54 @@ fn render_reliability_brief(rows: &[serde_json::Value]) -> String {
 }
 
 fn render_fixed_suite_brief(rows: &[serde_json::Value]) -> String {
-    let deltas = collect_scenario_deltas(
+    let sol_deltas = collect_language_scenario_deltas(
         rows,
         "fixed",
-        &[SOL_VIAIR_CODEGEN, VYPER_GAS_CODEGEN, VYPER_CODESIZE_CODEGEN],
+        "solidity",
+        SOL_CODEGEN_BASELINE,
+        &[SOL_VIAIR_CODEGEN, SOL_NOOPT_CODEGEN],
     );
-    let mut cheaper = deltas
+    let vyper_deltas = collect_language_scenario_deltas(
+        rows,
+        "fixed",
+        "vyper",
+        VYPER_GAS_CODEGEN,
+        &[VYPER_CODESIZE_CODEGEN, VYPER_NONE_CODEGEN],
+    );
+    let mut sol_changed = sol_deltas.clone();
+    sol_changed.sort_by(|left, right| {
+        right
+            .ratio
+            .ln()
+            .abs()
+            .partial_cmp(&left.ratio.ln().abs())
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+    let mut vyper_changed = vyper_deltas.clone();
+    vyper_changed.sort_by(|left, right| {
+        right
+            .ratio
+            .ln()
+            .abs()
+            .partial_cmp(&left.ratio.ln().abs())
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+    let mut cross_language =
+        collect_scenario_deltas(rows, "fixed", &[VYPER_GAS_CODEGEN, VYPER_CODESIZE_CODEGEN])
+            .into_iter()
+            .filter(|delta| delta.profile.starts_with("vyper-"))
+            .collect::<Vec<_>>();
+    cross_language.sort_by(|left, right| {
+        right
+            .ratio
+            .ln()
+            .abs()
+            .partial_cmp(&left.ratio.ln().abs())
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+    let mut cheaper = sol_deltas
         .iter()
+        .chain(vyper_deltas.iter())
         .filter(|delta| delta.ratio < 1.0)
         .cloned()
         .collect::<Vec<_>>();
@@ -901,8 +1004,9 @@ fn render_fixed_suite_brief(rows: &[serde_json::Value]) -> String {
             .partial_cmp(&right.ratio)
             .unwrap_or(std::cmp::Ordering::Equal)
     });
-    let mut costlier = deltas
+    let mut costlier = sol_deltas
         .iter()
+        .chain(vyper_deltas.iter())
         .filter(|delta| delta.ratio > 1.0)
         .cloned()
         .collect::<Vec<_>>();
@@ -916,26 +1020,44 @@ fn render_fixed_suite_brief(rows: &[serde_json::Value]) -> String {
     let mut html = String::new();
     html.push_str("<p class=\"answer\">Where does runtime gas actually move?</p>");
     html.push_str(&format!(
-        "<p class=\"section-lede\">Headline runtime comparisons are same benchmark, same scenario, same state profile, metadata-off, relative to <span class=\"mono\">{}</span>. This keeps the first view readable and leaves the full scenario table as a drilldown.</p>",
-        escape(SOL_CODEGEN_BASELINE)
+        "<p class=\"section-lede\">Baseline ratios are within each language: Solidity rows compare to <span class=\"mono\">{}</span>, Vyper rows compare to <span class=\"mono\">{}</span>. Cross-language numbers are kept as side-by-side raw values or an explicitly labelled optional drilldown.</p>",
+        escape(SOL_CODEGEN_BASELINE),
+        escape(VYPER_GAS_CODEGEN)
     ));
     html.push_str("<section class=\"two\">");
     html.push_str(&render_delta_table(
-        "Largest cheaper headline rows",
-        &cheaper,
+        "Largest Solidity profile moves",
+        &sol_changed,
         8,
     ));
     html.push_str(&render_delta_table(
-        "Largest costlier headline rows",
-        &costlier,
+        "Largest Vyper profile moves",
+        &vyper_changed,
         8,
     ));
     html.push_str("</section>");
-    html.push_str(
-        "<details><summary>Show all fixed-suite scenario ratios and Pareto scatter</summary>",
-    );
-    html.push_str(&render_fixed_scenario_ratios(rows));
+    html.push_str("<section class=\"two\">");
+    html.push_str(&render_delta_table("Cheaper vs own baseline", &cheaper, 6));
+    html.push_str(&render_delta_table(
+        "Costlier vs own baseline",
+        &costlier,
+        6,
+    ));
+    html.push_str("</section>");
+    html.push_str(&render_fixed_benchmark_summary(rows));
     html.push_str(&render_fixed_pareto_svg(rows));
+    html.push_str(
+        "<details><summary>Show cross-language ratios against Solidity baseline</summary>",
+    );
+    html.push_str("<p class=\"small muted\">This drilldown is intentionally labelled cross-language. It compares matched fixed-suite scenario rows against the Solidity legacy metadata-off baseline and should not be aggregated into a language score.</p>");
+    html.push_str(&render_delta_table(
+        "Largest cross-language fixed-suite deltas",
+        &cross_language,
+        20,
+    ));
+    html.push_str("</details>");
+    html.push_str("<details><summary>Show all fixed-suite scenario ratios</summary>");
+    html.push_str(&render_fixed_scenario_ratios(rows));
     html.push_str("</details>");
     html
 }
@@ -956,9 +1078,10 @@ fn render_profile_brief(rows: &[serde_json::Value]) -> String {
 
 fn render_metadata_brief(rows: &[serde_json::Value]) -> String {
     let summary = metadata_overhead_summary(rows);
+    let by_language = metadata_overhead_by_language(rows);
     let mut html = String::new();
     html.push_str("<p class=\"answer\">How much of bytecode/deploy cost is metadata?</p>");
-    html.push_str("<p class=\"section-lede\">Metadata is a deployment/verifiability dimension, not a codegen winner signal. The paired deltas below compare the same artifact/profile with metadata on versus off.</p>");
+    html.push_str("<p class=\"section-lede\">Metadata is a deployment/verifiability dimension, not a codegen winner signal. The paired deltas below compare the same artifact/profile with metadata on versus off. Vyper metadata-on/off currently produces identical runtime bytecode in this run, so those duplicated rows are flagged as a pending harness/toolchain parity question.</p>");
     html.push_str("<section class=\"grid\">");
     html.push_str(&metric_card(
         "Paired artifacts",
@@ -980,7 +1103,13 @@ fn render_metadata_brief(rows: &[serde_json::Value]) -> String {
         &signed(summary.avg_create_gas_delta),
         "average metadata-on minus metadata-off",
     ));
+    html.push_str(&metric_card(
+        "Vyper runtime delta",
+        &signed(by_language.vyper_avg_runtime_delta),
+        &format!("{} paired artifacts", by_language.vyper_pairs),
+    ));
     html.push_str("</section>");
+    html.push_str(&render_metadata_language_summary(&by_language));
     html.push_str("<details><summary>Show metadata deltas by profile family</summary>");
     html.push_str(&render_metadata_delta_summary(rows));
     html.push_str("</details>");
@@ -990,7 +1119,7 @@ fn render_metadata_brief(rows: &[serde_json::Value]) -> String {
 fn render_compile_brief(rows: &[serde_json::Value]) -> String {
     let mut html = String::new();
     html.push_str("<p class=\"answer\">What are the compile-time and memory tradeoffs?</p>");
-    html.push_str("<p class=\"section-lede\">Compile resources are artifact-level measurements. The default view shows the main codegen profiles; all metadata/noopt variants are available as a drilldown.</p>");
+    html.push_str("<p class=\"section-lede\">Compile resources are artifact-level measurements. Wall time has three samples per successful artifact and is shown with CV; RSS is one coarse peak sample, so small memory differences should not be over-read.</p>");
     html.push_str(&render_compile_resource_summary_for_profiles(
         rows,
         Some(&PRIMARY_CODEGEN_PROFILES),
@@ -1006,10 +1135,9 @@ fn render_scale_brief(rows: &[serde_json::Value]) -> String {
     html.push_str("<p class=\"answer\">Where do generated workloads expose compiler cliffs?</p>");
     html.push_str("<p class=\"section-lede\">Scale workloads are stress tests. They are best read as failure boundaries and growth curves, not as application-like gas averages.</p>");
     html.push_str(&render_compile_failure_brief_table(rows));
-    html.push_str("<details><summary>Show scale max-N matrix and aggregate scale table</summary>");
-    html.push_str(&render_scale_max_n(rows));
-    html.push_str(&render_scale_summary(rows));
-    html.push_str("</details>");
+    html.push_str(&render_scale_failure_surface(rows));
+    html.push_str(&render_scale_curve_panels(rows));
+    html.push_str(&render_scale_family_summary(rows));
     html
 }
 
@@ -1101,7 +1229,7 @@ fn render_correctness_matrix(rows: &[serde_json::Value]) -> String {
 
 fn render_measurement_scope() -> String {
     let mut html = String::new();
-    html.push_str("<div class=\"notice small info\"><strong>Measurement semantics:</strong> <span class=\"mono\">scenario_status_check=pass</span> means the call succeeded or reverted as expected. It is not exact semantic equivalence unless paired with return, observer, log, randomized, property, or golden checks.</div>");
+    html.push_str("<div class=\"notice small critical\"><strong>Measurement semantics:</strong> <span class=\"mono\">scenario_status_check=pass</span> means the call succeeded or reverted as expected. It is not exact semantic equivalence unless paired with return, observer, log, randomized, property, or golden checks. <span class=\"mono\">harness_call_gas</span> is Foundry internal-call gas; transaction calldata pricing is separate and EIP-7623 effects are not included in a measured top-level total.</div>");
     html.push_str("<div class=\"three\">");
     html.push_str(&metric_card(
         "harness_call_gas",
@@ -1192,7 +1320,12 @@ fn render_compile_failure_matrix(rows: &[serde_json::Value]) -> String {
 }
 
 fn render_fixed_scenario_ratios(rows: &[serde_json::Value]) -> String {
-    let selected_profiles = [SOL_VIAIR_CODEGEN, VYPER_GAS_CODEGEN, VYPER_CODESIZE_CODEGEN];
+    let selected_profiles = [
+        SOL_VIAIR_CODEGEN,
+        SOL_NOOPT_CODEGEN,
+        VYPER_CODESIZE_CODEGEN,
+        VYPER_NONE_CODEGEN,
+    ];
     let mut baseline = BTreeMap::new();
     let mut values: BTreeMap<String, BTreeMap<String, u64>> = BTreeMap::new();
     let mut labels = BTreeMap::new();
@@ -1200,18 +1333,14 @@ fn render_fixed_scenario_ratios(rows: &[serde_json::Value]) -> String {
         if !is_ok_fixed_metadata_off(row) {
             continue;
         }
-        let key = scenario_key(row);
-        labels.entry(key.clone()).or_insert_with(|| {
-            format!(
-                "{} / {} / {}",
-                str_at(row, "/benchmark_id").unwrap_or_default(),
-                str_at(row, "/gas/scenario").unwrap_or_default(),
-                str_at(row, "/gas/state_access_profile").unwrap_or_default()
-            )
-        });
+        let language = str_at(row, "/language").unwrap_or_default();
+        let key = format!("{}\0{}", language, scenario_key(row));
+        labels
+            .entry(key.clone())
+            .or_insert_with(|| format!("{language} / {}", scenario_label(row)));
         let profile = str_at(row, "/profile_id").unwrap_or_default();
         let gas = u64_at(row, "/gas/harness_call_gas");
-        if profile == SOL_CODEGEN_BASELINE {
+        if baseline_profile_for_language(&language) == Some(profile.as_str()) {
             baseline.insert(key.clone(), gas);
         }
         values.entry(key).or_default().insert(profile, gas);
@@ -1220,8 +1349,9 @@ fn render_fixed_scenario_ratios(rows: &[serde_json::Value]) -> String {
     let mut html = String::new();
     html.push_str("<h3>Scenario Gas Ratios</h3>");
     html.push_str(&format!(
-        "<p class=\"small muted\">Ratios compare the same benchmark, scenario, state profile, and metadata-off mode against <span class=\"mono\">{}</span>. Lower is less harness call gas.</p>",
-        escape(SOL_CODEGEN_BASELINE)
+        "<p class=\"small muted\">Ratios compare the same benchmark, scenario, state profile, language, and metadata-off mode against that language's baseline: Solidity <span class=\"mono\">{}</span>, Vyper <span class=\"mono\">{}</span>. Lower is less harness call gas.</p>",
+        escape(SOL_CODEGEN_BASELINE),
+        escape(VYPER_GAS_CODEGEN)
     ));
     html.push_str("<table><thead><tr><th>Scenario</th>");
     for profile in selected_profiles {
@@ -1255,7 +1385,10 @@ fn render_fixed_scenario_ratios(rows: &[serde_json::Value]) -> String {
 fn render_fixed_pareto_svg(rows: &[serde_json::Value]) -> String {
     let selected = rows
         .iter()
-        .filter(|row| is_ok_fixed_metadata_off(row))
+        .filter(|row| {
+            str_at(row, "/status").as_deref() == Some("ok")
+                && str_at(row, "/suite").as_deref() == Some("fixed")
+        })
         .collect::<Vec<_>>();
     if selected.is_empty() {
         return String::new();
@@ -1275,26 +1408,52 @@ fn render_fixed_pareto_svg(rows: &[serde_json::Value]) -> String {
 
     let mut html = String::new();
     html.push_str("<h3>Fixed-Suite Pareto Surface</h3>");
-    html.push_str("<div class=\"legend\"><span><span class=\"dot sol\"></span>Solidity profile</span><span><span class=\"dot vy\"></span>Vyper profile</span><span>metadata-off only</span></div>");
-    html.push_str("<div class=\"chart\"><svg width=\"1080\" height=\"390\" viewBox=\"0 0 1080 390\" role=\"img\" aria-label=\"Runtime bytecode size versus harness call gas for fixed suite metadata-off rows\">");
-    html.push_str("<line x1=\"64\" y1=\"330\" x2=\"1030\" y2=\"330\" stroke=\"#9ca3af\"/><line x1=\"64\" y1=\"24\" x2=\"64\" y2=\"330\" stroke=\"#9ca3af\"/>");
-    html.push_str("<text x=\"540\" y=\"374\" text-anchor=\"middle\" font-size=\"12\" fill=\"#657083\">runtime bytes</text>");
-    html.push_str("<text x=\"18\" y=\"190\" text-anchor=\"middle\" font-size=\"12\" fill=\"#657083\" transform=\"rotate(-90 18 190)\">harness call gas</text>");
-    for row in selected {
-        let size = u64_at(row, "/bytecode/runtime_bytes");
-        let gas = u64_at(row, "/gas/harness_call_gas");
-        let x = 64 + (size * 940 / max_size) as i32;
-        let y = 330 - (gas * 292 / max_gas) as i32;
-        let color = if str_at(row, "/language").as_deref() == Some("vyper") {
-            "#0f8a5f"
-        } else {
-            "#2563eb"
-        };
+    html.push_str("<div class=\"legend\"><span>faceted by language</span><span>colour = optimizer profile</span><span>circle = metadata-off</span><span>square = metadata-on</span></div>");
+    html.push_str("<div class=\"chart\"><svg width=\"1080\" height=\"420\" viewBox=\"0 0 1080 420\" role=\"img\" aria-label=\"Runtime bytecode size versus harness call gas faceted by language\">");
+    for (panel_index, language) in ["solidity", "vyper"].iter().enumerate() {
+        let x0 = 64 + panel_index as i32 * 510;
+        let y0 = 42;
+        let width = 440;
+        let height = 300;
         html.push_str(&format!(
-            "<circle cx=\"{x}\" cy=\"{y}\" r=\"3.5\" fill=\"{color}\" opacity=\".68\"><title>{}</title></circle>",
-            escape(&tooltip(row))
+            "<text x=\"{}\" y=\"22\" font-size=\"14\" font-weight=\"700\" fill=\"#172033\">{}</text>",
+            x0,
+            escape(language)
         ));
+        html.push_str(&format!(
+            "<line x1=\"{x0}\" y1=\"{}\" x2=\"{}\" y2=\"{}\" stroke=\"#9ca3af\"/><line x1=\"{x0}\" y1=\"{y0}\" x2=\"{x0}\" y2=\"{}\" stroke=\"#9ca3af\"/>",
+            y0 + height,
+            x0 + width,
+            y0 + height,
+            y0 + height
+        ));
+        for row in selected
+            .iter()
+            .filter(|row| str_at(row, "/language").as_deref() == Some(*language))
+        {
+            let size = u64_at(row, "/bytecode/runtime_bytes");
+            let gas = u64_at(row, "/gas/harness_call_gas");
+            let x = x0 + (size * width as u64 / max_size) as i32;
+            let y = y0 + height - (gas * height as u64 / max_gas) as i32;
+            let color = profile_color(&str_at(row, "/profile_id").unwrap_or_default());
+            if str_at(row, "/gas/metadata_mode").as_deref() == Some("on") {
+                html.push_str(&format!(
+                    "<rect x=\"{}\" y=\"{}\" width=\"5\" height=\"5\" fill=\"{}\" opacity=\".55\"><title>{}</title></rect>",
+                    x - 2,
+                    y - 2,
+                    color,
+                    escape(&tooltip(row))
+                ));
+            } else {
+                html.push_str(&format!(
+                    "<circle cx=\"{x}\" cy=\"{y}\" r=\"3\" fill=\"{color}\" opacity=\".72\"><title>{}</title></circle>",
+                    escape(&tooltip(row))
+                ));
+            }
+        }
     }
+    html.push_str("<text x=\"540\" y=\"400\" text-anchor=\"middle\" font-size=\"12\" fill=\"#657083\">runtime bytes (shared scale)</text>");
+    html.push_str("<text x=\"18\" y=\"215\" text-anchor=\"middle\" font-size=\"12\" fill=\"#657083\" transform=\"rotate(-90 18 215)\">harness call gas (shared scale)</text>");
     html.push_str("</svg></div>");
     html
 }
@@ -1425,8 +1584,9 @@ fn render_profile_tradeoff_table(
     let aggregates = fixed_profile_tradeoff_aggregates(rows);
     let mut html = String::new();
     html.push_str(&format!(
-        "<p class=\"small muted\">Geometric mean ratios over fixed-suite metadata-off rows, relative to <span class=\"mono\">{}</span>. Runtime gas is scenario-level; bytecode, deploy, and compile metrics are artifact-level.</p>",
-        escape(SOL_CODEGEN_BASELINE)
+        "<p class=\"small muted\">Geometric mean ratios over fixed-suite metadata-off rows. Solidity profiles are relative to <span class=\"mono\">{}</span>; Vyper profiles are relative to <span class=\"mono\">{}</span>. Runtime gas is scenario-level; bytecode, deploy, and compile metrics are artifact-level.</p>",
+        escape(SOL_CODEGEN_BASELINE),
+        escape(VYPER_GAS_CODEGEN)
     ));
     html.push_str("<table><thead><tr><th>Profile</th><th>Harness Gas</th><th>Runtime Bytes</th><th>Internal Create Gas</th><th>Compile Wall</th><th>Samples</th></tr></thead><tbody>");
     for (profile, aggregate) in aggregates {
@@ -1466,16 +1626,24 @@ fn fixed_profile_tradeoff_aggregates(
     let mut baseline_artifacts = BTreeMap::new();
     let mut seen = BTreeSet::new();
     for row in rows {
-        if !is_ok_fixed_metadata_off(row)
-            || str_at(row, "/profile_id").as_deref() != Some(SOL_CODEGEN_BASELINE)
-        {
+        if !is_ok_fixed_metadata_off(row) {
             continue;
         }
-        baseline_gas.insert(scenario_key(row), u64_at(row, "/gas/harness_call_gas"));
+        let language = str_at(row, "/language").unwrap_or_default();
+        let Some(baseline_profile) = baseline_profile_for_language(&language) else {
+            continue;
+        };
+        if str_at(row, "/profile_id").as_deref() != Some(baseline_profile) {
+            continue;
+        }
+        baseline_gas.insert(
+            format!("{}\0{}", language, scenario_key(row)),
+            u64_at(row, "/gas/harness_call_gas"),
+        );
         let benchmark = str_at(row, "/benchmark_id").unwrap_or_default();
         let artifact_key = artifact_key_from_row(row);
         if seen.insert(artifact_key) {
-            baseline_artifacts.insert(benchmark, artifact_metrics(row));
+            baseline_artifacts.insert(format!("{language}\0{benchmark}"), artifact_metrics(row));
         }
     }
 
@@ -1487,7 +1655,11 @@ fn fixed_profile_tradeoff_aggregates(
         }
         let profile = str_at(row, "/profile_id").unwrap_or_default();
         let entry = aggregates.entry(profile.clone()).or_default();
-        if let Some(base_gas) = baseline_gas.get(&scenario_key(row)).copied() {
+        let language = str_at(row, "/language").unwrap_or_default();
+        if let Some(base_gas) = baseline_gas
+            .get(&format!("{}\0{}", language, scenario_key(row)))
+            .copied()
+        {
             push_ratio(
                 &mut entry.gas,
                 u64_at(row, "/gas/harness_call_gas"),
@@ -1497,7 +1669,10 @@ fn fixed_profile_tradeoff_aggregates(
         let artifact_key = artifact_key_from_row(row);
         if seen_artifacts.insert(artifact_key) {
             let benchmark = str_at(row, "/benchmark_id").unwrap_or_default();
-            if let Some(base) = baseline_artifacts.get(&benchmark).copied() {
+            if let Some(base) = baseline_artifacts
+                .get(&format!("{language}\0{benchmark}"))
+                .copied()
+            {
                 let current = artifact_metrics(row);
                 push_ratio(
                     &mut entry.runtime_bytes,
@@ -1588,14 +1763,16 @@ fn render_compile_resource_summary_for_profiles(
         }
         let aggregate = aggregates.entry(profile).or_default();
         let metrics = artifact_metrics(row);
+        let stats = sample_stats(row, "/compile/wall_ms_samples");
         aggregate.artifacts += 1;
-        aggregate.total_wall_ms += metrics.compile_ms;
+        aggregate.wall_medians.push(stats.median);
+        aggregate.cvs.push(stats.cv);
         aggregate.total_rss_kib += metrics.peak_rss_kib;
         aggregate.max_rss_kib = aggregate.max_rss_kib.max(metrics.peak_rss_kib);
     }
     let max_wall = aggregates
         .values()
-        .map(|aggregate| aggregate.total_wall_ms / aggregate.artifacts.max(1) as f64)
+        .map(|aggregate| median(aggregate.wall_medians.clone()))
         .fold(0.0, f64::max)
         .max(1.0);
     let max_rss = aggregates
@@ -1606,10 +1783,12 @@ fn render_compile_resource_summary_for_profiles(
         .max(1);
 
     let mut html = String::new();
-    html.push_str("<table><thead><tr><th>Profile</th><th>Artifacts</th><th>Avg Wall ms</th><th>Max RSS KiB</th><th>Avg RSS KiB</th></tr></thead><tbody>");
+    html.push_str("<table><thead><tr><th>Profile</th><th>Artifacts</th><th>Median Wall ms</th><th>Avg CV</th><th>CV &gt; 5%</th><th>Max RSS KiB</th><th>Avg RSS KiB</th></tr></thead><tbody>");
     for (profile, aggregate) in aggregates {
         let artifacts = aggregate.artifacts.max(1);
-        let avg_wall = aggregate.total_wall_ms / artifacts as f64;
+        let median_wall = median(aggregate.wall_medians.clone());
+        let avg_cv = average(&aggregate.cvs);
+        let high_cv = aggregate.cvs.iter().filter(|cv| **cv > 0.05).count();
         let avg_rss = aggregate.total_rss_kib / artifacts as u64;
         html.push_str("<tr><td class=\"mono\">");
         html.push_str(&escape(&profile_short(&profile)));
@@ -1618,7 +1797,15 @@ fn render_compile_resource_summary_for_profiles(
         html.push_str("</span></td><td>");
         html.push_str(&aggregate.artifacts.to_string());
         html.push_str("</td><td>");
-        html.push_str(&bar_value(avg_wall, max_wall, &format!("{avg_wall:.2}")));
+        html.push_str(&bar_value(
+            median_wall,
+            max_wall,
+            &format!("{median_wall:.2}"),
+        ));
+        html.push_str("</td><td>");
+        html.push_str(&format!("{:.1}%", avg_cv * 100.0));
+        html.push_str("</td><td>");
+        html.push_str(&high_cv.to_string());
         html.push_str("</td><td>");
         html.push_str(&bar_value(
             aggregate.max_rss_kib as f64,
@@ -1719,7 +1906,8 @@ fn render_metadata_delta_summary(rows: &[serde_json::Value]) -> String {
 #[derive(Debug, Default)]
 struct CompileAggregate {
     artifacts: usize,
-    total_wall_ms: f64,
+    wall_medians: Vec<f64>,
+    cvs: Vec<f64>,
     total_rss_kib: u64,
     max_rss_kib: u64,
 }
@@ -1738,14 +1926,16 @@ fn render_compile_resource_summary(rows: &[serde_json::Value]) -> String {
         let profile = str_at(row, "/profile_id").unwrap_or_default();
         let aggregate = aggregates.entry(profile).or_default();
         let metrics = artifact_metrics(row);
+        let stats = sample_stats(row, "/compile/wall_ms_samples");
         aggregate.artifacts += 1;
-        aggregate.total_wall_ms += metrics.compile_ms;
+        aggregate.wall_medians.push(stats.median);
+        aggregate.cvs.push(stats.cv);
         aggregate.total_rss_kib += metrics.peak_rss_kib;
         aggregate.max_rss_kib = aggregate.max_rss_kib.max(metrics.peak_rss_kib);
     }
     let max_wall = aggregates
         .values()
-        .map(|aggregate| aggregate.total_wall_ms / aggregate.artifacts.max(1) as f64)
+        .map(|aggregate| median(aggregate.wall_medians.clone()))
         .fold(0.0, f64::max)
         .max(1.0);
     let max_rss = aggregates
@@ -1756,18 +1946,28 @@ fn render_compile_resource_summary(rows: &[serde_json::Value]) -> String {
         .max(1);
 
     let mut html = String::new();
-    html.push_str("<p class=\"small muted\">Compile metrics are artifact-level. Wall time is the mean of the recorded samples for each artifact; RSS is the recorded peak for that compiler invocation set.</p>");
-    html.push_str("<table><thead><tr><th>Profile</th><th>Artifacts</th><th>Avg Wall ms</th><th>Max RSS KiB</th><th>Avg RSS KiB</th></tr></thead><tbody>");
+    html.push_str("<p class=\"small muted\">Compile metrics are artifact-level. Wall time shows median recorded samples. CV is coefficient of variation over the recorded wall-time samples. RSS is a single peak sample and should be treated as coarse.</p>");
+    html.push_str("<table><thead><tr><th>Profile</th><th>Artifacts</th><th>Median Wall ms</th><th>Avg CV</th><th>CV &gt; 5%</th><th>Max RSS KiB</th><th>Avg RSS KiB</th></tr></thead><tbody>");
     for (profile, aggregate) in aggregates {
         let artifacts = aggregate.artifacts.max(1);
-        let avg_wall = aggregate.total_wall_ms / artifacts as f64;
+        let median_wall = median(aggregate.wall_medians.clone());
+        let avg_cv = average(&aggregate.cvs);
+        let high_cv = aggregate.cvs.iter().filter(|cv| **cv > 0.05).count();
         let avg_rss = aggregate.total_rss_kib / artifacts as u64;
         html.push_str("<tr><td class=\"mono\">");
         html.push_str(&escape(&profile));
         html.push_str("</td><td>");
         html.push_str(&aggregate.artifacts.to_string());
         html.push_str("</td><td>");
-        html.push_str(&bar_value(avg_wall, max_wall, &format!("{avg_wall:.2}")));
+        html.push_str(&bar_value(
+            median_wall,
+            max_wall,
+            &format!("{median_wall:.2}"),
+        ));
+        html.push_str("</td><td>");
+        html.push_str(&format!("{:.1}%", avg_cv * 100.0));
+        html.push_str("</td><td>");
+        html.push_str(&high_cv.to_string());
         html.push_str("</td><td>");
         html.push_str(&bar_value(
             aggregate.max_rss_kib as f64,
@@ -1782,160 +1982,15 @@ fn render_compile_resource_summary(rows: &[serde_json::Value]) -> String {
     html
 }
 
-#[derive(Debug, Default)]
-struct ScaleCell {
-    max_ok: Option<u64>,
-    failed_values: BTreeSet<u64>,
-}
-
-fn render_scale_max_n(rows: &[serde_json::Value]) -> String {
-    let mut profiles = BTreeSet::new();
-    let mut cells: BTreeMap<String, BTreeMap<String, ScaleCell>> = BTreeMap::new();
-    let mut seen_ok = BTreeSet::new();
-    for row in rows {
-        if str_at(row, "/suite").as_deref() != Some("scale") {
-            continue;
-        }
-        let family = str_at(row, "/family").unwrap_or_default();
-        let profile = str_at(row, "/profile_id").unwrap_or_default();
-        let value = u64_at(row, "/parameter_value");
-        profiles.insert(profile.clone());
-        let cell = cells.entry(family).or_default().entry(profile).or_default();
-        match str_at(row, "/status").as_deref() {
-            Some("ok") => {
-                let key = artifact_key_from_row(row);
-                if seen_ok.insert(key) {
-                    cell.max_ok = Some(cell.max_ok.unwrap_or(0).max(value));
-                }
-            }
-            Some("compile_error") => {
-                cell.failed_values.insert(value);
-            }
-            _ => {}
-        }
-    }
+fn render_data_export(rows: &[serde_json::Value]) -> String {
     let mut html = String::new();
-    html.push_str("<h3>Scale Failure And Max-N Matrix</h3>");
-    html.push_str("<p class=\"small muted\">Cells show the largest N compiled for each generated family/profile and any failed N values. This keeps compiler reliability cliffs visible instead of averaging them away.</p>");
-    html.push_str("<div class=\"chart\"><table><thead><tr><th>Family</th>");
-    for profile in &profiles {
-        html.push_str("<th>");
-        html.push_str(&escape(profile));
-        html.push_str("</th>");
-    }
-    html.push_str("</tr></thead><tbody>");
-    for (family, by_profile) in cells {
-        html.push_str("<tr><td class=\"mono\">");
-        html.push_str(&escape(&family));
-        html.push_str("</td>");
-        for profile in &profiles {
-            let Some(cell) = by_profile.get(profile) else {
-                html.push_str("<td class=\"heat-na\">n/a</td>");
-                continue;
-            };
-            let class = if cell.failed_values.is_empty() {
-                "heat-ok"
-            } else {
-                "heat-fail"
-            };
-            html.push_str("<td class=\"");
-            html.push_str(class);
-            html.push_str("\">");
-            if let Some(max_ok) = cell.max_ok {
-                html.push_str("max ");
-                html.push_str(&max_ok.to_string());
-            } else {
-                html.push_str("none");
-            }
-            if !cell.failed_values.is_empty() {
-                html.push_str("<br><span class=\"small\">fail ");
-                html.push_str(
-                    &cell
-                        .failed_values
-                        .iter()
-                        .map(u64::to_string)
-                        .collect::<Vec<_>>()
-                        .join(","),
-                );
-                html.push_str("</span>");
-            }
-            html.push_str("</td>");
-        }
-        html.push_str("</tr>");
-    }
-    html.push_str("</tbody></table></div>");
-    html
-}
-
-fn render_raw_rows_table(rows: &[serde_json::Value]) -> String {
-    let mut html = String::new();
-    html.push_str("<table><thead><tr><th>Status</th><th>Suite</th><th>Family</th><th>N</th><th>Benchmark</th><th>Implementation</th><th>Compiler</th><th>Profile</th><th>Metadata</th><th>State</th><th>Scenario</th><th>Status Check</th><th>Baseline Diff</th><th>Randomized</th><th>Property</th><th>Failures</th><th>Runtime Bytes</th><th>Internal Create Gas</th><th>Harness Call Gas</th><th>Calldata Gas</th><th>Harness Est. Tx Gas</th></tr></thead><tbody>");
-    for row in rows {
-        html.push_str("<tr><td>");
-        html.push_str(&escape(&str_at(row, "/status").unwrap_or_default()));
-        html.push_str("</td><td>");
-        html.push_str(&escape(&str_at(row, "/suite").unwrap_or_default()));
-        html.push_str("</td><td>");
-        html.push_str(&escape(&str_at(row, "/family").unwrap_or_default()));
-        html.push_str("</td><td>");
-        html.push_str(&escape(
-            &str_at(row, "/parameter_value").unwrap_or_default(),
-        ));
-        html.push_str("</td><td>");
-        html.push_str(&escape(&str_at(row, "/benchmark_id").unwrap_or_default()));
-        html.push_str("</td><td>");
-        html.push_str(&escape(
-            &str_at(row, "/implementation_id").unwrap_or_default(),
-        ));
-        html.push_str("</td><td>");
-        html.push_str(&escape(&format!(
-            "{} {}",
-            str_at(row, "/compiler/name").unwrap_or_default(),
-            str_at(row, "/compiler/version").unwrap_or_default()
-        )));
-        html.push_str("</td><td>");
-        html.push_str(&escape(&str_at(row, "/profile_id").unwrap_or_default()));
-        html.push_str("</td><td>");
-        html.push_str(&escape(
-            &str_at(row, "/gas/metadata_mode").unwrap_or_default(),
-        ));
-        html.push_str("</td><td>");
-        html.push_str(&escape(
-            &str_at(row, "/gas/state_access_profile").unwrap_or_default(),
-        ));
-        html.push_str("</td><td>");
-        html.push_str(&escape(&str_at(row, "/gas/scenario").unwrap_or_default()));
-        html.push_str("</td><td>");
-        html.push_str(&escape(
-            &str_at(row, "/correctness/scenario_status_check").unwrap_or_default(),
-        ));
-        html.push_str("</td><td>");
-        html.push_str(&escape(
-            &str_at(row, "/correctness/baseline_differential_check").unwrap_or_default(),
-        ));
-        html.push_str("</td><td>");
-        html.push_str(&escape(
-            &str_at(row, "/correctness/randomized_differential_check").unwrap_or_default(),
-        ));
-        html.push_str("</td><td>");
-        html.push_str(&escape(
-            &str_at(row, "/correctness/property_tests").unwrap_or_default(),
-        ));
-        html.push_str("</td><td>");
-        html.push_str(&failure_links_html(row));
-        html.push_str("</td><td>");
-        html.push_str(&u64_at(row, "/bytecode/runtime_bytes").to_string());
-        html.push_str("</td><td>");
-        html.push_str(&u64_at(row, "/gas/internal_create_gas").to_string());
-        html.push_str("</td><td>");
-        html.push_str(&u64_at(row, "/gas/harness_call_gas").to_string());
-        html.push_str("</td><td>");
-        html.push_str(&u64_at(row, "/gas/calldata_gas").to_string());
-        html.push_str("</td><td>");
-        html.push_str(&u64_at(row, "/gas/harness_estimated_tx_gas").to_string());
-        html.push_str("</td></tr>");
-    }
-    html.push_str("</tbody></table>");
+    html.push_str("<div class=\"card\"><h3>Machine-readable outputs</h3>");
+    html.push_str(&format!(
+        "<p class=\"small muted\">The HTML report intentionally does not inline the {} normalized rows. Use the JSON artifacts for exhaustive row-level analysis.</p>",
+        rows.len()
+    ));
+    html.push_str("<p><a href=\"../normalized/results.json\">normalized results JSON</a> &middot; <a href=\"../normalized/run-manifest.json\">run manifest JSON</a> &middot; <a href=\"../raw/foundry-gas.jsonl\">raw Foundry gas JSONL</a></p>");
+    html.push_str("</div>");
     html
 }
 
@@ -1996,12 +2051,11 @@ fn render_real_derived_summary(rows: &[serde_json::Value]) -> String {
         6,
     ));
     html.push_str("</section>");
-    html.push_str(
-        "<details><summary>Show real-derived scenario ratios and row-level provenance</summary>",
-    );
+    html.push_str(&render_real_model_profile_summary(&selected));
+    html.push_str("<details><summary>Show real-derived scenario ratios</summary>");
     html.push_str(&render_real_derived_scenario_ratios(&selected));
-    html.push_str(&render_real_derived_detail_table(&selected));
     html.push_str("</details>");
+    html.push_str("<p class=\"small muted\">Row-level provenance and every measured scenario remain in the normalized JSON export; the HTML keeps this section at model and scenario-ratio granularity.</p>");
     html
 }
 
@@ -2016,6 +2070,8 @@ struct RealModelScope {
     artifacts: BTreeSet<String>,
     assumptions: BTreeSet<String>,
     exclusions: BTreeSet<String>,
+    min_eip170_margin: Option<i64>,
+    min_eip3860_margin: Option<i64>,
 }
 
 fn render_real_model_scope_table(rows: &[&serde_json::Value]) -> String {
@@ -2036,6 +2092,18 @@ fn render_real_model_scope_table(rows: &[&serde_json::Value]) -> String {
             if !scenario.is_empty() {
                 entry.scenarios.insert(scenario);
             }
+            entry.min_eip170_margin = Some(
+                entry
+                    .min_eip170_margin
+                    .unwrap_or(i64::MAX)
+                    .min(i64_at(row, "/bytecode/eip170_margin_bytes")),
+            );
+            entry.min_eip3860_margin = Some(
+                entry
+                    .min_eip3860_margin
+                    .unwrap_or(i64::MAX)
+                    .min(i64_at(row, "/bytecode/eip3860_margin_bytes")),
+            );
         }
         entry.artifacts.insert(artifact_key_from_row(row));
         for assumption in array_strings_at(row, "/provenance/mock_assumptions") {
@@ -2047,7 +2115,7 @@ fn render_real_model_scope_table(rows: &[&serde_json::Value]) -> String {
     }
 
     let mut html = String::new();
-    html.push_str("<table><thead><tr><th>Model</th><th>Scope</th><th>Coverage</th><th>Reader Guardrails</th></tr></thead><tbody>");
+    html.push_str("<table><thead><tr><th>Model</th><th>Scope</th><th>Coverage</th><th>EIP Margins</th><th>Reader Guardrails</th></tr></thead><tbody>");
     for (benchmark, scope) in models {
         html.push_str("<tr><td class=\"mono\">");
         html.push_str(&escape(&benchmark));
@@ -2068,6 +2136,18 @@ fn render_real_model_scope_table(rows: &[&serde_json::Value]) -> String {
             scope.artifacts.len()
         ));
         html.push_str("</td><td class=\"small\">");
+        html.push_str(&format!(
+            "EIP-170: {} bytes<br>EIP-3860: {} bytes",
+            scope
+                .min_eip170_margin
+                .map(signed)
+                .unwrap_or_else(|| "n/a".to_string()),
+            scope
+                .min_eip3860_margin
+                .map(signed)
+                .unwrap_or_else(|| "n/a".to_string())
+        ));
+        html.push_str("</td><td class=\"small\">");
         html.push_str("<span class=\"muted\">mocked:</span> ");
         html.push_str(&escape(&summarize_set(&scope.assumptions, 2)));
         html.push_str("<br><span class=\"muted\">excluded:</span> ");
@@ -2078,58 +2158,64 @@ fn render_real_model_scope_table(rows: &[&serde_json::Value]) -> String {
     html
 }
 
-fn render_real_derived_detail_table(rows: &[&serde_json::Value]) -> String {
-    let mut html = String::new();
-    html.push_str("<table><thead><tr><th>Upstream</th><th>Benchmark</th><th>Model</th><th>Production Equivalent</th><th>Source</th><th>Port</th><th>Profile</th><th>Status</th><th>Scenario</th><th>Assumptions / Exclusions</th><th>Runtime Bytes</th><th>Internal Create Gas</th><th>Harness Call Gas</th><th>Harness Est. Tx Gas</th></tr></thead><tbody>");
+#[derive(Debug, Default)]
+struct RealModelProfileSummary {
+    scenarios: BTreeSet<String>,
+    artifacts: BTreeSet<String>,
+    runtime_bytes: u64,
+    internal_create_gas: u64,
+    gas_total: u64,
+    gas_samples: u64,
+}
+
+fn render_real_model_profile_summary(rows: &[&serde_json::Value]) -> String {
+    let mut groups: BTreeMap<String, RealModelProfileSummary> = BTreeMap::new();
     for row in rows {
-        html.push_str("<tr><td>");
-        html.push_str(&escape(
-            &str_at(row, "/provenance/upstream_project").unwrap_or_default(),
-        ));
+        if str_at(row, "/status").as_deref() != Some("ok")
+            || str_at(row, "/gas/metadata_mode").as_deref() != Some("off")
+        {
+            continue;
+        }
+        let benchmark = str_at(row, "/benchmark_id").unwrap_or_default();
+        let language = str_at(row, "/language").unwrap_or_default();
+        let profile = str_at(row, "/profile_id").unwrap_or_default();
+        let key = format!("{benchmark}\0{language}\0{profile}");
+        let entry = groups.entry(key).or_default();
+        if let Some(scenario) = str_at(row, "/gas/scenario") {
+            entry.scenarios.insert(scenario);
+        }
+        entry.gas_total += u64_at(row, "/gas/harness_call_gas");
+        entry.gas_samples += 1;
+        if entry.artifacts.insert(artifact_key_from_row(row)) {
+            entry.runtime_bytes = u64_at(row, "/bytecode/runtime_bytes");
+            entry.internal_create_gas = u64_at(row, "/gas/internal_create_gas");
+        }
+    }
+
+    let mut html = String::new();
+    html.push_str("<h3>Model/Profile Summary</h3>");
+    html.push_str("<p class=\"small muted\">Metadata-off artifact-level size/deploy values plus average harness call gas across model scenarios. This replaces row-level provenance repetition with one reader-facing profile surface per model.</p>");
+    html.push_str("<table><thead><tr><th>Model</th><th>Language</th><th>Profile</th><th>Scenarios</th><th>Runtime Bytes</th><th>Internal Create Gas</th><th>Avg Harness Call Gas</th></tr></thead><tbody>");
+    for (key, summary) in groups {
+        let mut parts = key.split('\0');
+        let benchmark = parts.next().unwrap_or_default();
+        let language = parts.next().unwrap_or_default();
+        let profile = parts.next().unwrap_or_default();
+        let avg_gas = summary.gas_total / summary.gas_samples.max(1);
+        html.push_str("<tr><td class=\"mono\">");
+        html.push_str(&escape(benchmark));
         html.push_str("</td><td>");
-        html.push_str(&escape(&str_at(row, "/benchmark_id").unwrap_or_default()));
+        html.push_str(&escape(language));
+        html.push_str("</td><td class=\"mono\">");
+        html.push_str(&escape(&profile_short(profile)));
         html.push_str("</td><td>");
-        html.push_str(&escape(
-            &str_at(row, "/provenance/model_kind").unwrap_or_default(),
-        ));
+        html.push_str(&summary.scenarios.len().to_string());
         html.push_str("</td><td>");
-        html.push_str(&escape(
-            &str_at(row, "/provenance/production_equivalence").unwrap_or_default(),
-        ));
+        html.push_str(&summary.runtime_bytes.to_string());
         html.push_str("</td><td>");
-        html.push_str(&escape(&format!(
-            "{}:{}",
-            str_at(row, "/provenance/source_language").unwrap_or_default(),
-            str_at(row, "/provenance/source_path").unwrap_or_default()
-        )));
+        html.push_str(&summary.internal_create_gas.to_string());
         html.push_str("</td><td>");
-        html.push_str(&escape(&str_at(row, "/language").unwrap_or_default()));
-        html.push_str("</td><td>");
-        html.push_str(&escape(&str_at(row, "/profile_id").unwrap_or_default()));
-        html.push_str("</td><td>");
-        html.push_str(&escape(&str_at(row, "/status").unwrap_or_default()));
-        html.push_str("</td><td>");
-        html.push_str(&escape(&str_at(row, "/gas/scenario").unwrap_or_default()));
-        html.push_str("</td><td>");
-        html.push_str("<div class=\"small\"><span class=\"muted\">assumptions:</span> ");
-        html.push_str(&escape(&joined_array_at(
-            row,
-            "/provenance/mock_assumptions",
-        )));
-        html.push_str("<br><span class=\"muted\">excluded:</span> ");
-        html.push_str(&escape(&joined_array_at(
-            row,
-            "/provenance/excluded_features",
-        )));
-        html.push_str("</div>");
-        html.push_str("</td><td>");
-        html.push_str(&u64_at(row, "/bytecode/runtime_bytes").to_string());
-        html.push_str("</td><td>");
-        html.push_str(&u64_at(row, "/gas/internal_create_gas").to_string());
-        html.push_str("</td><td>");
-        html.push_str(&u64_at(row, "/gas/harness_call_gas").to_string());
-        html.push_str("</td><td>");
-        html.push_str(&u64_at(row, "/gas/harness_estimated_tx_gas").to_string());
+        html.push_str(&avg_gas.to_string());
         html.push_str("</td></tr>");
     }
     html.push_str("</tbody></table>");
@@ -2200,54 +2286,46 @@ fn render_real_derived_scenario_ratios(rows: &[&serde_json::Value]) -> String {
 }
 
 #[derive(Debug, Default)]
-struct ScaleAggregate {
-    family: String,
-    parameter_value: u64,
-    language: String,
-    profile_id: String,
-    compile_wall_ms: f64,
-    compile_metric_artifacts: BTreeSet<String>,
-    runtime_bytes: u64,
-    internal_create_gas: u64,
-    harness_call_gas: u64,
-    metric_samples: u64,
+struct ScaleFamilySummary {
+    n_values: BTreeSet<u64>,
+    profiles: BTreeSet<String>,
+    successful_points: BTreeSet<String>,
+    failure_profiles: BTreeSet<String>,
     compile_failures: u64,
+    max_runtime_bytes: u64,
+    max_harness_call_gas: u64,
+    max_compile_ms: f64,
 }
 
-fn render_scale_summary(rows: &[serde_json::Value]) -> String {
-    let mut groups: BTreeMap<String, ScaleAggregate> = BTreeMap::new();
+fn render_scale_family_summary(rows: &[serde_json::Value]) -> String {
+    let mut groups: BTreeMap<String, ScaleFamilySummary> = BTreeMap::new();
     for row in rows {
         if str_at(row, "/suite").as_deref() != Some(BenchmarkSuite::Scale.as_str()) {
             continue;
         }
         let family = str_at(row, "/family").unwrap_or_default();
-        let parameter_value = u64_at(row, "/parameter_value");
-        let language = str_at(row, "/language").unwrap_or_default();
+        let n = u64_at(row, "/parameter_value");
         let profile_id = str_at(row, "/profile_id").unwrap_or_default();
-        let key = format!("{family}\0{parameter_value:020}\0{language}\0{profile_id}");
-        let entry = groups.entry(key).or_insert_with(|| ScaleAggregate {
-            family,
-            parameter_value,
-            language,
-            profile_id: profile_id.clone(),
-            ..ScaleAggregate::default()
-        });
+        let entry = groups.entry(family).or_default();
+        entry.n_values.insert(n);
+        let is_metadata_off = str_at(row, "/gas/metadata_mode").as_deref() == Some("off");
+        if is_metadata_off {
+            entry.profiles.insert(profile_id.clone());
+        }
         if str_at(row, "/status").as_deref() == Some("compile_error") {
             entry.compile_failures += 1;
-        } else {
-            let compile_key = format!(
-                "{}\0{}\0{}",
-                str_at(row, "/benchmark_id").unwrap_or_default(),
-                str_at(row, "/implementation_id").unwrap_or_default(),
-                profile_id
-            );
-            if entry.compile_metric_artifacts.insert(compile_key) {
-                entry.compile_wall_ms += mean_f64_array_at(row, "/compile/wall_ms_samples");
-            }
-            entry.runtime_bytes += u64_at(row, "/bytecode/runtime_bytes");
-            entry.internal_create_gas += u64_at(row, "/gas/internal_create_gas");
-            entry.harness_call_gas += u64_at(row, "/gas/harness_call_gas");
-            entry.metric_samples += 1;
+            entry.failure_profiles.insert(profile_short(&profile_id));
+        } else if is_metadata_off {
+            entry.successful_points.insert(format!("{n}\0{profile_id}"));
+            entry.max_runtime_bytes = entry
+                .max_runtime_bytes
+                .max(u64_at(row, "/bytecode/runtime_bytes"));
+            entry.max_harness_call_gas = entry
+                .max_harness_call_gas
+                .max(u64_at(row, "/gas/harness_call_gas"));
+            entry.max_compile_ms = entry
+                .max_compile_ms
+                .max(mean_f64_array_at(row, "/compile/wall_ms_samples"));
         }
     }
 
@@ -2256,38 +2334,545 @@ fn render_scale_summary(rows: &[serde_json::Value]) -> String {
     }
 
     let mut html = String::new();
-    html.push_str("<table><thead><tr><th>Family</th><th>N</th><th>Language</th><th>Profile</th><th>Avg Compile ms</th><th>Avg Runtime Bytes</th><th>Avg Internal Create Gas</th><th>Avg Harness Call Gas</th><th>Run Samples</th><th>Compile Failures</th></tr></thead><tbody>");
-    for aggregate in groups.values() {
-        let samples = aggregate.metric_samples.max(1) as f64;
-        let compile_samples = aggregate.compile_metric_artifacts.len().max(1) as f64;
-        html.push_str("<tr><td>");
-        html.push_str(&escape(&aggregate.family));
+    html.push_str("<h3>Scale Family Summary</h3>");
+    html.push_str("<p class=\"small muted\">One row per generated family. Detailed N/profile rows are intentionally left to the JSON export; curves and failure surface above are the primary scale reading path.</p>");
+    html.push_str("<table><thead><tr><th>Family</th><th>N Range</th><th>Metadata-off Profiles</th><th>Successful N/Profile Points</th><th>Compile Failures</th><th>Failure Profiles</th><th>Max Runtime Bytes</th><th>Max Harness Call Gas</th><th>Max Compile ms</th></tr></thead><tbody>");
+    for (family, aggregate) in groups {
+        let min_n = aggregate
+            .n_values
+            .iter()
+            .next()
+            .copied()
+            .unwrap_or_default();
+        let max_n = aggregate
+            .n_values
+            .iter()
+            .next_back()
+            .copied()
+            .unwrap_or_default();
+        html.push_str("<tr><td class=\"mono\">");
+        html.push_str(&escape(&family));
         html.push_str("</td><td>");
-        html.push_str(&aggregate.parameter_value.to_string());
+        html.push_str(&format!("{min_n}-{max_n}"));
         html.push_str("</td><td>");
-        html.push_str(&escape(&aggregate.language));
+        html.push_str(&aggregate.profiles.len().to_string());
         html.push_str("</td><td>");
-        html.push_str(&escape(&aggregate.profile_id));
-        html.push_str("</td><td>");
-        html.push_str(&format!(
-            "{:.2}",
-            aggregate.compile_wall_ms / compile_samples
-        ));
-        html.push_str("</td><td>");
-        html.push_str(&((aggregate.runtime_bytes as f64 / samples).round() as u64).to_string());
-        html.push_str("</td><td>");
-        html.push_str(
-            &((aggregate.internal_create_gas as f64 / samples).round() as u64).to_string(),
-        );
-        html.push_str("</td><td>");
-        html.push_str(&((aggregate.harness_call_gas as f64 / samples).round() as u64).to_string());
-        html.push_str("</td><td>");
-        html.push_str(&aggregate.metric_samples.to_string());
+        html.push_str(&aggregate.successful_points.len().to_string());
         html.push_str("</td><td>");
         html.push_str(&aggregate.compile_failures.to_string());
+        html.push_str("</td><td class=\"small\">");
+        html.push_str(&escape(
+            &aggregate
+                .failure_profiles
+                .iter()
+                .cloned()
+                .collect::<Vec<_>>()
+                .join("; "),
+        ));
+        html.push_str("</td><td>");
+        html.push_str(&aggregate.max_runtime_bytes.to_string());
+        html.push_str("</td><td>");
+        html.push_str(&aggregate.max_harness_call_gas.to_string());
+        html.push_str("</td><td>");
+        html.push_str(&format!("{:.2}", aggregate.max_compile_ms));
         html.push_str("</td></tr>");
     }
     html.push_str("</tbody></table>");
+    html
+}
+
+#[derive(Debug, Default)]
+struct BenchmarkProfileSummary {
+    scenarios: usize,
+    total_gas: u64,
+    runtime_bytes: u64,
+    compile_ms: f64,
+}
+
+fn render_fixed_benchmark_summary(rows: &[serde_json::Value]) -> String {
+    let mut cells: BTreeMap<String, BTreeMap<String, BenchmarkProfileSummary>> = BTreeMap::new();
+    let mut seen_artifacts = BTreeSet::new();
+    for row in rows {
+        if !is_ok_fixed_metadata_off(row) {
+            continue;
+        }
+        let profile = str_at(row, "/profile_id").unwrap_or_default();
+        if !SOL_CODEGEN_PROFILES.contains(&profile.as_str())
+            && !VYPER_CODEGEN_PROFILES.contains(&profile.as_str())
+        {
+            continue;
+        }
+        let benchmark = str_at(row, "/benchmark_id").unwrap_or_default();
+        let entry = cells
+            .entry(benchmark)
+            .or_default()
+            .entry(profile.clone())
+            .or_default();
+        entry.scenarios += 1;
+        entry.total_gas += u64_at(row, "/gas/harness_call_gas");
+        let artifact_key = artifact_key_from_row(row);
+        if seen_artifacts.insert(artifact_key) {
+            entry.runtime_bytes = u64_at(row, "/bytecode/runtime_bytes");
+            entry.compile_ms = mean_f64_array_at(row, "/compile/wall_ms_samples");
+        }
+    }
+
+    let profiles = [
+        SOL_CODEGEN_BASELINE,
+        SOL_VIAIR_CODEGEN,
+        SOL_NOOPT_CODEGEN,
+        VYPER_GAS_CODEGEN,
+        VYPER_CODESIZE_CODEGEN,
+        VYPER_NONE_CODEGEN,
+    ];
+    let mut html = String::new();
+    html.push_str("<h3>Per-Benchmark Snapshot</h3>");
+    html.push_str("<p class=\"small muted\">Cells show runtime bytes and average harness call gas across scenarios for each benchmark/profile. This is a compact index; scenario-level rows remain in the JSON export.</p>");
+    html.push_str("<table><thead><tr><th>Benchmark</th>");
+    for profile in profiles {
+        html.push_str("<th>");
+        html.push_str(&escape(&profile_short(profile)));
+        html.push_str("</th>");
+    }
+    html.push_str("</tr></thead><tbody>");
+    for (benchmark, by_profile) in cells {
+        html.push_str("<tr><td class=\"mono\">");
+        html.push_str(&escape(&benchmark));
+        html.push_str("</td>");
+        for profile in profiles {
+            html.push_str("<td>");
+            if let Some(summary) = by_profile.get(profile) {
+                let avg_gas = summary.total_gas / summary.scenarios.max(1) as u64;
+                html.push_str(&format!(
+                    "<span class=\"mono\">{} B</span><br><span class=\"small muted\">avg gas {}</span>",
+                    summary.runtime_bytes, avg_gas
+                ));
+            } else {
+                html.push_str("<span class=\"pill na\">n/a</span>");
+            }
+            html.push_str("</td>");
+        }
+        html.push_str("</tr>");
+    }
+    html.push_str("</tbody></table>");
+    html
+}
+
+fn render_benchmark_summary(rows: &[serde_json::Value]) -> String {
+    let mut groups: BTreeMap<String, Vec<&serde_json::Value>> = BTreeMap::new();
+    for row in rows {
+        let benchmark = str_at(row, "/benchmark_id").unwrap_or_default();
+        if !benchmark.is_empty() {
+            groups.entry(benchmark).or_default().push(row);
+        }
+    }
+    let mut html = String::new();
+    html.push_str("<p class=\"section-lede\">One row per benchmark keeps the report navigable without turning the HTML into a 1,968-row export. Use the JSON output for full row-level analysis.</p>");
+    html.push_str("<table><thead><tr><th>Benchmark</th><th>Suite</th><th>Scenarios</th><th>Artifacts</th><th>Compile Failures</th><th>Correctness Strength</th><th>Worst EIP Margins</th></tr></thead><tbody>");
+    for (benchmark, group) in groups {
+        let suite = group
+            .iter()
+            .find_map(|row| str_at(row, "/suite"))
+            .unwrap_or_default();
+        let scenarios = group
+            .iter()
+            .filter_map(|row| str_at(row, "/gas/scenario"))
+            .collect::<BTreeSet<_>>();
+        let artifacts = group
+            .iter()
+            .map(|row| artifact_key_from_row(row))
+            .collect::<BTreeSet<_>>();
+        let failures = group
+            .iter()
+            .filter(|row| str_at(row, "/status").as_deref() == Some("compile_error"))
+            .count();
+        let strength = aggregate_strength(&group);
+        let min_eip170 = group
+            .iter()
+            .filter(|row| str_at(row, "/status").as_deref() == Some("ok"))
+            .map(|row| i64_at(row, "/bytecode/eip170_margin_bytes"))
+            .min();
+        let min_eip3860 = group
+            .iter()
+            .filter(|row| str_at(row, "/status").as_deref() == Some("ok"))
+            .map(|row| i64_at(row, "/bytecode/eip3860_margin_bytes"))
+            .min();
+        html.push_str("<tr><td class=\"mono\">");
+        html.push_str(&escape(&benchmark));
+        html.push_str("</td><td>");
+        html.push_str(&escape(&suite));
+        html.push_str("</td><td>");
+        html.push_str(&scenarios.len().to_string());
+        html.push_str("</td><td>");
+        html.push_str(&artifacts.len().to_string());
+        html.push_str("</td><td>");
+        html.push_str(&failures.to_string());
+        html.push_str("</td><td>");
+        html.push_str(&strength_badge(&strength));
+        html.push_str("</td><td class=\"small\">");
+        html.push_str(&format!(
+            "EIP-170 {} / EIP-3860 {}",
+            min_eip170.map(signed).unwrap_or_else(|| "n/a".to_string()),
+            min_eip3860.map(signed).unwrap_or_else(|| "n/a".to_string())
+        ));
+        html.push_str("</td></tr>");
+    }
+    html.push_str("</tbody></table>");
+    html
+}
+
+fn render_correctness_heatmap(rows: &[serde_json::Value]) -> String {
+    let checks = [
+        ("status", "/correctness/scenario_status_check"),
+        ("baseline", "/correctness/baseline_differential_check"),
+        ("return", "/correctness/return_data_check"),
+        ("observer", "/correctness/observer_check"),
+        ("random", "/correctness/randomized_differential_check"),
+        ("property", "/correctness/property_tests"),
+        ("golden", "/correctness/golden_behavior_check"),
+        ("logs", "/correctness/log_check"),
+    ];
+    let mut groups: BTreeMap<String, Vec<&serde_json::Value>> = BTreeMap::new();
+    for row in rows {
+        groups
+            .entry(str_at(row, "/benchmark_id").unwrap_or_default())
+            .or_default()
+            .push(row);
+    }
+    let mut html = String::new();
+    html.push_str("<div class=\"legend\"><span><span class=\"pill pass\">pass</span></span><span><span class=\"pill info\">baseline_only</span></span><span><span class=\"pill warn\">not_run</span></span><span><span class=\"pill na\">not_applicable</span></span><span><span class=\"pill fail\">fail</span></span></div>");
+    html.push_str("<div class=\"chart\"><table><thead><tr><th>Benchmark</th><th>Suite</th>");
+    for (label, _) in checks {
+        html.push_str("<th>");
+        html.push_str(label);
+        html.push_str("</th>");
+    }
+    html.push_str("<th>Strength</th></tr></thead><tbody>");
+    for (benchmark, group) in groups {
+        let suite = group
+            .iter()
+            .find_map(|row| str_at(row, "/suite"))
+            .unwrap_or_default();
+        html.push_str("<tr><td class=\"mono\">");
+        html.push_str(&escape(&benchmark));
+        html.push_str("</td><td>");
+        html.push_str(&escape(&suite));
+        html.push_str("</td>");
+        for (_, pointer) in checks {
+            let status = aggregate_check_status(&group, pointer);
+            html.push_str(&heat_cell(&status));
+        }
+        html.push_str("<td>");
+        html.push_str(&strength_badge(&aggregate_strength(&group)));
+        html.push_str("</td></tr>");
+    }
+    html.push_str("</tbody></table></div>");
+    html
+}
+
+fn render_scale_failure_surface(rows: &[serde_json::Value]) -> String {
+    let mut profiles = BTreeSet::new();
+    let mut cells: BTreeMap<String, BTreeMap<String, String>> = BTreeMap::new();
+    for row in rows {
+        if str_at(row, "/suite").as_deref() != Some("scale") {
+            continue;
+        }
+        let profile = str_at(row, "/profile_id").unwrap_or_default();
+        if !profile.ends_with("metadata-off") {
+            continue;
+        }
+        profiles.insert(profile.clone());
+        let family = str_at(row, "/family").unwrap_or_default();
+        let value = u64_at(row, "/parameter_value");
+        let key = format!("{family}\0{value:020}");
+        let status = if str_at(row, "/status").as_deref() == Some("compile_error") {
+            "fail"
+        } else {
+            "ok"
+        };
+        cells
+            .entry(key)
+            .or_default()
+            .entry(profile)
+            .and_modify(|current| {
+                if status == "fail" {
+                    *current = "fail".to_string();
+                }
+            })
+            .or_insert_with(|| status.to_string());
+    }
+    let mut html = String::new();
+    html.push_str("<h3>Compile Failure Surface</h3>");
+    html.push_str("<p class=\"small muted\">Metadata-off scale family/N/profile tiles. The visible failure boundary matters more than any average failure count.</p>");
+    html.push_str("<div class=\"chart\"><table><thead><tr><th>Family / N</th>");
+    for profile in &profiles {
+        html.push_str("<th>");
+        html.push_str(&escape(&profile_short(profile)));
+        html.push_str("</th>");
+    }
+    html.push_str("</tr></thead><tbody>");
+    for (key, by_profile) in cells {
+        let (family, value) = key.split_once('\0').unwrap_or((&key, ""));
+        let n = value.parse::<u64>().unwrap_or(0);
+        html.push_str("<tr><td class=\"mono\">");
+        html.push_str(&escape(&format!("{family} / N={n}")));
+        html.push_str("</td>");
+        for profile in &profiles {
+            match by_profile.get(profile).map(String::as_str) {
+                Some("ok") => html.push_str("<td class=\"heat-ok\">ok</td>"),
+                Some("fail") => html.push_str("<td class=\"heat-fail\">fail</td>"),
+                _ => html.push_str("<td class=\"heat-na\">n/a</td>"),
+            }
+        }
+        html.push_str("</tr>");
+    }
+    html.push_str("</tbody></table></div>");
+    html
+}
+
+#[derive(Debug, Default, Clone)]
+struct ScaleCurveAggregate {
+    gas_total: u64,
+    gas_samples: u64,
+    runtime_bytes: u64,
+    compile_ms: f64,
+    seen_artifact: bool,
+}
+
+fn render_scale_curve_panels(rows: &[serde_json::Value]) -> String {
+    let mut groups: BTreeMap<String, BTreeMap<String, BTreeMap<u64, ScaleCurveAggregate>>> =
+        BTreeMap::new();
+    let mut seen_artifacts = BTreeSet::new();
+    for row in rows {
+        if str_at(row, "/suite").as_deref() != Some("scale")
+            || str_at(row, "/status").as_deref() != Some("ok")
+            || str_at(row, "/gas/metadata_mode").as_deref() != Some("off")
+        {
+            continue;
+        }
+        let profile = str_at(row, "/profile_id").unwrap_or_default();
+        if !PRIMARY_CODEGEN_PROFILES.contains(&profile.as_str())
+            && profile != SOL_NOOPT_CODEGEN
+            && profile != VYPER_NONE_CODEGEN
+        {
+            continue;
+        }
+        let family = str_at(row, "/family").unwrap_or_default();
+        let n = u64_at(row, "/parameter_value");
+        let entry = groups
+            .entry(family)
+            .or_default()
+            .entry(profile.clone())
+            .or_default()
+            .entry(n)
+            .or_default();
+        entry.gas_total += u64_at(row, "/gas/harness_call_gas");
+        entry.gas_samples += 1;
+        let artifact_key = artifact_key_from_row(row);
+        if seen_artifacts.insert(artifact_key) {
+            entry.seen_artifact = true;
+            entry.runtime_bytes = u64_at(row, "/bytecode/runtime_bytes");
+            entry.compile_ms = mean_f64_array_at(row, "/compile/wall_ms_samples");
+        }
+    }
+    if groups.is_empty() {
+        return String::new();
+    }
+    let mut html = String::new();
+    html.push_str("<h3>Scale Curves</h3>");
+    html.push_str("<p class=\"small muted\">Each family is shown as N on a log2 x-axis. Runtime gas is averaged across that family's generated scenarios for the profile/N point; compile time and bytecode are artifact-level.</p>");
+    html.push_str("<div class=\"chart-grid\">");
+    for (family, by_profile) in groups {
+        html.push_str("<div class=\"svg-card\"><h3>");
+        html.push_str(&escape(&family));
+        html.push_str("</h3>");
+        html.push_str(&scale_family_svg(&by_profile));
+        html.push_str("</div>");
+    }
+    html.push_str("</div>");
+    html
+}
+
+fn scale_family_svg(by_profile: &BTreeMap<String, BTreeMap<u64, ScaleCurveAggregate>>) -> String {
+    let metrics = [
+        ("runtime bytes", ScaleMetric::RuntimeBytes),
+        ("avg call gas", ScaleMetric::Gas),
+        ("compile ms", ScaleMetric::CompileMs),
+    ];
+    let max_n = by_profile
+        .values()
+        .flat_map(|points| points.keys().copied())
+        .max()
+        .unwrap_or(1)
+        .max(1);
+    let mut max_values = [1.0_f64; 3];
+    for points in by_profile.values() {
+        for point in points.values() {
+            max_values[0] = max_values[0].max(point.runtime_bytes as f64);
+            max_values[1] =
+                max_values[1].max(point.gas_total as f64 / point.gas_samples.max(1) as f64);
+            max_values[2] = max_values[2].max(point.compile_ms);
+        }
+    }
+    let mut svg = String::new();
+    svg.push_str("<svg width=\"620\" height=\"245\" viewBox=\"0 0 620 245\" role=\"img\" aria-label=\"scale curves\">");
+    for (index, (label, metric)) in metrics.iter().enumerate() {
+        let x0 = 44 + index as i32 * 198;
+        let y0 = 26;
+        let width = 150;
+        let height = 150;
+        svg.push_str(&format!(
+            "<text x=\"{}\" y=\"16\" font-size=\"11\" fill=\"#374151\">{}</text>",
+            x0,
+            escape(label)
+        ));
+        svg.push_str(&format!(
+            "<line x1=\"{x0}\" y1=\"{}\" x2=\"{}\" y2=\"{}\" stroke=\"#9ca3af\"/><line x1=\"{x0}\" y1=\"{y0}\" x2=\"{x0}\" y2=\"{}\" stroke=\"#9ca3af\"/>",
+            y0 + height,
+            x0 + width,
+            y0 + height,
+            y0 + height
+        ));
+        for (profile, points) in by_profile {
+            let mut coords = Vec::new();
+            for (n, point) in points {
+                let x_ratio = if max_n <= 1 {
+                    0.0
+                } else {
+                    (*n as f64).log2() / (max_n as f64).log2()
+                };
+                let value = match metric {
+                    ScaleMetric::RuntimeBytes => point.runtime_bytes as f64,
+                    ScaleMetric::Gas => point.gas_total as f64 / point.gas_samples.max(1) as f64,
+                    ScaleMetric::CompileMs => point.compile_ms,
+                };
+                let max_value = max_values[index].max(1.0);
+                let x = x0 as f64 + x_ratio * width as f64;
+                let y = y0 as f64 + height as f64 - (value / max_value) * height as f64;
+                coords.push(format!("{x:.1},{y:.1}"));
+            }
+            if coords.len() >= 2 {
+                svg.push_str(&format!(
+                    "<polyline fill=\"none\" stroke=\"{}\" stroke-width=\"1.8\" points=\"{}\"><title>{}</title></polyline>",
+                    profile_color(profile),
+                    coords.join(" "),
+                    escape(&profile_short(profile))
+                ));
+            }
+        }
+        svg.push_str(&format!(
+            "<text x=\"{}\" y=\"{}\" font-size=\"10\" fill=\"#657083\">N=1</text><text x=\"{}\" y=\"{}\" font-size=\"10\" fill=\"#657083\" text-anchor=\"end\">N={}</text>",
+            x0,
+            y0 + height + 15,
+            x0 + width,
+            y0 + height + 15,
+            max_n
+        ));
+    }
+    svg.push_str("<g transform=\"translate(44 218)\">");
+    for (idx, profile) in [
+        SOL_CODEGEN_BASELINE,
+        SOL_VIAIR_CODEGEN,
+        SOL_NOOPT_CODEGEN,
+        VYPER_GAS_CODEGEN,
+        VYPER_CODESIZE_CODEGEN,
+        VYPER_NONE_CODEGEN,
+    ]
+    .iter()
+    .enumerate()
+    {
+        let x = idx as i32 * 94;
+        svg.push_str(&format!(
+            "<circle cx=\"{}\" cy=\"0\" r=\"4\" fill=\"{}\"/><text x=\"{}\" y=\"4\" font-size=\"9\" fill=\"#374151\">{}</text>",
+            x,
+            profile_color(profile),
+            x + 8,
+            escape(&profile_short(profile))
+        ));
+    }
+    svg.push_str("</g></svg>");
+    svg
+}
+
+#[derive(Debug, Clone, Copy)]
+enum ScaleMetric {
+    RuntimeBytes,
+    Gas,
+    CompileMs,
+}
+
+fn render_metadata_language_summary(summary: &MetadataLanguageSummary) -> String {
+    let mut html = String::new();
+    html.push_str("<table><thead><tr><th>Language</th><th>Pairs</th><th>Avg Runtime Bytes Delta</th><th>Avg Creation Bytes Delta</th><th>Interpretation</th></tr></thead><tbody>");
+    html.push_str(&metadata_language_row(
+        "Solidity",
+        summary.solidity_pairs,
+        summary.solidity_avg_runtime_delta,
+        summary.solidity_avg_creation_delta,
+        "Solidity metadata-on changes emitted runtime bytecode in this run.",
+    ));
+    html.push_str(&metadata_language_row(
+        "Vyper",
+        summary.vyper_pairs,
+        summary.vyper_avg_runtime_delta,
+        summary.vyper_avg_creation_delta,
+        "Vyper runtime bytecode is identical across metadata modes here; treat duplicated Vyper metadata rows as a pending parity diagnosis.",
+    ));
+    html.push_str("</tbody></table>");
+    html
+}
+
+fn metadata_language_row(
+    language: &str,
+    pairs: usize,
+    runtime_delta: i64,
+    creation_delta: i64,
+    note: &str,
+) -> String {
+    format!(
+        "<tr><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td class=\"small muted\">{}</td></tr>",
+        escape(language),
+        pairs,
+        signed(runtime_delta),
+        signed(creation_delta),
+        escape(note)
+    )
+}
+
+fn render_methodology(
+    rows: &[serde_json::Value],
+    toolchains: &Toolchains,
+    manifest: &serde_json::Value,
+) -> String {
+    let metadata = metadata_overhead_by_language(rows);
+    let mut html = String::new();
+    html.push_str("<section class=\"two\">");
+    html.push_str("<div class=\"card\"><h3>Pinned Environment</h3><p class=\"small muted\">");
+    html.push_str(&format!(
+        "EVM fork {}. solc {} at <span class=\"mono\">{}</span> with sha256 <span class=\"mono\">{}</span>. Vyper {} at <span class=\"mono\">{}</span> with sha256 <span class=\"mono\">{}</span>. Host: {}. Foundry: {}.",
+        escape(&toolchains.evm_version),
+        escape(&toolchains.solc.version),
+        escape(&toolchains.solc.binary_path.display().to_string()),
+        escape(&toolchains.solc.binary_sha256),
+        escape(&toolchains.vyper.version),
+        escape(&toolchains.vyper.binary_path.display().to_string()),
+        escape(&toolchains.vyper.binary_sha256),
+        escape(&str_at(manifest, "/environment/host/cpu").unwrap_or_default()),
+        escape(&str_at(manifest, "/environment/tools/forge").unwrap_or_default())
+    ));
+    html.push_str("</p></div>");
+    html.push_str("<div class=\"card\"><h3>Limitations</h3><p class=\"small muted\">Gas is Foundry internal-call gas, not measured transaction gas. Compile timing is host-specific with three wall-time samples per successful artifact. Peak RSS is a single coarse sample. Cross-language behavioral equivalence is fuzz+property checked only where the correctness heatmap says so. Vyper metadata-mode parity is pending: ");
+    html.push_str(&format!(
+        "{} paired Vyper artifacts currently show {} runtime-byte delta.",
+        metadata.vyper_pairs,
+        signed(metadata.vyper_avg_runtime_delta)
+    ));
+    html.push_str("</p></div></section>");
+    html.push_str("<details><summary>Show profile settings JSON</summary><pre class=\"small\">");
+    html.push_str(&escape(
+        &serde_json::to_string_pretty(&manifest["profiles"]).unwrap_or_default(),
+    ));
+    html.push_str("</pre></details>");
     html
 }
 
@@ -2298,6 +2883,328 @@ fn metric_card(label: &str, value: &str, subvalue: &str) -> String {
         escape(value),
         escape(subvalue)
     )
+}
+
+#[derive(Debug, Default)]
+struct MetadataLanguageSummary {
+    solidity_pairs: usize,
+    solidity_avg_runtime_delta: i64,
+    solidity_avg_creation_delta: i64,
+    vyper_pairs: usize,
+    vyper_avg_runtime_delta: i64,
+    vyper_avg_creation_delta: i64,
+}
+
+fn metadata_overhead_by_language(rows: &[serde_json::Value]) -> MetadataLanguageSummary {
+    let mut pairs: BTreeMap<String, (String, MetadataPair)> = BTreeMap::new();
+    let mut seen = BTreeSet::new();
+    for row in rows {
+        if str_at(row, "/status").as_deref() != Some("ok") {
+            continue;
+        }
+        let artifact_key = artifact_key_from_row(row);
+        if !seen.insert(artifact_key) {
+            continue;
+        }
+        let language = str_at(row, "/language").unwrap_or_default();
+        let profile = str_at(row, "/profile_id").unwrap_or_default();
+        let base_profile = profile_without_metadata(&profile);
+        let key = format!(
+            "{}\0{}\0{}",
+            str_at(row, "/benchmark_id").unwrap_or_default(),
+            str_at(row, "/implementation_id").unwrap_or_default(),
+            base_profile
+        );
+        let pair = &mut pairs
+            .entry(key)
+            .or_insert_with(|| (language.clone(), MetadataPair::default()))
+            .1;
+        match str_at(row, "/gas/metadata_mode").as_deref() {
+            Some("off") => pair.off = Some(artifact_metrics(row)),
+            Some("on") => pair.on = Some(artifact_metrics(row)),
+            _ => {}
+        }
+    }
+
+    let mut solidity_runtime = 0;
+    let mut solidity_creation = 0;
+    let mut vyper_runtime = 0;
+    let mut vyper_creation = 0;
+    let mut summary = MetadataLanguageSummary::default();
+    for (language, pair) in pairs.into_values() {
+        let Some(off) = pair.off else {
+            continue;
+        };
+        let Some(on) = pair.on else {
+            continue;
+        };
+        match language.as_str() {
+            "solidity" => {
+                summary.solidity_pairs += 1;
+                solidity_runtime += on.runtime_bytes as i64 - off.runtime_bytes as i64;
+                solidity_creation += on.creation_bytes as i64 - off.creation_bytes as i64;
+            }
+            "vyper" => {
+                summary.vyper_pairs += 1;
+                vyper_runtime += on.runtime_bytes as i64 - off.runtime_bytes as i64;
+                vyper_creation += on.creation_bytes as i64 - off.creation_bytes as i64;
+            }
+            _ => {}
+        }
+    }
+    summary.solidity_avg_runtime_delta = solidity_runtime / summary.solidity_pairs.max(1) as i64;
+    summary.solidity_avg_creation_delta = solidity_creation / summary.solidity_pairs.max(1) as i64;
+    summary.vyper_avg_runtime_delta = vyper_runtime / summary.vyper_pairs.max(1) as i64;
+    summary.vyper_avg_creation_delta = vyper_creation / summary.vyper_pairs.max(1) as i64;
+    summary
+}
+
+fn behavior_fuzz_benchmark_count(rows: &[serde_json::Value], suite: &str) -> usize {
+    let mut benchmarks = BTreeSet::new();
+    for row in rows {
+        if str_at(row, "/suite").as_deref() == Some(suite)
+            && str_at(row, "/correctness/randomized_differential_check").as_deref() == Some("pass")
+            && str_at(row, "/correctness/property_tests").as_deref() == Some("pass")
+        {
+            benchmarks.insert(str_at(row, "/benchmark_id").unwrap_or_default());
+        }
+    }
+    benchmarks.len()
+}
+
+fn coverage_strip_for_suite(rows: &[serde_json::Value], suite: &str) -> String {
+    let mut counts: BTreeMap<&'static str, usize> = BTreeMap::new();
+    let mut total = 0usize;
+    for row in rows {
+        if str_at(row, "/suite").as_deref() != Some(suite) {
+            continue;
+        }
+        total += 1;
+        *counts.entry(row_strength(row)).or_default() += 1;
+    }
+    let total = total.max(1);
+    let segments = [
+        ("behavior-fuzz", "seg-fuzz"),
+        ("baseline-smoke", "seg-baseline"),
+        ("status-only", "seg-status"),
+        ("compile-fail", "seg-fail"),
+        ("not-applicable", "seg-na"),
+    ];
+    let mut html = String::new();
+    html.push_str("<div class=\"strip\">");
+    for (strength, class) in segments {
+        let count = counts.get(strength).copied().unwrap_or(0);
+        if count == 0 {
+            continue;
+        }
+        let width = count as f64 * 100.0 / total as f64;
+        html.push_str(&format!(
+            "<div class=\"seg {class}\" style=\"width:{width:.2}%\" title=\"{}: {} rows\">{}</div>",
+            escape(strength),
+            count,
+            if width > 12.0 {
+                count.to_string()
+            } else {
+                String::new()
+            }
+        ));
+    }
+    html.push_str("</div>");
+    html
+}
+
+fn row_strength(row: &serde_json::Value) -> &'static str {
+    if str_at(row, "/status").as_deref() == Some("compile_error")
+        || str_at(row, "/correctness/scenario_status_check").as_deref() == Some("fail")
+    {
+        return "compile-fail";
+    }
+    if str_at(row, "/correctness/randomized_differential_check").as_deref() == Some("pass")
+        && str_at(row, "/correctness/property_tests").as_deref() == Some("pass")
+    {
+        return "behavior-fuzz";
+    }
+    if matches!(
+        str_at(row, "/correctness/baseline_differential_check").as_deref(),
+        Some("baseline_only" | "pass")
+    ) {
+        return "baseline-smoke";
+    }
+    if str_at(row, "/correctness/scenario_status_check").as_deref() == Some("pass") {
+        return "status-only";
+    }
+    "not-applicable"
+}
+
+fn aggregate_strength(rows: &[&serde_json::Value]) -> String {
+    if rows.iter().any(|row| row_strength(row) == "behavior-fuzz") {
+        "behavior-fuzz".to_string()
+    } else if rows.iter().any(|row| row_strength(row) == "baseline-smoke") {
+        "baseline-smoke".to_string()
+    } else if rows.iter().any(|row| row_strength(row) == "status-only") {
+        "status-only".to_string()
+    } else if rows.iter().any(|row| row_strength(row) == "compile-fail") {
+        "compile-fail".to_string()
+    } else {
+        "not-applicable".to_string()
+    }
+}
+
+fn strength_badge(strength: &str) -> String {
+    let class = match strength {
+        "behavior-fuzz" => "pass",
+        "baseline-smoke" => "info",
+        "status-only" => "warn",
+        "compile-fail" => "fail",
+        _ => "na",
+    };
+    format!("<span class=\"pill {class}\">{}</span>", escape(strength))
+}
+
+fn aggregate_check_status(rows: &[&serde_json::Value], pointer: &str) -> String {
+    let mut statuses = BTreeSet::new();
+    for row in rows {
+        if str_at(row, "/status").as_deref() != Some("ok") {
+            continue;
+        }
+        statuses.insert(str_at(row, pointer).unwrap_or_else(|| "not_applicable".into()));
+    }
+    if statuses.contains("fail") {
+        "fail".to_string()
+    } else if statuses.contains("pass") {
+        "pass".to_string()
+    } else if statuses.contains("baseline_only") {
+        "baseline_only".to_string()
+    } else if statuses.contains("not_run") {
+        "not_run".to_string()
+    } else {
+        "not_applicable".to_string()
+    }
+}
+
+fn heat_cell(status: &str) -> String {
+    let class = match status {
+        "pass" => "heat-ok",
+        "baseline_only" => "heat-info",
+        "not_run" => "heat-warn",
+        "fail" => "heat-fail",
+        _ => "heat-na",
+    };
+    format!("<td class=\"{class}\">{}</td>", escape(status))
+}
+
+fn dispatch_signature(rows: &[serde_json::Value]) -> String {
+    let viair = scale_metric_endpoints(rows, "dispatch_N", "first_selector", SOL_VIAIR_CODEGEN);
+    let vyper_gas = scale_metric_endpoints(rows, "dispatch_N", "first_selector", VYPER_GAS_CODEGEN);
+    match (viair, vyper_gas) {
+        (Some((viair_min, viair_max)), Some((vyper_min, vyper_max))) => format!(
+            "On dispatch_N first_selector, solc viaIR moves from {viair_min} to {viair_max} gas as N grows, while Vyper gas stays near {vyper_min}-{vyper_max} gas."
+        ),
+        _ => "Scale curves show compiler-specific growth and failure boundaries; see the scale section.".to_string(),
+    }
+}
+
+fn scale_metric_endpoints(
+    rows: &[serde_json::Value],
+    family: &str,
+    scenario: &str,
+    profile: &str,
+) -> Option<(u64, u64)> {
+    let mut points = BTreeMap::new();
+    for row in rows {
+        if str_at(row, "/status").as_deref() == Some("ok")
+            && str_at(row, "/suite").as_deref() == Some("scale")
+            && str_at(row, "/family").as_deref() == Some(family)
+            && str_at(row, "/gas/scenario").as_deref() == Some(scenario)
+            && str_at(row, "/profile_id").as_deref() == Some(profile)
+            && str_at(row, "/gas/metadata_mode").as_deref() == Some("off")
+        {
+            points.insert(
+                u64_at(row, "/parameter_value"),
+                u64_at(row, "/gas/harness_call_gas"),
+            );
+        }
+    }
+    Some((*points.values().next()?, *points.values().next_back()?))
+}
+
+fn collect_language_scenario_deltas(
+    rows: &[serde_json::Value],
+    suite: &str,
+    language: &str,
+    baseline_profile: &str,
+    profiles: &[&str],
+) -> Vec<ScenarioDelta> {
+    let mut baseline = BTreeMap::new();
+    let mut values: BTreeMap<String, BTreeMap<String, u64>> = BTreeMap::new();
+    let mut labels = BTreeMap::new();
+    for row in rows {
+        if str_at(row, "/status").as_deref() != Some("ok")
+            || str_at(row, "/suite").as_deref() != Some(suite)
+            || str_at(row, "/language").as_deref() != Some(language)
+            || str_at(row, "/gas/metadata_mode").as_deref() != Some("off")
+        {
+            continue;
+        }
+        let key = scenario_key(row);
+        labels
+            .entry(key.clone())
+            .or_insert_with(|| scenario_label(row));
+        let profile = str_at(row, "/profile_id").unwrap_or_default();
+        let gas = u64_at(row, "/gas/harness_call_gas");
+        if profile == baseline_profile {
+            baseline.insert(key.clone(), gas);
+        }
+        if profiles.iter().any(|candidate| *candidate == profile) {
+            values.entry(key).or_default().insert(profile, gas);
+        }
+    }
+
+    let mut deltas = Vec::new();
+    for (key, by_profile) in values {
+        let Some(base) = baseline.get(&key).copied() else {
+            continue;
+        };
+        if base == 0 {
+            continue;
+        }
+        let label = labels.get(&key).cloned().unwrap_or(key);
+        for (profile, value) in by_profile {
+            if value == 0 {
+                continue;
+            }
+            deltas.push(ScenarioDelta {
+                label: label.clone(),
+                profile,
+                ratio: value as f64 / base as f64,
+                delta: value as i64 - base as i64,
+                value,
+                baseline: base,
+            });
+        }
+    }
+    deltas
+}
+
+fn baseline_profile_for_language(language: &str) -> Option<&'static str> {
+    match language {
+        "solidity" => Some(SOL_CODEGEN_BASELINE),
+        "vyper" => Some(VYPER_GAS_CODEGEN),
+        _ => None,
+    }
+}
+
+fn profile_color(profile: &str) -> &'static str {
+    let base = profile_without_metadata(profile);
+    match base.as_str() {
+        "solc-latest-legacy-runs200" => "#2563eb",
+        "solc-latest-viair-runs200" => "#7c3aed",
+        "solc-latest-noopt" => "#b91c1c",
+        "vyper-latest-gas" => "#0f8a5f",
+        "vyper-latest-codesize" => "#b45309",
+        "vyper-latest-none" => "#64748b",
+        _ => "#111827",
+    }
 }
 
 fn is_ok_fixed_metadata_off(row: &serde_json::Value) -> bool {
@@ -2602,10 +3509,6 @@ fn profile_short(profile: &str) -> String {
     }
 }
 
-fn ratio_text(ratio: f64) -> String {
-    format!("{ratio:.2}x")
-}
-
 fn signed(value: i64) -> String {
     if value >= 0 {
         format!("+{value}")
@@ -2662,6 +3565,65 @@ fn u64_at(row: &serde_json::Value, pointer: &str) -> u64 {
         .unwrap_or(0)
 }
 
+fn i64_at(row: &serde_json::Value, pointer: &str) -> i64 {
+    row.pointer(pointer)
+        .and_then(|value| value.as_i64())
+        .unwrap_or(0)
+}
+
+#[derive(Debug, Clone, Copy)]
+struct SampleStats {
+    median: f64,
+    cv: f64,
+}
+
+fn sample_stats(row: &serde_json::Value, pointer: &str) -> SampleStats {
+    let values = row
+        .pointer(pointer)
+        .and_then(|value| value.as_array())
+        .map(|items| {
+            items
+                .iter()
+                .filter_map(|item| item.as_f64())
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+    let median = median(values.clone());
+    let mean = average(&values);
+    let cv = if values.len() <= 1 || mean <= 0.0 {
+        0.0
+    } else {
+        let variance = values
+            .iter()
+            .map(|value| (value - mean).powi(2))
+            .sum::<f64>()
+            / values.len() as f64;
+        variance.sqrt() / mean
+    };
+    SampleStats { median, cv }
+}
+
+fn median(mut values: Vec<f64>) -> f64 {
+    if values.is_empty() {
+        return 0.0;
+    }
+    values.sort_by(|left, right| left.partial_cmp(right).unwrap_or(std::cmp::Ordering::Equal));
+    let mid = values.len() / 2;
+    if values.len() % 2 == 0 {
+        (values[mid - 1] + values[mid]) / 2.0
+    } else {
+        values[mid]
+    }
+}
+
+fn average(values: &[f64]) -> f64 {
+    if values.is_empty() {
+        0.0
+    } else {
+        values.iter().sum::<f64>() / values.len() as f64
+    }
+}
+
 fn mean_f64_array_at(row: &serde_json::Value, pointer: &str) -> f64 {
     let Some(values) = row.pointer(pointer).and_then(|value| value.as_array()) else {
         return 0.0;
@@ -2677,8 +3639,8 @@ fn mean_f64_array_at(row: &serde_json::Value, pointer: &str) -> f64 {
     if count == 0.0 { 0.0 } else { total / count }
 }
 
-fn joined_array_at(row: &serde_json::Value, pointer: &str) -> String {
-    array_strings_at(row, pointer).join("; ")
+fn short_hash(value: &str) -> String {
+    value.chars().take(12).collect()
 }
 
 fn array_strings_at(row: &serde_json::Value, pointer: &str) -> Vec<String> {
@@ -2704,27 +3666,6 @@ fn summarize_set(values: &BTreeSet<String>, limit: usize) -> String {
         selected.push(format!("+{remaining} more"));
     }
     selected.join("; ")
-}
-
-fn failure_links_html(row: &serde_json::Value) -> String {
-    let Some(links) = row
-        .pointer("/correctness/failure_artifacts")
-        .and_then(|value| value.as_array())
-    else {
-        return String::new();
-    };
-    if links.is_empty() {
-        return String::new();
-    }
-    links
-        .iter()
-        .filter_map(|link| link.as_str())
-        .map(|link| {
-            let escaped = escape(link);
-            format!("<a href=\"../../{escaped}\">{escaped}</a>")
-        })
-        .collect::<Vec<_>>()
-        .join("<br>")
 }
 
 fn escape(value: &str) -> String {
