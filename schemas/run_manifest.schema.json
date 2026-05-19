@@ -2,12 +2,71 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "EVM Compiler Bench run manifest",
   "type": "object",
-  "required": ["run_id", "started_at", "evm_version", "toolchains", "profiles"],
+  "required": [
+    "run_id",
+    "started_at",
+    "evm_version",
+    "toolchains",
+    "profiles",
+    "scale_generator",
+    "artifacts",
+    "compile_failures",
+    "gas_records"
+  ],
   "properties": {
     "run_id": { "type": "string" },
     "started_at": { "type": "string", "format": "date-time" },
     "evm_version": { "type": "string" },
     "toolchains": { "type": "array", "items": { "type": "object" } },
-    "profiles": { "type": "array", "items": { "type": "object" } }
+    "profiles": { "type": "array", "items": { "type": "object" } },
+    "scale_generator": {
+      "type": "object",
+      "required": ["version", "config_hash", "parameter_name", "values", "benchmarks"],
+      "properties": {
+        "version": { "type": "string" },
+        "config_hash": { "type": "string" },
+        "parameter_name": { "type": "string" },
+        "values": { "type": "array", "items": { "type": "integer", "minimum": 1 } },
+        "benchmarks": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "benchmark_id",
+              "family",
+              "parameter_name",
+              "parameter_value",
+              "contract_name",
+              "solidity_path",
+              "solidity_hash",
+              "vyper_path",
+              "vyper_hash",
+              "spec_path",
+              "spec_hash",
+              "scenario_path",
+              "scenario_hash"
+            ],
+            "properties": {
+              "benchmark_id": { "type": "string" },
+              "family": { "type": "string" },
+              "parameter_name": { "type": "string" },
+              "parameter_value": { "type": "integer", "minimum": 1 },
+              "contract_name": { "type": "string" },
+              "solidity_path": { "type": "string" },
+              "solidity_hash": { "type": "string" },
+              "vyper_path": { "type": "string" },
+              "vyper_hash": { "type": "string" },
+              "spec_path": { "type": "string" },
+              "spec_hash": { "type": "string" },
+              "scenario_path": { "type": "string" },
+              "scenario_hash": { "type": "string" }
+            }
+          }
+        }
+      }
+    },
+    "artifacts": { "type": "integer", "minimum": 0 },
+    "compile_failures": { "type": "integer", "minimum": 0 },
+    "gas_records": { "type": "integer", "minimum": 0 }
   }
 }

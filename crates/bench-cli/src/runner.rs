@@ -21,6 +21,10 @@ pub fn run_foundry(
 ) -> Result<Vec<GasRecord>> {
     ensure_dir(&root.join("results/raw"))?;
     clear_failure_dir(root)?;
+    if compiled.artifacts.is_empty() {
+        fs::write(root.join("results/raw/foundry-gas.jsonl"), "")?;
+        return Ok(Vec::new());
+    }
     let test_path = root.join("foundry/test/GeneratedBench.t.sol");
     fs::write(&test_path, generate_test(compiled, scenarios)?)?;
     require_success(
@@ -33,6 +37,8 @@ pub fn run_foundry(
                 .arg("test/GeneratedBench.t.sol")
                 .arg("--evm-version")
                 .arg(evm_version)
+                .arg("--via-ir")
+                .arg("--optimize")
                 .arg("-q"),
             None,
         )?,

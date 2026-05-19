@@ -426,17 +426,46 @@ Acceptance criteria:
 
 ### Milestone 3: scale studies
 
-Add generated families:
+Keep the language/compiler matrix fixed: Solidity and Vyper only, latest stable compiler versions only, latest mutually supported EVM target only. Do not add Yul, Huff, Fe, historical compiler trends, or native-large-project benchmarks in this milestone.
 
-* `dispatch_N`
-* `storage_slots_N`
-* `mapping_depth_N`
-* `abi_args_N`
-* `loop_bound_N`
-* `external_calls_N`
-* `events_N`
+Add deterministic generated benchmark families:
 
-This is where compiler-time and optimizer-scaling insights will show up.
+* `dispatch_N`: external selector fanout with `N` callable functions.
+* `storage_slots_N`: read/write paths touching `N` independent storage slots.
+* `mapping_depth_N`: mapping access patterns with `N` nested or chained key lookups where both languages can express the shape.
+* `abi_args_N`: external functions with `N` ABI arguments, including a separate dynamic-argument variant only if it remains equivalent in Solidity and Vyper.
+* `loop_bound_N`: bounded loops over `N` iterations with fixed calldata/pre-state.
+* `external_calls_N`: `N` external calls through a deterministic local callee contract.
+* `events_N`: event emission paths with `N` indexed/non-indexed fields or `N` repeated emits, depending on the most equivalent shape both languages support.
+
+The generated source files do not need to be checked in. Check in the deterministic family definitions, generator code, schemas, and tests; generate sources, specs, and scenarios into a clearly ignored directory such as `benches/generated/` or `target/bench-generated/`. The run manifest must record the generator version/config, family name, parameter value, generated source hash, and generated scenario hash so any row can be reproduced from checked-in inputs.
+
+Use a fixed initial parameter grid for every family unless a family-specific cap is needed:
+
+* `N = 1, 2, 4, 8, 16, 32, 64`
+
+Generated rows must remain compatible with the Milestone 2 pipeline: metadata-on/off variants, deterministic golden scenarios, deterministic differential checks, raw JSONL, normalized JSON, run manifest, static HTML, and `cargo run -- validate`.
+Compiler failures at larger `N` values are benchmark data, not an automatic reason to shrink the grid. Keep deterministic rows for attempted compiles, record the compiler/profile/error text (for example Solidity `Stack too deep`) in normalized output and the HTML report, and run Foundry only for successfully compiled artifacts.
+
+Report updates:
+
+* Add normalized fields for `suite: fixed | scale`, `family`, `parameter_name`, and `parameter_value`.
+* Add normalized compile status fields so generated rows can distinguish runnable artifacts from compile failures.
+* Add HTML tables or charts that show compile time, runtime bytes, deploy gas, and runtime gas versus `N` by family/profile/language.
+* Add HTML visibility for compile failures by family/profile/language.
+* Preserve existing fixed-benchmark tables while making generated scale rows visually and machine-readably distinct.
+
+Acceptance criteria:
+
+* All seven generated families above are implemented for both Solidity and Vyper.
+* Generated artifacts are deterministic and reproducible from checked-in generator inputs.
+* Generated sources/specs/scenarios are ignored rather than checked in.
+* `cargo test` covers generator determinism, family schema validation, and at least one generated example per family.
+* `cargo run -- validate` validates checked-in specs/scenarios plus generated family definitions and generated outputs if present.
+* `cargo run -- run` regenerates scale benchmarks, compiles all fixed and generated profiles, runs deterministic golden and differential checks, and writes reports.
+* Normalized results and the run manifest include family metadata and generated source/scenario hashes for every scale row.
+* Compile failures are reported as first-class normalized rows and do not prevent running successfully compiled profiles.
+* The HTML report includes scale-study views and compile-failure visibility for all seven families.
 
 ### Milestone 4: native-large-project suite
 

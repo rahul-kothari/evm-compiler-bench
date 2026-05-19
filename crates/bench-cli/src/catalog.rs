@@ -1,66 +1,74 @@
 use crate::models::Benchmark;
 
-pub fn benchmarks() -> Vec<Benchmark> {
+pub fn fixed_benchmarks() -> Vec<Benchmark> {
     vec![
-        Benchmark {
-            id: "counter",
-            contract_name: "Counter",
-            solidity_path: "benches/implementations/counter/solidity/Counter.sol",
-            vyper_path: "benches/implementations/counter/vyper/Counter.vy",
-        },
-        Benchmark {
-            id: "erc20_minimal",
-            contract_name: "Erc20Minimal",
-            solidity_path: "benches/implementations/erc20_minimal/solidity/Erc20Minimal.sol",
-            vyper_path: "benches/implementations/erc20_minimal/vyper/Erc20Minimal.vy",
-        },
-        Benchmark {
-            id: "erc20_permit_hashing",
-            contract_name: "Erc20PermitHashing",
-            solidity_path: "benches/implementations/erc20_permit_hashing/solidity/Erc20PermitHashing.sol",
-            vyper_path: "benches/implementations/erc20_permit_hashing/vyper/Erc20PermitHashing.vy",
-        },
-        Benchmark {
-            id: "ownable_pausable",
-            contract_name: "OwnablePausable",
-            solidity_path: "benches/implementations/ownable_pausable/solidity/OwnablePausable.sol",
-            vyper_path: "benches/implementations/ownable_pausable/vyper/OwnablePausable.vy",
-        },
-        Benchmark {
-            id: "vault_deposit_withdraw",
-            contract_name: "VaultDepositWithdraw",
-            solidity_path: "benches/implementations/vault_deposit_withdraw/solidity/VaultDepositWithdraw.sol",
-            vyper_path: "benches/implementations/vault_deposit_withdraw/vyper/VaultDepositWithdraw.vy",
-        },
-        Benchmark {
-            id: "factory_create2",
-            contract_name: "FactoryCreate2",
-            solidity_path: "benches/implementations/factory_create2/solidity/FactoryCreate2.sol",
-            vyper_path: "benches/implementations/factory_create2/vyper/FactoryCreate2.vy",
-        },
-        Benchmark {
-            id: "minimal_proxy",
-            contract_name: "MinimalProxy",
-            solidity_path: "benches/implementations/minimal_proxy/solidity/MinimalProxy.sol",
-            vyper_path: "benches/implementations/minimal_proxy/vyper/MinimalProxy.vy",
-        },
-        Benchmark {
-            id: "merkle_verifier",
-            contract_name: "MerkleVerifier",
-            solidity_path: "benches/implementations/merkle_verifier/solidity/MerkleVerifier.sol",
-            vyper_path: "benches/implementations/merkle_verifier/vyper/MerkleVerifier.vy",
-        },
-        Benchmark {
-            id: "amm_pair_subset",
-            contract_name: "AmmPairSubset",
-            solidity_path: "benches/implementations/amm_pair_subset/solidity/AmmPairSubset.sol",
-            vyper_path: "benches/implementations/amm_pair_subset/vyper/AmmPairSubset.vy",
-        },
-        Benchmark {
-            id: "scaling_dispatch_N",
-            contract_name: "ScalingDispatchN",
-            solidity_path: "benches/implementations/scaling_dispatch_N/solidity/ScalingDispatchN.sol",
-            vyper_path: "benches/implementations/scaling_dispatch_N/vyper/ScalingDispatchN.vy",
-        },
+        Benchmark::fixed(
+            "counter",
+            "Counter",
+            "benches/implementations/counter/solidity/Counter.sol",
+            "benches/implementations/counter/vyper/Counter.vy",
+        ),
+        Benchmark::fixed(
+            "erc20_minimal",
+            "Erc20Minimal",
+            "benches/implementations/erc20_minimal/solidity/Erc20Minimal.sol",
+            "benches/implementations/erc20_minimal/vyper/Erc20Minimal.vy",
+        ),
+        Benchmark::fixed(
+            "erc20_permit_hashing",
+            "Erc20PermitHashing",
+            "benches/implementations/erc20_permit_hashing/solidity/Erc20PermitHashing.sol",
+            "benches/implementations/erc20_permit_hashing/vyper/Erc20PermitHashing.vy",
+        ),
+        Benchmark::fixed(
+            "ownable_pausable",
+            "OwnablePausable",
+            "benches/implementations/ownable_pausable/solidity/OwnablePausable.sol",
+            "benches/implementations/ownable_pausable/vyper/OwnablePausable.vy",
+        ),
+        Benchmark::fixed(
+            "vault_deposit_withdraw",
+            "VaultDepositWithdraw",
+            "benches/implementations/vault_deposit_withdraw/solidity/VaultDepositWithdraw.sol",
+            "benches/implementations/vault_deposit_withdraw/vyper/VaultDepositWithdraw.vy",
+        ),
+        Benchmark::fixed(
+            "factory_create2",
+            "FactoryCreate2",
+            "benches/implementations/factory_create2/solidity/FactoryCreate2.sol",
+            "benches/implementations/factory_create2/vyper/FactoryCreate2.vy",
+        ),
+        Benchmark::fixed(
+            "minimal_proxy",
+            "MinimalProxy",
+            "benches/implementations/minimal_proxy/solidity/MinimalProxy.sol",
+            "benches/implementations/minimal_proxy/vyper/MinimalProxy.vy",
+        ),
+        Benchmark::fixed(
+            "merkle_verifier",
+            "MerkleVerifier",
+            "benches/implementations/merkle_verifier/solidity/MerkleVerifier.sol",
+            "benches/implementations/merkle_verifier/vyper/MerkleVerifier.vy",
+        ),
+        Benchmark::fixed(
+            "amm_pair_subset",
+            "AmmPairSubset",
+            "benches/implementations/amm_pair_subset/solidity/AmmPairSubset.sol",
+            "benches/implementations/amm_pair_subset/vyper/AmmPairSubset.vy",
+        ),
+        Benchmark::fixed(
+            "scaling_dispatch_N",
+            "ScalingDispatchN",
+            "benches/implementations/scaling_dispatch_N/solidity/ScalingDispatchN.sol",
+            "benches/implementations/scaling_dispatch_N/vyper/ScalingDispatchN.vy",
+        ),
     ]
+}
+
+pub fn all_benchmarks(generated: Vec<Benchmark>, only_benchmark: Option<&str>) -> Vec<Benchmark> {
+    fixed_benchmarks()
+        .into_iter()
+        .chain(generated)
+        .filter(|benchmark| only_benchmark.is_none_or(|id| id == benchmark.id))
+        .collect()
 }

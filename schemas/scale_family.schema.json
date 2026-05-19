@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "EVM Compiler Bench scale family definitions",
+  "type": "object",
+  "required": ["version", "parameter_name", "values", "families"],
+  "properties": {
+    "version": { "type": "integer", "const": 1 },
+    "parameter_name": { "type": "string", "const": "N" },
+    "values": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "type": "integer", "minimum": 1 },
+      "uniqueItems": true
+    },
+    "families": {
+      "type": "array",
+      "minItems": 7,
+      "items": {
+        "type": "object",
+        "required": ["id", "title"],
+        "properties": {
+          "id": {
+            "enum": [
+              "dispatch_N",
+              "storage_slots_N",
+              "mapping_depth_N",
+              "abi_args_N",
+              "loop_bound_N",
+              "external_calls_N",
+              "events_N"
+            ]
+          },
+          "title": { "type": "string" }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}

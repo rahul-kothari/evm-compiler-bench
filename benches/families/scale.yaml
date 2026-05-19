@@ -1,0 +1,18 @@
+version: 1
+parameter_name: N
+values: [1, 2, 4, 8, 16, 32, 64]
+families:
+  - id: dispatch_N
+    title: Dispatch N
+  - id: storage_slots_N
+    title: Storage Slots N
+  - id: mapping_depth_N
+    title: Mapping Depth N
+  - id: abi_args_N
+    title: ABI Args N
+  - id: loop_bound_N
+    title: Loop Bound N
+  - id: external_calls_N
+    title: External Calls N
+  - id: events_N
+    title: Events N

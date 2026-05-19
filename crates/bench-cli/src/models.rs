@@ -17,12 +17,53 @@ impl Language {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum BenchmarkSuite {
+    Fixed,
+    Scale,
+}
+
+impl BenchmarkSuite {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Fixed => "fixed",
+            Self::Scale => "scale",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize)]
 pub struct Benchmark {
-    pub id: &'static str,
-    pub contract_name: &'static str,
-    pub solidity_path: &'static str,
-    pub vyper_path: &'static str,
+    pub id: String,
+    pub contract_name: String,
+    pub solidity_path: String,
+    pub vyper_path: String,
+    pub suite: BenchmarkSuite,
+    pub family: Option<String>,
+    pub parameter_name: Option<String>,
+    pub parameter_value: Option<u64>,
+    pub scenario_path: Option<String>,
+    pub scenario_hash: Option<String>,
+    pub generator_version: Option<String>,
+}
+
+impl Benchmark {
+    pub fn fixed(id: &str, contract_name: &str, solidity_path: &str, vyper_path: &str) -> Self {
+        Self {
+            id: id.to_string(),
+            contract_name: contract_name.to_string(),
+            solidity_path: solidity_path.to_string(),
+            vyper_path: vyper_path.to_string(),
+            suite: BenchmarkSuite::Fixed,
+            family: None,
+            parameter_name: None,
+            parameter_value: None,
+            scenario_path: None,
+            scenario_hash: None,
+            generator_version: None,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -178,6 +219,13 @@ pub struct BytecodeMetrics {
 pub struct CompiledArtifact {
     pub benchmark_id: String,
     pub implementation_id: String,
+    pub suite: BenchmarkSuite,
+    pub family: Option<String>,
+    pub parameter_name: Option<String>,
+    pub parameter_value: Option<u64>,
+    pub scenario_path: Option<String>,
+    pub scenario_hash: Option<String>,
+    pub generator_version: Option<String>,
     pub language: Language,
     pub contract_name: String,
     pub profile_id: String,
@@ -193,10 +241,33 @@ pub struct CompiledArtifact {
     pub bytecode: BytecodeMetrics,
 }
 
+#[derive(Debug, Clone, Serialize)]
+pub struct CompileFailure {
+    pub benchmark_id: String,
+    pub implementation_id: String,
+    pub suite: BenchmarkSuite,
+    pub family: Option<String>,
+    pub parameter_name: Option<String>,
+    pub parameter_value: Option<u64>,
+    pub scenario_path: Option<String>,
+    pub scenario_hash: Option<String>,
+    pub generator_version: Option<String>,
+    pub language: Language,
+    pub contract_name: String,
+    pub profile_id: String,
+    pub compiler: Toolchain,
+    pub compiler_settings: serde_json::Value,
+    pub metadata_mode: MetadataMode,
+    pub source_path: PathBuf,
+    pub source_hash: String,
+    pub error: String,
+}
+
 #[derive(Debug, Clone)]
 pub struct CompileSet {
     pub profiles: Vec<CompilerProfile>,
     pub artifacts: Vec<CompiledArtifact>,
+    pub failures: Vec<CompileFailure>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]

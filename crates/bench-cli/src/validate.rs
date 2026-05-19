@@ -1,4 +1,9 @@
-use crate::{catalog::benchmarks, scenarios::load_scenario_catalog};
+use crate::{
+    catalog::fixed_benchmarks,
+    scale::{SCALE_GENERATOR_VERSION, ScaleConfig, ScaleManifest, load_scale_config},
+    scenarios::{load_scenario_catalog, validate_scenario_file},
+    util::sha256_file,
+};
 use anyhow::{Context, Result, bail};
 use serde_json::Value;
 use std::{
@@ -11,55 +16,47 @@ use std::{
 pub struct ValidationSummary {
     pub specs: usize,
     pub scenario_files: usize,
+    pub scale_families: usize,
+    pub generated_benchmarks: usize,
     pub result_rows: usize,
 }
 
 pub fn validate_all(root: &Path) -> Result<ValidationSummary> {
     let specs = validate_specs(root)?;
     let scenario_files = validate_scenarios(root)?;
+    let (scale_config, _) = load_scale_config(root)?;
+    let scale_families = scale_config.families.len();
+    let generated_benchmarks = validate_generated_outputs_if_present(root, &scale_config)?;
     let result_rows = validate_outputs_if_present(root)?;
     Ok(ValidationSummary {
         specs,
         scenario_files,
+        scale_families,
+        generated_benchmarks,
         result_rows,
     })
 }
 
 fn validate_specs(root: &Path) -> Result<usize> {
     let mut count = 0;
-    let bench_ids: BTreeSet<_> = benchmarks()
+    let bench_ids: BTreeSet<_> = fixed_benchmarks()
         .into_iter()
-        .map(|bench| bench.id.to_string())
+        .map(|bench| bench.id)
         .collect();
     for path in yaml_files(&root.join("benches/specs"))? {
         let text = fs::read_to_string(&path)?;
         let value: serde_yaml::Value =
             serde_yaml::from_str(&text).with_context(|| format!("parsing {}", path.display()))?;
+        validate_benchmark_spec(root, &value, &path)?;
         let id = value
             .get("id")
             .and_then(|value| value.as_str())
             .with_context(|| format!("{} missing id", path.display()))?;
         if !bench_ids.contains(id) {
-            bail!("{} id {id} is not in the benchmark catalog", path.display());
-        }
-        require_sequence(&value, "abi", &path)?;
-        require_sequence(&value, "scenarios", &path)?;
-        let implementations = value
-            .get("implementations")
-            .with_context(|| format!("{} missing implementations", path.display()))?;
-        for language in ["solidity", "vyper"] {
-            let implementation = implementations
-                .get(language)
-                .and_then(|value| value.as_str())
-                .with_context(|| format!("{} missing {language} implementation", path.display()))?;
-            let implementation_path = root.join(implementation);
-            if !implementation_path.exists() {
-                bail!(
-                    "{} references missing {language} implementation {}",
-                    path.display(),
-                    implementation_path.display()
-                );
-            }
+            bail!(
+                "{} id {id} is not in the fixed benchmark catalog",
+                path.display()
+            );
         }
         count += 1;
     }
@@ -73,16 +70,16 @@ fn validate_specs(root: &Path) -> Result<usize> {
 }
 
 fn validate_scenarios(root: &Path) -> Result<usize> {
-    let catalog = load_scenario_catalog(root, None)?;
-    let bench_ids: BTreeSet<_> = benchmarks()
+    let catalog = load_scenario_catalog(root, None, &[])?;
+    let bench_ids: BTreeSet<_> = fixed_benchmarks()
         .into_iter()
-        .map(|bench| bench.id.to_string())
+        .map(|bench| bench.id)
         .collect();
     let mut count = 0;
     for file in catalog.iter() {
         if !bench_ids.contains(&file.benchmark_id) {
             bail!(
-                "scenario file references unknown benchmark {}",
+                "scenario file references unknown fixed benchmark {}",
                 file.benchmark_id
             );
         }
@@ -92,6 +89,156 @@ fn validate_scenarios(root: &Path) -> Result<usize> {
         bail!("expected {} scenario files, found {count}", bench_ids.len());
     }
     Ok(count)
+}
+
+fn validate_generated_outputs_if_present(root: &Path, config: &ScaleConfig) -> Result<usize> {
+    let manifest_path = root.join("target/bench-generated/manifest.json");
+    if !manifest_path.exists() {
+        return Ok(0);
+    }
+    let manifest: ScaleManifest = serde_json::from_str(&fs::read_to_string(&manifest_path)?)
+        .with_context(|| format!("parsing {}", manifest_path.display()))?;
+    if manifest.generator_version != SCALE_GENERATOR_VERSION {
+        bail!(
+            "{} generator version {} does not match {}",
+            manifest_path.display(),
+            manifest.generator_version,
+            SCALE_GENERATOR_VERSION
+        );
+    }
+    if manifest.parameter_name != config.parameter_name {
+        bail!(
+            "{} parameter_name does not match scale config",
+            manifest_path.display()
+        );
+    }
+    if manifest.values != config.values {
+        bail!(
+            "{} values do not match scale config",
+            manifest_path.display()
+        );
+    }
+
+    let families: BTreeSet<_> = config
+        .families
+        .iter()
+        .map(|family| family.id.as_str())
+        .collect();
+    let values: BTreeSet<_> = config.values.iter().copied().collect();
+    let expected_count = families.len() * values.len();
+    if manifest.benchmarks.len() != expected_count {
+        bail!(
+            "{} expected {expected_count} generated benchmarks, found {}",
+            manifest_path.display(),
+            manifest.benchmarks.len()
+        );
+    }
+
+    let mut benchmark_ids = BTreeSet::new();
+    for benchmark in &manifest.benchmarks {
+        if !benchmark_ids.insert(benchmark.benchmark_id.as_str()) {
+            bail!(
+                "{} duplicate generated benchmark {}",
+                manifest_path.display(),
+                benchmark.benchmark_id
+            );
+        }
+        if !families.contains(benchmark.family.as_str()) {
+            bail!(
+                "{} generated benchmark {} has unknown family {}",
+                manifest_path.display(),
+                benchmark.benchmark_id,
+                benchmark.family
+            );
+        }
+        if benchmark.parameter_name != config.parameter_name {
+            bail!(
+                "{} generated benchmark {} has wrong parameter name {}",
+                manifest_path.display(),
+                benchmark.benchmark_id,
+                benchmark.parameter_name
+            );
+        }
+        if !values.contains(&benchmark.parameter_value) {
+            bail!(
+                "{} generated benchmark {} has unsupported parameter value {}",
+                manifest_path.display(),
+                benchmark.benchmark_id,
+                benchmark.parameter_value
+            );
+        }
+
+        validate_generated_path(
+            root,
+            &benchmark.solidity_path,
+            &benchmark.solidity_hash,
+            "solidity source",
+        )?;
+        validate_generated_path(
+            root,
+            &benchmark.vyper_path,
+            &benchmark.vyper_hash,
+            "vyper source",
+        )?;
+        let spec_path =
+            validate_generated_path(root, &benchmark.spec_path, &benchmark.spec_hash, "spec")?;
+        let scenario_path = validate_generated_path(
+            root,
+            &benchmark.scenario_path,
+            &benchmark.scenario_hash,
+            "scenario",
+        )?;
+
+        let spec: serde_yaml::Value = serde_yaml::from_str(&fs::read_to_string(&spec_path)?)
+            .with_context(|| format!("parsing {}", spec_path.display()))?;
+        validate_benchmark_spec(root, &spec, &spec_path)?;
+        require_yaml_string(&spec, "id", &spec_path, &benchmark.benchmark_id)?;
+        let scale = spec
+            .get("scale")
+            .with_context(|| format!("{} missing scale metadata", spec_path.display()))?;
+        require_yaml_string(scale, "family", &spec_path, &benchmark.family)?;
+        require_yaml_string(
+            scale,
+            "parameter_name",
+            &spec_path,
+            &benchmark.parameter_name,
+        )?;
+        let spec_parameter_value = scale
+            .get("parameter_value")
+            .and_then(|value| value.as_u64())
+            .with_context(|| format!("{} missing numeric parameter_value", spec_path.display()))?;
+        if spec_parameter_value != benchmark.parameter_value {
+            bail!(
+                "{} parameter_value {spec_parameter_value} does not match manifest value {}",
+                spec_path.display(),
+                benchmark.parameter_value
+            );
+        }
+        let implementations = spec
+            .get("implementations")
+            .with_context(|| format!("{} missing implementations", spec_path.display()))?;
+        require_yaml_string(
+            implementations,
+            "solidity",
+            &spec_path,
+            &benchmark.solidity_path,
+        )?;
+        require_yaml_string(implementations, "vyper", &spec_path, &benchmark.vyper_path)?;
+
+        let scenario_file = serde_yaml::from_str(&fs::read_to_string(&scenario_path)?)
+            .with_context(|| format!("parsing {}", scenario_path.display()))?;
+        validate_scenario_file(&scenario_file, &scenario_path)?;
+        if scenario_file.benchmark_id != benchmark.benchmark_id {
+            bail!(
+                "{} benchmark_id {} does not match manifest benchmark {}",
+                scenario_path.display(),
+                scenario_file.benchmark_id,
+                benchmark.benchmark_id
+            );
+        }
+    }
+
+    Ok(manifest.benchmarks.len())
 }
 
 fn validate_outputs_if_present(root: &Path) -> Result<usize> {
@@ -105,53 +252,37 @@ fn validate_outputs_if_present(root: &Path) -> Result<usize> {
             .as_array()
             .with_context(|| format!("{} must be an array", results_path.display()))?;
         for row in array {
+            require_json_pointer(row, "/status", &results_path)?;
             require_json_pointer(row, "/benchmark_id", &results_path)?;
             require_json_pointer(row, "/implementation_id", &results_path)?;
             require_json_pointer(row, "/profile_id", &results_path)?;
+            require_json_pointer(row, "/suite", &results_path)?;
+            require_json_pointer(row, "/family", &results_path)?;
+            require_json_pointer(row, "/parameter_name", &results_path)?;
+            require_json_pointer(row, "/parameter_value", &results_path)?;
+            require_json_pointer(row, "/generated", &results_path)?;
+            require_json_pointer(row, "/generated/generator_version", &results_path)?;
+            require_json_pointer(row, "/generated/scenario_path", &results_path)?;
+            require_json_pointer(row, "/generated/scenario_hash", &results_path)?;
             require_json_pointer(row, "/compiler/name", &results_path)?;
             require_json_pointer(row, "/compiler/version", &results_path)?;
             require_json_pointer(row, "/compiler/settings", &results_path)?;
             require_json_pointer(row, "/compiler/settings/metadataMode", &results_path)?;
-            require_json_pointer(row, "/bytecode/runtime_bytes", &results_path)?;
-            require_json_pointer(row, "/gas/scenario", &results_path)?;
-            require_json_pointer(row, "/gas/state_access_profile", &results_path)?;
-            require_json_pointer(row, "/gas/metadata_mode", &results_path)?;
+            require_json_pointer(row, "/compile/status", &results_path)?;
             require_json_pointer(row, "/correctness/golden_tests", &results_path)?;
             require_json_pointer(row, "/correctness/differential_tests", &results_path)?;
             require_json_pointer(row, "/correctness/randomized_differential", &results_path)?;
             require_json_pointer(row, "/correctness/property_tests", &results_path)?;
             require_json_pointer(row, "/correctness/failure_artifacts", &results_path)?;
-            require_enum(
-                row,
-                "/gas/state_access_profile",
-                &["cold", "warm", "mixed"],
-                &results_path,
-            )?;
-            require_enum(row, "/gas/metadata_mode", &["on", "off"], &results_path)?;
+            require_enum(row, "/status", &["ok", "compile_error"], &results_path)?;
+            require_enum(row, "/suite", &["fixed", "scale"], &results_path)?;
             require_enum(
                 row,
                 "/compiler/settings/metadataMode",
                 &["on", "off"],
                 &results_path,
             )?;
-            if row.pointer("/gas/metadata_mode") != row.pointer("/compiler/settings/metadataMode") {
-                bail!(
-                    "{} metadata mode mismatch in result row",
-                    results_path.display()
-                );
-            }
-            require_enum(
-                row,
-                "/correctness/golden_tests",
-                &["pass", "fail"],
-                &results_path,
-            )?;
-            require_enum(
-                row,
-                "/correctness/differential_tests",
-                &["pass", "fail"],
-                &results_path,
-            )?;
+            validate_row_status(row, &results_path)?;
             require_enum(
                 row,
                 "/correctness/randomized_differential",
@@ -173,6 +304,7 @@ fn validate_outputs_if_present(root: &Path) -> Result<usize> {
                     results_path.display()
                 );
             }
+            validate_suite_metadata(row, &results_path)?;
             rows += 1;
         }
     }
@@ -185,11 +317,147 @@ fn validate_outputs_if_present(root: &Path) -> Result<usize> {
             "/evm_version",
             "/toolchains",
             "/profiles",
+            "/scale_generator",
+            "/scale_generator/version",
+            "/scale_generator/config_hash",
+            "/scale_generator/parameter_name",
+            "/scale_generator/values",
+            "/scale_generator/benchmarks",
+            "/artifacts",
+            "/compile_failures",
+            "/gas_records",
         ] {
             require_json_pointer(&value, pointer, &manifest_path)?;
         }
+        if !value
+            .pointer("/scale_generator/benchmarks")
+            .is_some_and(|value| value.is_array())
+        {
+            bail!(
+                "{} scale_generator.benchmarks must be an array",
+                manifest_path.display()
+            );
+        }
     }
     Ok(rows)
+}
+
+fn validate_benchmark_spec(root: &Path, value: &serde_yaml::Value, path: &Path) -> Result<()> {
+    require_sequence(value, "abi", path)?;
+    require_sequence(value, "scenarios", path)?;
+    let implementations = value
+        .get("implementations")
+        .with_context(|| format!("{} missing implementations", path.display()))?;
+    for language in ["solidity", "vyper"] {
+        let implementation = implementations
+            .get(language)
+            .and_then(|value| value.as_str())
+            .with_context(|| format!("{} missing {language} implementation", path.display()))?;
+        let implementation_path = root.join(implementation);
+        if !implementation_path.exists() {
+            bail!(
+                "{} references missing {language} implementation {}",
+                path.display(),
+                implementation_path.display()
+            );
+        }
+    }
+    Ok(())
+}
+
+fn validate_row_status(row: &Value, path: &Path) -> Result<()> {
+    match row.pointer("/status").and_then(|value| value.as_str()) {
+        Some("ok") => {
+            require_enum(row, "/compile/status", &["ok"], path)?;
+            require_json_pointer(row, "/bytecode/runtime_bytes", path)?;
+            require_json_pointer(row, "/gas/scenario", path)?;
+            require_json_pointer(row, "/gas/state_access_profile", path)?;
+            require_json_pointer(row, "/gas/metadata_mode", path)?;
+            require_enum(
+                row,
+                "/gas/state_access_profile",
+                &["cold", "warm", "mixed"],
+                path,
+            )?;
+            require_enum(row, "/gas/metadata_mode", &["on", "off"], path)?;
+            if row.pointer("/gas/metadata_mode") != row.pointer("/compiler/settings/metadataMode") {
+                bail!("{} metadata mode mismatch in result row", path.display());
+            }
+            require_enum(row, "/correctness/golden_tests", &["pass", "fail"], path)?;
+            require_enum(
+                row,
+                "/correctness/differential_tests",
+                &["pass", "fail", "not_applicable"],
+                path,
+            )?;
+        }
+        Some("compile_error") => {
+            require_enum(row, "/compile/status", &["error"], path)?;
+            require_string_pointer(row, "/compile/error", path)?;
+            require_null(row, "/bytecode", path)?;
+            require_null(row, "/gas", path)?;
+            require_enum(row, "/correctness/golden_tests", &["not_applicable"], path)?;
+            require_enum(
+                row,
+                "/correctness/differential_tests",
+                &["not_applicable"],
+                path,
+            )?;
+        }
+        Some(other) => bail!("{} unsupported row status {other}", path.display()),
+        None => bail!("{} missing row status", path.display()),
+    }
+    Ok(())
+}
+
+fn validate_generated_path(
+    root: &Path,
+    relative_path: &str,
+    expected_hash: &str,
+    label: &str,
+) -> Result<PathBuf> {
+    if Path::new(relative_path).is_absolute() || relative_path.contains("..") {
+        bail!("{label} path {relative_path} must be a generated relative path");
+    }
+    if !relative_path.starts_with("target/bench-generated/") {
+        bail!("{label} path {relative_path} is outside target/bench-generated");
+    }
+    let path = root.join(relative_path);
+    if !path.exists() {
+        bail!("missing generated {label} {}", path.display());
+    }
+    let actual_hash = sha256_file(&path)?;
+    if actual_hash != expected_hash {
+        bail!(
+            "generated {label} {} hash mismatch: expected {expected_hash}, got {actual_hash}",
+            path.display()
+        );
+    }
+    Ok(path)
+}
+
+fn validate_suite_metadata(row: &Value, path: &Path) -> Result<()> {
+    match row.pointer("/suite").and_then(|value| value.as_str()) {
+        Some("fixed") => {
+            require_null(row, "/family", path)?;
+            require_null(row, "/parameter_name", path)?;
+            require_null(row, "/parameter_value", path)?;
+            require_null(row, "/generated/generator_version", path)?;
+            require_null(row, "/generated/scenario_path", path)?;
+            require_null(row, "/generated/scenario_hash", path)?;
+        }
+        Some("scale") => {
+            require_string_pointer(row, "/family", path)?;
+            require_string_pointer(row, "/parameter_name", path)?;
+            require_u64_pointer(row, "/parameter_value", path)?;
+            require_string_pointer(row, "/generated/generator_version", path)?;
+            require_string_pointer(row, "/generated/scenario_path", path)?;
+            require_string_pointer(row, "/generated/scenario_hash", path)?;
+        }
+        Some(other) => bail!("{} unsupported suite {other}", path.display()),
+        None => bail!("{} missing suite", path.display()),
+    }
+    Ok(())
 }
 
 fn require_sequence(value: &serde_yaml::Value, key: &str, path: &Path) -> Result<()> {
@@ -203,9 +471,55 @@ fn require_sequence(value: &serde_yaml::Value, key: &str, path: &Path) -> Result
     Ok(())
 }
 
+fn require_yaml_string(
+    value: &serde_yaml::Value,
+    key: &str,
+    path: &Path,
+    expected: &str,
+) -> Result<()> {
+    let actual = value
+        .get(key)
+        .and_then(|value| value.as_str())
+        .with_context(|| format!("{} missing string {key}", path.display()))?;
+    if actual != expected {
+        bail!(
+            "{} {key} {actual} does not match expected value {expected}",
+            path.display()
+        );
+    }
+    Ok(())
+}
+
 fn require_json_pointer(value: &Value, pointer: &str, path: &Path) -> Result<()> {
     if value.pointer(pointer).is_none() {
         bail!("{} missing JSON pointer {pointer}", path.display());
+    }
+    Ok(())
+}
+
+fn require_string_pointer(value: &Value, pointer: &str, path: &Path) -> Result<()> {
+    if !value
+        .pointer(pointer)
+        .is_some_and(|value| value.is_string())
+    {
+        bail!("{} JSON pointer {pointer} must be a string", path.display());
+    }
+    Ok(())
+}
+
+fn require_u64_pointer(value: &Value, pointer: &str, path: &Path) -> Result<()> {
+    if !value.pointer(pointer).is_some_and(|value| value.is_u64()) {
+        bail!(
+            "{} JSON pointer {pointer} must be a positive integer",
+            path.display()
+        );
+    }
+    Ok(())
+}
+
+fn require_null(value: &Value, pointer: &str, path: &Path) -> Result<()> {
+    if !value.pointer(pointer).is_some_and(|value| value.is_null()) {
+        bail!("{} JSON pointer {pointer} must be null", path.display());
     }
     Ok(())
 }
@@ -252,5 +566,10 @@ mod tests {
             .unwrap();
         assert_eq!(super::validate_specs(root).unwrap(), 10);
         assert_eq!(super::validate_scenarios(root).unwrap(), 10);
+        let (config, _) = crate::scale::load_scale_config(root).unwrap();
+        assert_eq!(config.families.len(), 7);
+        let generated_count = super::validate_generated_outputs_if_present(root, &config).unwrap();
+        let expected_generated_count = config.families.len() * config.values.len();
+        assert!(generated_count == 0 || generated_count == expected_generated_count);
     }
 }

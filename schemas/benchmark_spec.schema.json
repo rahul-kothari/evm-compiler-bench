@@ -20,6 +20,15 @@
         }
       }
     },
+    "scale": {
+      "type": "object",
+      "required": ["family", "parameter_name", "parameter_value"],
+      "properties": {
+        "family": { "type": "string" },
+        "parameter_name": { "type": "string" },
+        "parameter_value": { "type": "integer", "minimum": 1 }
+      }
+    },
     "implementations": {
       "type": "object",
       "required": ["solidity", "vyper"],

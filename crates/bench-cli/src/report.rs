@@ -1,5 +1,9 @@
 use crate::{
-    models::{CompileSet, CompiledArtifact, GasRecord, ScenarioFile, Toolchains},
+    models::{
+        BenchmarkSuite, CompileFailure, CompileSet, CompiledArtifact, GasRecord, ScenarioFile,
+        Toolchains,
+    },
+    scale::ScaleManifest,
     scenarios::ScenarioCatalog,
     util::ensure_dir,
 };
@@ -7,10 +11,13 @@ use anyhow::{Context, Result};
 use chrono::Utc;
 use serde_json::json;
 use std::{
-    collections::BTreeMap,
+    collections::{BTreeMap, BTreeSet},
     fs,
     path::{Path, PathBuf},
 };
+
+const SOL_BASELINE: &str = "solc-latest-legacy-runs200-metadata-on";
+const VYPER_BASELINE: &str = "vyper-latest-gas-metadata-on";
 
 pub struct ReportPaths {
     pub normalized_results: PathBuf,
@@ -24,6 +31,7 @@ pub fn write_outputs(
     compiled: &CompileSet,
     gas_records: &[GasRecord],
     scenarios: &ScenarioCatalog,
+    scale_manifest: &ScaleManifest,
 ) -> Result<ReportPaths> {
     let normalized_dir = root.join("results/normalized");
     let reports_dir = root.join("results/reports");
@@ -41,7 +49,15 @@ pub fn write_outputs(
         "evm_version": toolchains.evm_version,
         "toolchains": [toolchains.solc, toolchains.vyper],
         "profiles": compiled.profiles,
+        "scale_generator": {
+            "version": scale_manifest.generator_version.clone(),
+            "config_hash": scale_manifest.config_hash.clone(),
+            "parameter_name": scale_manifest.parameter_name.clone(),
+            "values": scale_manifest.values.clone(),
+            "benchmarks": scale_manifest.benchmarks.clone()
+        },
         "artifacts": compiled.artifacts.len(),
+        "compile_failures": compiled.failures.len(),
         "gas_records": gas_records.len()
     });
     fs::write(&run_manifest, serde_json::to_string_pretty(&manifest)?)?;
@@ -75,7 +91,8 @@ fn normalized_rows(
     }
 
     let failure_links = failure_links_by_benchmark(root)?;
-    let mut rows = Vec::with_capacity(gas_records.len());
+    let differential_benchmarks = differential_benchmarks(compiled);
+    let mut rows = Vec::with_capacity(gas_records.len() + compiled.failures.len());
     for gas in gas_records {
         let artifact = artifacts
             .get(&artifact_key(
@@ -94,7 +111,16 @@ fn normalized_rows(
             .get(&artifact.benchmark_id)
             .cloned()
             .unwrap_or_default();
-        rows.push(row(artifact, gas, scenario_file, failures));
+        rows.push(row(
+            artifact,
+            gas,
+            scenario_file,
+            failures,
+            differential_benchmarks.contains(&artifact.benchmark_id),
+        ));
+    }
+    for failure in &compiled.failures {
+        rows.push(failure_row(failure));
     }
     rows.sort_by(|a, b| {
         let left = sort_key(a);
@@ -109,6 +135,7 @@ fn row(
     gas: &GasRecord,
     scenario_file: &ScenarioFile,
     failure_links: Vec<String>,
+    differential_available: bool,
 ) -> serde_json::Value {
     let randomized_status = correctness_status(
         scenario_file.randomized.is_some(),
@@ -121,9 +148,19 @@ fn row(
         "property",
     );
     json!({
+        "status": "ok",
         "benchmark_id": gas.benchmark_id,
         "implementation_id": gas.implementation_id,
         "profile_id": artifact.profile_id,
+        "suite": artifact.suite.as_str(),
+        "family": artifact.family.clone(),
+        "parameter_name": artifact.parameter_name.clone(),
+        "parameter_value": artifact.parameter_value,
+        "generated": {
+            "generator_version": artifact.generator_version.clone(),
+            "scenario_path": artifact.scenario_path.clone(),
+            "scenario_hash": artifact.scenario_hash.clone()
+        },
         "language": artifact.language.as_str(),
         "compiler": {
             "name": artifact.compiler.name,
@@ -134,7 +171,12 @@ fn row(
             "settings": artifact.compiler_settings
         },
         "source_hash": artifact.source_hash,
-        "compile": artifact.compile,
+        "compile": {
+            "status": "ok",
+            "wall_ms_samples": artifact.compile.wall_ms_samples.clone(),
+            "cpu_ms_samples": artifact.compile.cpu_ms_samples.clone(),
+            "peak_rss_kib": artifact.compile.peak_rss_kib
+        },
         "bytecode": artifact.bytecode,
         "gas": {
             "scenario": gas.scenario,
@@ -147,12 +189,72 @@ fn row(
         },
         "correctness": {
             "golden_tests": "pass",
-            "differential_tests": "pass",
+            "differential_tests": if differential_available { "pass" } else { "not_applicable" },
             "randomized_differential": randomized_status,
             "property_tests": property_status,
             "properties": scenario_file.properties.iter().map(|property| property.name.clone()).collect::<Vec<_>>(),
             "failure_artifacts": failure_links,
             "success": gas.success
+        }
+    })
+}
+
+fn differential_benchmarks(compiled: &CompileSet) -> BTreeSet<String> {
+    let mut solidity = BTreeSet::new();
+    let mut vyper = BTreeSet::new();
+    for artifact in &compiled.artifacts {
+        match artifact.profile_id.as_str() {
+            SOL_BASELINE => {
+                solidity.insert(artifact.benchmark_id.clone());
+            }
+            VYPER_BASELINE => {
+                vyper.insert(artifact.benchmark_id.clone());
+            }
+            _ => {}
+        }
+    }
+    solidity.intersection(&vyper).cloned().collect()
+}
+
+fn failure_row(failure: &CompileFailure) -> serde_json::Value {
+    json!({
+        "status": "compile_error",
+        "benchmark_id": failure.benchmark_id,
+        "implementation_id": failure.implementation_id,
+        "profile_id": failure.profile_id,
+        "suite": failure.suite.as_str(),
+        "family": failure.family.clone(),
+        "parameter_name": failure.parameter_name.clone(),
+        "parameter_value": failure.parameter_value,
+        "generated": {
+            "generator_version": failure.generator_version.clone(),
+            "scenario_path": failure.scenario_path.clone(),
+            "scenario_hash": failure.scenario_hash.clone()
+        },
+        "language": failure.language.as_str(),
+        "compiler": {
+            "name": failure.compiler.name,
+            "version": failure.compiler.version,
+            "binary_path": failure.compiler.binary_path,
+            "binary_sha256": failure.compiler.binary_sha256,
+            "download_source": failure.compiler.download_source,
+            "settings": failure.compiler_settings
+        },
+        "source_hash": failure.source_hash,
+        "compile": {
+            "status": "error",
+            "error": failure.error
+        },
+        "bytecode": null,
+        "gas": null,
+        "correctness": {
+            "golden_tests": "not_applicable",
+            "differential_tests": "not_applicable",
+            "randomized_differential": "not_applicable",
+            "property_tests": "not_applicable",
+            "properties": [],
+            "failure_artifacts": [],
+            "success": false
         }
     })
 }
@@ -202,12 +304,17 @@ fn failure_links_by_benchmark(root: &Path) -> Result<BTreeMap<String, Vec<String
 fn render_html(rows: &[serde_json::Value], toolchains: &Toolchains) -> Result<String> {
     let mut by_profile: BTreeMap<String, (u64, usize)> = BTreeMap::new();
     let mut by_benchmark: BTreeMap<String, usize> = BTreeMap::new();
+    let mut compile_failures = 0;
     for row in rows {
-        let profile_id = str_at(row, "/profile_id").unwrap_or_default();
-        let gas = u64_at(row, "/gas/execution_gas");
-        let entry = by_profile.entry(profile_id).or_default();
-        entry.0 += gas;
-        entry.1 += 1;
+        if str_at(row, "/status").as_deref() == Some("ok") {
+            let profile_id = str_at(row, "/profile_id").unwrap_or_default();
+            let gas = u64_at(row, "/gas/execution_gas");
+            let entry = by_profile.entry(profile_id).or_default();
+            entry.0 += gas;
+            entry.1 += 1;
+        } else if str_at(row, "/status").as_deref() == Some("compile_error") {
+            compile_failures += 1;
+        }
         *by_benchmark
             .entry(str_at(row, "/benchmark_id").unwrap_or_default())
             .or_default() += 1;
@@ -236,7 +343,7 @@ fn render_html(rows: &[serde_json::Value], toolchains: &Toolchains) -> Result<St
     html.push_str(&card("Rows", rows.len()));
     html.push_str(&card("Benchmarks", by_benchmark.len()));
     html.push_str(&card("Profiles", by_profile.len()));
-    html.push_str(&card("Toolchains", 2));
+    html.push_str(&card("Compile Failures", compile_failures));
     html.push_str("</section>");
 
     html.push_str("<h2>Runtime Gas By Profile</h2><table><thead><tr><th>Profile</th><th>Average Execution Gas</th><th>Samples</th></tr></thead><tbody>");
@@ -250,6 +357,9 @@ fn render_html(rows: &[serde_json::Value], toolchains: &Toolchains) -> Result<St
         html.push_str("</td></tr>");
     }
     html.push_str("</tbody></table>");
+
+    html.push_str("<h2>Scale Studies</h2>");
+    html.push_str(&render_scale_summary(rows));
 
     html.push_str("<h2>Runtime Size vs Runtime Gas</h2><div class=\"chart\"><svg width=\"1080\" height=\"360\" viewBox=\"0 0 1080 360\" role=\"img\">");
     html.push_str("<line x1=\"45\" y1=\"315\" x2=\"1040\" y2=\"315\" stroke=\"#999\"/><line x1=\"45\" y1=\"20\" x2=\"45\" y2=\"315\" stroke=\"#999\"/>");
@@ -275,9 +385,19 @@ fn render_html(rows: &[serde_json::Value], toolchains: &Toolchains) -> Result<St
     }
     html.push_str("</svg></div>");
 
-    html.push_str("<h2>Result Rows</h2><table><thead><tr><th>Benchmark</th><th>Implementation</th><th>Compiler</th><th>Profile</th><th>Metadata</th><th>State</th><th>Scenario</th><th>Randomized</th><th>Property</th><th>Failures</th><th>Runtime Bytes</th><th>Deploy Gas</th><th>Execution Gas</th></tr></thead><tbody>");
+    html.push_str("<h2>Result Rows</h2><table><thead><tr><th>Status</th><th>Suite</th><th>Family</th><th>N</th><th>Benchmark</th><th>Implementation</th><th>Compiler</th><th>Profile</th><th>Metadata</th><th>State</th><th>Scenario</th><th>Randomized</th><th>Property</th><th>Failures</th><th>Runtime Bytes</th><th>Deploy Gas</th><th>Execution Gas</th></tr></thead><tbody>");
     for row in rows {
         html.push_str("<tr><td>");
+        html.push_str(&escape(&str_at(row, "/status").unwrap_or_default()));
+        html.push_str("</td><td>");
+        html.push_str(&escape(&str_at(row, "/suite").unwrap_or_default()));
+        html.push_str("</td><td>");
+        html.push_str(&escape(&str_at(row, "/family").unwrap_or_default()));
+        html.push_str("</td><td>");
+        html.push_str(&escape(
+            &str_at(row, "/parameter_value").unwrap_or_default(),
+        ));
+        html.push_str("</td><td>");
         html.push_str(&escape(&str_at(row, "/benchmark_id").unwrap_or_default()));
         html.push_str("</td><td>");
         html.push_str(&escape(
@@ -323,6 +443,83 @@ fn render_html(rows: &[serde_json::Value], toolchains: &Toolchains) -> Result<St
     Ok(html)
 }
 
+#[derive(Debug, Default)]
+struct ScaleAggregate {
+    family: String,
+    parameter_value: u64,
+    language: String,
+    profile_id: String,
+    compile_wall_ms: f64,
+    runtime_bytes: u64,
+    deploy_gas: u64,
+    execution_gas: u64,
+    metric_samples: u64,
+    compile_failures: u64,
+}
+
+fn render_scale_summary(rows: &[serde_json::Value]) -> String {
+    let mut groups: BTreeMap<String, ScaleAggregate> = BTreeMap::new();
+    for row in rows {
+        if str_at(row, "/suite").as_deref() != Some(BenchmarkSuite::Scale.as_str()) {
+            continue;
+        }
+        let family = str_at(row, "/family").unwrap_or_default();
+        let parameter_value = u64_at(row, "/parameter_value");
+        let language = str_at(row, "/language").unwrap_or_default();
+        let profile_id = str_at(row, "/profile_id").unwrap_or_default();
+        let key = format!("{family}\0{parameter_value:020}\0{language}\0{profile_id}");
+        let entry = groups.entry(key).or_insert_with(|| ScaleAggregate {
+            family,
+            parameter_value,
+            language,
+            profile_id,
+            ..ScaleAggregate::default()
+        });
+        if str_at(row, "/status").as_deref() == Some("compile_error") {
+            entry.compile_failures += 1;
+        } else {
+            entry.compile_wall_ms += f64_at(row, "/compile/wall_ms_samples/0");
+            entry.runtime_bytes += u64_at(row, "/bytecode/runtime_bytes");
+            entry.deploy_gas += u64_at(row, "/gas/deploy_gas");
+            entry.execution_gas += u64_at(row, "/gas/execution_gas");
+            entry.metric_samples += 1;
+        }
+    }
+
+    if groups.is_empty() {
+        return "<div class=\"card\">No generated scale rows in this report.</div>".to_string();
+    }
+
+    let mut html = String::new();
+    html.push_str("<table><thead><tr><th>Family</th><th>N</th><th>Language</th><th>Profile</th><th>Avg Compile ms</th><th>Avg Runtime Bytes</th><th>Avg Deploy Gas</th><th>Avg Runtime Gas</th><th>Run Samples</th><th>Compile Failures</th></tr></thead><tbody>");
+    for aggregate in groups.values() {
+        let samples = aggregate.metric_samples.max(1) as f64;
+        html.push_str("<tr><td>");
+        html.push_str(&escape(&aggregate.family));
+        html.push_str("</td><td>");
+        html.push_str(&aggregate.parameter_value.to_string());
+        html.push_str("</td><td>");
+        html.push_str(&escape(&aggregate.language));
+        html.push_str("</td><td>");
+        html.push_str(&escape(&aggregate.profile_id));
+        html.push_str("</td><td>");
+        html.push_str(&format!("{:.2}", aggregate.compile_wall_ms / samples));
+        html.push_str("</td><td>");
+        html.push_str(&((aggregate.runtime_bytes as f64 / samples).round() as u64).to_string());
+        html.push_str("</td><td>");
+        html.push_str(&((aggregate.deploy_gas as f64 / samples).round() as u64).to_string());
+        html.push_str("</td><td>");
+        html.push_str(&((aggregate.execution_gas as f64 / samples).round() as u64).to_string());
+        html.push_str("</td><td>");
+        html.push_str(&aggregate.metric_samples.to_string());
+        html.push_str("</td><td>");
+        html.push_str(&aggregate.compile_failures.to_string());
+        html.push_str("</td></tr>");
+    }
+    html.push_str("</tbody></table>");
+    html
+}
+
 fn artifact_key(benchmark_id: &str, implementation_id: &str, profile_id: &str) -> String {
     format!("{benchmark_id}\0{implementation_id}\0{profile_id}")
 }
@@ -338,6 +535,14 @@ fn sort_key(row: &serde_json::Value) -> String {
 }
 
 fn tooltip(row: &serde_json::Value) -> String {
+    if str_at(row, "/status").as_deref() == Some("compile_error") {
+        return format!(
+            "{} / {} / {} / compile error",
+            str_at(row, "/benchmark_id").unwrap_or_default(),
+            str_at(row, "/implementation_id").unwrap_or_default(),
+            str_at(row, "/profile_id").unwrap_or_default()
+        );
+    }
     format!(
         "{} / {} / {} / {} / gas {}",
         str_at(row, "/benchmark_id").unwrap_or_default(),
@@ -361,6 +566,12 @@ fn u64_at(row: &serde_json::Value, pointer: &str) -> u64 {
     row.pointer(pointer)
         .and_then(|value| value.as_u64())
         .unwrap_or(0)
+}
+
+fn f64_at(row: &serde_json::Value, pointer: &str) -> f64 {
+    row.pointer(pointer)
+        .and_then(|value| value.as_f64())
+        .unwrap_or(0.0)
 }
 
 fn failure_links_html(row: &serde_json::Value) -> String {

@@ -3,16 +3,19 @@ mod compiler;
 mod models;
 mod report;
 mod runner;
+mod scale;
 mod scenarios;
 mod toolchain;
 mod util;
 mod validate;
 
 use anyhow::Result;
+use catalog::all_benchmarks;
 use clap::{Parser, Subcommand};
 use compiler::compile_all;
 use report::write_outputs;
 use runner::run_foundry;
+use scale::generate_scale_suite;
 use scenarios::load_scenario_catalog;
 use std::path::PathBuf;
 use toolchain::resolve_toolchains;
@@ -53,6 +56,12 @@ enum Command {
         #[arg(long)]
         offline: bool,
     },
+    /// Generate deterministic scale-study sources, specs, and scenarios.
+    Generate {
+        /// Restrict generation output used by the command to one benchmark id.
+        #[arg(long)]
+        benchmark: Option<String>,
+    },
     /// Validate checked-in specs, scenarios, and generated outputs if present.
     Validate,
 }
@@ -63,10 +72,20 @@ fn main() -> Result<()> {
     match cli.command {
         Command::Run { offline, benchmark } => {
             let toolchains = resolve_toolchains(&root, offline)?;
-            let compiled = compile_all(&root, &toolchains, benchmark.as_deref())?;
-            let scenarios = load_scenario_catalog(&root, benchmark.as_deref())?;
+            let generated = generate_scale_suite(&root, benchmark.as_deref())?;
+            let benchmarks = all_benchmarks(generated.benchmarks.clone(), benchmark.as_deref());
+            let compiled = compile_all(&root, &toolchains, &benchmarks)?;
+            let scenarios =
+                load_scenario_catalog(&root, benchmark.as_deref(), &generated.scenarios)?;
             let gas_records = run_foundry(&root, &toolchains.evm_version, &compiled, &scenarios)?;
-            let report = write_outputs(&root, &toolchains, &compiled, &gas_records, &scenarios)?;
+            let report = write_outputs(
+                &root,
+                &toolchains,
+                &compiled,
+                &gas_records,
+                &scenarios,
+                &generated.manifest,
+            )?;
             println!("foundry produced {} gas records", gas_records.len());
             println!(
                 "normalized results: {}",
@@ -75,8 +94,9 @@ fn main() -> Result<()> {
             println!("run manifest: {}", report.run_manifest.display());
             println!("html report: {}", report.html_report.display());
             println!(
-                "compiled {} artifacts across {} profiles for EVM {}",
+                "compiled {} artifacts with {} failures across {} profiles for EVM {}",
                 compiled.artifacts.len(),
+                compiled.failures.len(),
                 compiled.profiles.len(),
                 toolchains.evm_version
             );
@@ -90,13 +110,25 @@ fn main() -> Result<()> {
                     artifact.bytecode.runtime_bytes
                 );
             }
+            for failure in &compiled.failures {
+                println!(
+                    "{} {} {} compile_error={}",
+                    failure.benchmark_id,
+                    failure.implementation_id,
+                    failure.profile_id,
+                    error_summary(&failure.error)
+                );
+            }
         }
         Command::Compile { offline, benchmark } => {
             let toolchains = resolve_toolchains(&root, offline)?;
-            let compiled = compile_all(&root, &toolchains, benchmark.as_deref())?;
+            let generated = generate_scale_suite(&root, benchmark.as_deref())?;
+            let benchmarks = all_benchmarks(generated.benchmarks, benchmark.as_deref());
+            let compiled = compile_all(&root, &toolchains, &benchmarks)?;
             println!(
-                "compiled {} artifacts across {} profiles for EVM {}",
+                "compiled {} artifacts with {} failures across {} profiles for EVM {}",
                 compiled.artifacts.len(),
+                compiled.failures.len(),
                 compiled.profiles.len(),
                 toolchains.evm_version
             );
@@ -108,6 +140,15 @@ fn main() -> Result<()> {
                     artifact.profile_id,
                     artifact.bytecode.creation_bytes,
                     artifact.bytecode.runtime_bytes
+                );
+            }
+            for failure in &compiled.failures {
+                println!(
+                    "{} {} {} compile_error={}",
+                    failure.benchmark_id,
+                    failure.implementation_id,
+                    failure.profile_id,
+                    error_summary(&failure.error)
                 );
             }
         }
@@ -127,13 +168,48 @@ fn main() -> Result<()> {
                 toolchains.vyper.binary_sha256
             );
         }
+        Command::Generate { benchmark } => {
+            let generated = generate_scale_suite(&root, benchmark.as_deref())?;
+            println!(
+                "generated {} scale benchmarks using {}",
+                generated.manifest.benchmarks.len(),
+                generated.manifest.generator_version
+            );
+            println!(
+                "selected {} generated benchmarks for this invocation",
+                generated.benchmarks.len()
+            );
+            println!(
+                "generated root: {}",
+                root.join("target/bench-generated").display()
+            );
+        }
         Command::Validate => {
             let summary = validate_all(&root)?;
             println!(
-                "validated {} specs, {} scenario files, {} result rows",
-                summary.specs, summary.scenario_files, summary.result_rows
+                "validated {} specs, {} scenario files, {} scale families, {} generated benchmarks, {} result rows",
+                summary.specs,
+                summary.scenario_files,
+                summary.scale_families,
+                summary.generated_benchmarks,
+                summary.result_rows
             );
         }
     }
     Ok(())
+}
+
+fn error_summary(value: &str) -> String {
+    for marker in ["Stack too deep", "CodeSizeLimit", "vyper.exceptions."] {
+        if let Some(start) = value.find(marker) {
+            let line = value[start..].lines().next().unwrap_or(marker);
+            return line.trim_matches('"').to_string();
+        }
+    }
+    value
+        .lines()
+        .map(str::trim)
+        .find(|line| !line.is_empty() && *line != "[" && *line != "]")
+        .unwrap_or(value)
+        .to_string()
 }

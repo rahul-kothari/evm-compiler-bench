@@ -23,7 +23,11 @@ impl ScenarioCatalog {
     }
 }
 
-pub fn load_scenario_catalog(root: &Path, only_benchmark: Option<&str>) -> Result<ScenarioCatalog> {
+pub fn load_scenario_catalog(
+    root: &Path,
+    only_benchmark: Option<&str>,
+    generated: &[ScenarioFile],
+) -> Result<ScenarioCatalog> {
     let scenario_dir = root.join("benches/scenarios");
     let mut files = BTreeMap::new();
     for path in yaml_files(&scenario_dir)? {
@@ -35,6 +39,19 @@ pub fn load_scenario_catalog(root: &Path, only_benchmark: Option<&str>) -> Resul
             if files.insert(file.benchmark_id.clone(), file).is_some() {
                 bail!("duplicate scenario benchmark id in {}", path.display());
             }
+        }
+    }
+    for file in generated {
+        validate_scenario_file(file, Path::new("generated scenario"))?;
+        if only_benchmark.is_none_or(|id| id == file.benchmark_id)
+            && files
+                .insert(file.benchmark_id.clone(), file.clone())
+                .is_some()
+        {
+            bail!(
+                "duplicate generated scenario benchmark id {}",
+                file.benchmark_id
+            );
         }
     }
     if let Some(benchmark_id) = only_benchmark

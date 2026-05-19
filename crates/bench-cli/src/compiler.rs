@@ -1,8 +1,7 @@
 use crate::{
-    catalog::benchmarks,
     models::{
-        Benchmark, BytecodeMetrics, CompileMetrics, CompileSet, CompiledArtifact, CompilerProfile,
-        Language, MetadataMode, Toolchain, Toolchains,
+        Benchmark, BytecodeMetrics, CompileFailure, CompileMetrics, CompileSet, CompiledArtifact,
+        CompilerProfile, Language, MetadataMode, Toolchain, Toolchains,
     },
     util::{byte_len, require_success, run_measured, sha256_bytes, stripped_cbor_len},
 };
@@ -13,37 +12,49 @@ use std::{fs, path::Path, process::Command};
 pub fn compile_all(
     root: &Path,
     toolchains: &Toolchains,
-    only_benchmark: Option<&str>,
+    benchmarks: &[Benchmark],
 ) -> Result<CompileSet> {
     let profiles = load_profiles(root)?;
     let mut artifacts = Vec::new();
-    for benchmark in benchmarks() {
-        if only_benchmark.is_some_and(|id| id != benchmark.id) {
-            continue;
-        }
+    let mut failures = Vec::new();
+    for benchmark in benchmarks {
         for profile in &profiles {
-            let artifact = match profile.language {
+            let result = match profile.language {
                 Language::Solidity => compile_solidity(
                     root,
-                    &benchmark,
+                    benchmark,
                     profile,
                     &toolchains.solc,
                     &toolchains.evm_version,
-                )?,
+                ),
                 Language::Vyper => compile_vyper(
                     root,
-                    &benchmark,
+                    benchmark,
                     profile,
                     &toolchains.vyper,
                     &toolchains.evm_version,
-                )?,
+                ),
             };
-            artifacts.push(artifact);
+            match result {
+                Ok(artifact) => artifacts.push(artifact),
+                Err(error) => failures.push(compile_failure(
+                    root,
+                    benchmark,
+                    profile,
+                    match profile.language {
+                        Language::Solidity => &toolchains.solc,
+                        Language::Vyper => &toolchains.vyper,
+                    },
+                    &toolchains.evm_version,
+                    error.to_string(),
+                )?),
+            }
         }
     }
     Ok(CompileSet {
         profiles,
         artifacts,
+        failures,
     })
 }
 
@@ -82,7 +93,7 @@ fn compile_solidity(
     solc: &Toolchain,
     evm_version: &str,
 ) -> Result<CompiledArtifact> {
-    let source_path = root.join(benchmark.solidity_path);
+    let source_path = root.join(&benchmark.solidity_path);
     let source = fs::read_to_string(&source_path)?;
     let file_name = source_path
         .file_name()
@@ -149,14 +160,7 @@ fn compile_solidity(
         measured.stats.wall_ms,
         measured.stats.cpu_ms,
         measured.stats.peak_rss_kib,
-        json!({
-            "evmVersion": evm_version,
-            "metadataMode": profile.metadata_mode.as_str(),
-            "metadata": solidity_metadata_settings(profile.metadata_mode),
-            "optimizer": profile.optimizer,
-            "optimizerRuns": profile.optimizer_runs,
-            "viaIR": profile.via_ir
-        }),
+        solidity_compiler_settings(profile, evm_version),
     )
 }
 
@@ -187,6 +191,27 @@ fn solidity_metadata_settings(metadata_mode: MetadataMode) -> serde_json::Value 
     }
 }
 
+fn solidity_compiler_settings(profile: &CompilerProfile, evm_version: &str) -> serde_json::Value {
+    json!({
+        "evmVersion": evm_version,
+        "metadataMode": profile.metadata_mode.as_str(),
+        "metadata": solidity_metadata_settings(profile.metadata_mode),
+        "optimizer": profile.optimizer,
+        "optimizerRuns": profile.optimizer_runs,
+        "viaIR": profile.via_ir
+    })
+}
+
+fn vyper_compiler_settings(profile: &CompilerProfile, evm_version: &str) -> serde_json::Value {
+    let optimizer_mode = profile.optimizer_mode.as_deref().unwrap_or("gas");
+    json!({
+        "evmVersion": evm_version,
+        "metadataMode": profile.metadata_mode.as_str(),
+        "bytecodeMetadata": profile.metadata_mode == MetadataMode::On,
+        "optimize": optimizer_mode
+    })
+}
+
 fn compile_vyper(
     root: &Path,
     benchmark: &Benchmark,
@@ -194,7 +219,7 @@ fn compile_vyper(
     vyper: &Toolchain,
     evm_version: &str,
 ) -> Result<CompiledArtifact> {
-    let source_path = root.join(benchmark.vyper_path);
+    let source_path = root.join(&benchmark.vyper_path);
     let optimizer_mode = profile.optimizer_mode.as_deref().unwrap_or("gas");
     let mut command = Command::new(&vyper.binary_path);
     command
@@ -232,12 +257,7 @@ fn compile_vyper(
         measured.stats.wall_ms,
         measured.stats.cpu_ms,
         measured.stats.peak_rss_kib,
-        json!({
-            "evmVersion": evm_version,
-            "metadataMode": profile.metadata_mode.as_str(),
-            "bytecodeMetadata": profile.metadata_mode == MetadataMode::On,
-            "optimize": optimizer_mode
-        }),
+        vyper_compiler_settings(profile, evm_version),
     )
 }
 
@@ -259,10 +279,17 @@ fn artifact(
     let bytecode = bytecode_metrics(&creation_bytecode, &runtime_bytecode)?;
     let language = profile.language;
     Ok(CompiledArtifact {
-        benchmark_id: benchmark.id.to_string(),
+        benchmark_id: benchmark.id.clone(),
         implementation_id: format!("{}/handwritten/v1", language.as_str()),
+        suite: benchmark.suite,
+        family: benchmark.family.clone(),
+        parameter_name: benchmark.parameter_name.clone(),
+        parameter_value: benchmark.parameter_value,
+        scenario_path: benchmark.scenario_path.clone(),
+        scenario_hash: benchmark.scenario_hash.clone(),
+        generator_version: benchmark.generator_version.clone(),
         language,
-        contract_name: benchmark.contract_name.to_string(),
+        contract_name: benchmark.contract_name.clone(),
         profile_id: profile.id.clone(),
         compiler: toolchain.clone(),
         compiler_settings,
@@ -278,6 +305,46 @@ fn artifact(
             peak_rss_kib,
         },
         bytecode,
+    })
+}
+
+fn compile_failure(
+    root: &Path,
+    benchmark: &Benchmark,
+    profile: &CompilerProfile,
+    toolchain: &Toolchain,
+    evm_version: &str,
+    error: String,
+) -> Result<CompileFailure> {
+    let language = profile.language;
+    let source_path = match language {
+        Language::Solidity => root.join(&benchmark.solidity_path),
+        Language::Vyper => root.join(&benchmark.vyper_path),
+    };
+    let source = fs::read(&source_path)?;
+    let compiler_settings = match language {
+        Language::Solidity => solidity_compiler_settings(profile, evm_version),
+        Language::Vyper => vyper_compiler_settings(profile, evm_version),
+    };
+    Ok(CompileFailure {
+        benchmark_id: benchmark.id.clone(),
+        implementation_id: format!("{}/handwritten/v1", language.as_str()),
+        suite: benchmark.suite,
+        family: benchmark.family.clone(),
+        parameter_name: benchmark.parameter_name.clone(),
+        parameter_value: benchmark.parameter_value,
+        scenario_path: benchmark.scenario_path.clone(),
+        scenario_hash: benchmark.scenario_hash.clone(),
+        generator_version: benchmark.generator_version.clone(),
+        language,
+        contract_name: benchmark.contract_name.clone(),
+        profile_id: profile.id.clone(),
+        compiler: toolchain.clone(),
+        compiler_settings,
+        metadata_mode: profile.metadata_mode,
+        source_path,
+        source_hash: sha256_bytes(&source),
+        error,
     })
 }
 

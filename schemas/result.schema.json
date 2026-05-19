@@ -3,8 +3,15 @@
   "title": "EVM Compiler Bench result row",
   "type": "object",
   "required": [
+    "status",
     "benchmark_id",
     "implementation_id",
+    "profile_id",
+    "suite",
+    "family",
+    "parameter_name",
+    "parameter_value",
+    "generated",
     "language",
     "compiler",
     "source_hash",
@@ -14,9 +21,23 @@
     "correctness"
   ],
   "properties": {
+    "status": { "enum": ["ok", "compile_error"] },
     "benchmark_id": { "type": "string" },
     "implementation_id": { "type": "string" },
     "profile_id": { "type": "string" },
+    "suite": { "enum": ["fixed", "scale"] },
+    "family": { "type": ["string", "null"] },
+    "parameter_name": { "type": ["string", "null"] },
+    "parameter_value": { "type": ["integer", "null"], "minimum": 1 },
+    "generated": {
+      "type": "object",
+      "required": ["generator_version", "scenario_path", "scenario_hash"],
+      "properties": {
+        "generator_version": { "type": ["string", "null"] },
+        "scenario_path": { "type": ["string", "null"] },
+        "scenario_hash": { "type": ["string", "null"] }
+      }
+    },
     "language": { "enum": ["solidity", "vyper"] },
     "compiler": {
       "type": "object",
@@ -35,10 +56,17 @@
       }
     },
     "source_hash": { "type": "string" },
-    "compile": { "type": "object" },
-    "bytecode": { "type": "object" },
-    "gas": {
+    "compile": {
       "type": "object",
+      "required": ["status"],
+      "properties": {
+        "status": { "enum": ["ok", "error"] },
+        "error": { "type": "string" }
+      }
+    },
+    "bytecode": { "type": ["object", "null"] },
+    "gas": {
+      "type": ["object", "null"],
       "required": [
         "scenario",
         "evm_fork",
@@ -69,8 +97,8 @@
         "success"
       ],
       "properties": {
-        "golden_tests": { "enum": ["pass", "fail"] },
-        "differential_tests": { "enum": ["pass", "fail"] },
+        "golden_tests": { "enum": ["pass", "fail", "not_applicable"] },
+        "differential_tests": { "enum": ["pass", "fail", "not_applicable"] },
         "randomized_differential": { "enum": ["pass", "fail", "not_applicable"] },
         "property_tests": { "enum": ["pass", "fail", "not_applicable"] },
         "properties": { "type": "array", "items": { "type": "string" } },
