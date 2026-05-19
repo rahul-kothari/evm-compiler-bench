@@ -26,6 +26,7 @@ pub struct Benchmark {
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
 pub struct CallSpec {
     pub data: String,
     #[serde(default)]
@@ -69,6 +70,7 @@ impl MetadataMode {
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
 pub struct Scenario {
     pub name: String,
     #[serde(default = "default_state_access_profile")]
@@ -84,6 +86,7 @@ pub struct Scenario {
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
 pub struct RandomizedSpec {
     pub seed: u64,
     #[serde(default = "default_random_iterations")]
@@ -91,12 +94,14 @@ pub struct RandomizedSpec {
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
 pub struct PropertySpec {
     pub name: String,
     pub seed: Option<u64>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
 pub struct ScenarioFile {
     pub benchmark_id: String,
     pub scenarios: Vec<Scenario>,
@@ -107,6 +112,7 @@ pub struct ScenarioFile {
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
 pub struct CompilerProfile {
     pub id: String,
     pub language: Language,

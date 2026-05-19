@@ -92,7 +92,46 @@ pub fn validate_scenario_file(file: &ScenarioFile, path: &Path) -> Result<()> {
     {
         bail!("{} randomized iterations must be non-zero", path.display());
     }
+    if file.randomized.is_some() && !supports_randomized(&file.benchmark_id) {
+        bail!(
+            "{} has randomized config for unsupported benchmark {}",
+            path.display(),
+            file.benchmark_id
+        );
+    }
+    for property in &file.properties {
+        if property_helper_name(&property.name) != Some(file.benchmark_id.as_str()) {
+            bail!(
+                "{} has unsupported property {} for benchmark {}",
+                path.display(),
+                property.name,
+                file.benchmark_id
+            );
+        }
+    }
     Ok(())
+}
+
+fn supports_randomized(benchmark_id: &str) -> bool {
+    matches!(
+        benchmark_id,
+        "counter"
+            | "erc20_minimal"
+            | "vault_deposit_withdraw"
+            | "ownable_pausable"
+            | "amm_pair_subset"
+    )
+}
+
+fn property_helper_name(property_name: &str) -> Option<&'static str> {
+    match property_name {
+        "counter_model_matches" => Some("counter"),
+        "erc20_supply_conservation" => Some("erc20_minimal"),
+        "vault_share_accounting" => Some("vault_deposit_withdraw"),
+        "ownable_authorization" => Some("ownable_pausable"),
+        "amm_reserve_liquidity_coherence" => Some("amm_pair_subset"),
+        _ => None,
+    }
 }
 
 fn yaml_files(dir: &Path) -> Result<Vec<PathBuf>> {

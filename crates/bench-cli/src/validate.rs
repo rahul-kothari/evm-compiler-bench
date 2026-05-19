@@ -121,6 +121,58 @@ fn validate_outputs_if_present(root: &Path) -> Result<usize> {
             require_json_pointer(row, "/correctness/randomized_differential", &results_path)?;
             require_json_pointer(row, "/correctness/property_tests", &results_path)?;
             require_json_pointer(row, "/correctness/failure_artifacts", &results_path)?;
+            require_enum(
+                row,
+                "/gas/state_access_profile",
+                &["cold", "warm", "mixed"],
+                &results_path,
+            )?;
+            require_enum(row, "/gas/metadata_mode", &["on", "off"], &results_path)?;
+            require_enum(
+                row,
+                "/compiler/settings/metadataMode",
+                &["on", "off"],
+                &results_path,
+            )?;
+            if row.pointer("/gas/metadata_mode") != row.pointer("/compiler/settings/metadataMode") {
+                bail!(
+                    "{} metadata mode mismatch in result row",
+                    results_path.display()
+                );
+            }
+            require_enum(
+                row,
+                "/correctness/golden_tests",
+                &["pass", "fail"],
+                &results_path,
+            )?;
+            require_enum(
+                row,
+                "/correctness/differential_tests",
+                &["pass", "fail"],
+                &results_path,
+            )?;
+            require_enum(
+                row,
+                "/correctness/randomized_differential",
+                &["pass", "fail", "not_applicable"],
+                &results_path,
+            )?;
+            require_enum(
+                row,
+                "/correctness/property_tests",
+                &["pass", "fail", "not_applicable"],
+                &results_path,
+            )?;
+            if !row
+                .pointer("/correctness/failure_artifacts")
+                .is_some_and(|value| value.is_array())
+            {
+                bail!(
+                    "{} failure_artifacts must be an array",
+                    results_path.display()
+                );
+            }
             rows += 1;
         }
     }
@@ -154,6 +206,20 @@ fn require_sequence(value: &serde_yaml::Value, key: &str, path: &Path) -> Result
 fn require_json_pointer(value: &Value, pointer: &str, path: &Path) -> Result<()> {
     if value.pointer(pointer).is_none() {
         bail!("{} missing JSON pointer {pointer}", path.display());
+    }
+    Ok(())
+}
+
+fn require_enum(value: &Value, pointer: &str, allowed: &[&str], path: &Path) -> Result<()> {
+    let actual = value
+        .pointer(pointer)
+        .and_then(|value| value.as_str())
+        .with_context(|| format!("{} JSON pointer {pointer} must be a string", path.display()))?;
+    if !allowed.contains(&actual) {
+        bail!(
+            "{} JSON pointer {pointer} has unsupported value {actual}",
+            path.display()
+        );
     }
     Ok(())
 }
