@@ -23,6 +23,12 @@ const SOL_CODEGEN_BASELINE: &str = "solc-latest-legacy-runs200-metadata-off";
 const SOL_VIAIR_CODEGEN: &str = "solc-latest-viair-runs200-metadata-off";
 const VYPER_GAS_CODEGEN: &str = "vyper-latest-gas-metadata-off";
 const VYPER_CODESIZE_CODEGEN: &str = "vyper-latest-codesize-metadata-off";
+const PRIMARY_CODEGEN_PROFILES: [&str; 4] = [
+    SOL_CODEGEN_BASELINE,
+    SOL_VIAIR_CODEGEN,
+    VYPER_GAS_CODEGEN,
+    VYPER_CODESIZE_CODEGEN,
+];
 
 pub struct ReportPaths {
     pub normalized_results: PathBuf,
@@ -614,8 +620,9 @@ fn render_html(rows: &[serde_json::Value], toolchains: &Toolchains) -> Result<St
     html.push_str(".chart{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:12px;overflow:auto}.notice{background:#fff7ed;border:1px solid #fdba74;border-radius:8px;padding:12px;margin:12px 0;color:#7c2d12}.info{background:#eff6ff;border-color:#bfdbfe;color:#1e3a8a}.muted{color:var(--muted)}.small{font-size:11px;line-height:1.35}.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace}");
     html.push_str(".pill{display:inline-flex;align-items:center;border-radius:999px;padding:3px 8px;font-size:11px;border:1px solid var(--line);background:#f9fafb;white-space:nowrap}.pass{background:#ecfdf5;color:#065f46;border-color:#a7f3d0}.warn{background:#fffbeb;color:#92400e;border-color:#fde68a}.fail{background:#fef2f2;color:#991b1b;border-color:#fecaca}.na{background:#f4f4f5;color:#52525b;border-color:#e4e4e7}");
     html.push_str(".bar{height:9px;background:#e5e7eb;border-radius:999px;min-width:92px;position:relative;overflow:hidden}.bar span{display:block;height:100%;border-radius:999px;background:var(--blue)}.bar.good span{background:var(--green)}.bar.warn span{background:var(--amber)}.bar.fail span{background:var(--red)}.ratio{display:grid;grid-template-columns:58px 1fr;gap:8px;align-items:center;min-width:160px}");
-    html.push_str(".heat-ok{background:#dcfce7;color:#166534;text-align:center}.heat-fail{background:#fee2e2;color:#991b1b;text-align:center}.heat-na{background:#f4f4f5;color:#71717a;text-align:center}.legend{display:flex;gap:12px;align-items:center;font-size:12px;color:var(--muted);margin:8px 0}.dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:4px}.sol{background:var(--blue)}.vy{background:var(--green)}details>summary{cursor:pointer;font-weight:700;margin:12px 0}");
-    html.push_str("@media(max-width:900px){.grid,.three,.two,.scope{grid-template-columns:1fr}main{padding:20px 14px}.v{font-size:20px}}");
+    html.push_str(".heat-ok{background:#dcfce7;color:#166534;text-align:center}.heat-fail{background:#fee2e2;color:#991b1b;text-align:center}.heat-na{background:#f4f4f5;color:#71717a;text-align:center}.legend{display:flex;gap:12px;align-items:center;font-size:12px;color:var(--muted);margin:8px 0}.dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:4px}.sol{background:var(--blue)}.vy{background:var(--green)}details{margin-top:12px}details>summary{cursor:pointer;font-weight:700;margin:12px 0}");
+    html.push_str(".brief{display:grid;grid-template-columns:1.35fr .65fr;gap:14px;align-items:start}.takeaways{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:12px}.takeaway{background:#f8fafc;border:1px solid var(--line);border-radius:8px;padding:12px}.takeaway strong{display:block;margin-bottom:5px}.answer{font-size:18px;font-weight:700;margin:0 0 6px}.section-lede{font-size:13px;color:var(--muted);max-width:900px}.mini-table td,.mini-table th{font-size:12px}.callout{background:#f8fafc;border:1px solid var(--line);border-radius:8px;padding:12px;margin:10px 0}");
+    html.push_str("@media(max-width:900px){.grid,.three,.two,.scope,.brief,.takeaways{grid-template-columns:1fr}main{padding:20px 14px}.v{font-size:20px}}");
     html.push_str("</style></head><body><main>");
     html.push_str("<h1>EVM Compiler Bench</h1>");
     html.push_str(&format!(
@@ -624,39 +631,35 @@ fn render_html(rows: &[serde_json::Value], toolchains: &Toolchains) -> Result<St
         escape(&toolchains.solc.version),
         escape(&toolchains.vyper.version)
     ));
-    html.push_str(&render_overview(&summary));
+    html.push_str(&render_overview(rows, &summary));
     html.push_str("<nav><a href=\"#validity\">Validity</a><a href=\"#reliability\">Reliability</a><a href=\"#fixed\">Fixed Suite</a><a href=\"#profiles\">Profiles</a><a href=\"#metadata\">Metadata</a><a href=\"#compile\">Compile Resources</a><a href=\"#scale\">Scale Studies</a><a href=\"#real\">Real-Derived Models</a><a href=\"#raw\">Raw Rows</a></nav>");
 
     html.push_str("<section id=\"validity\"><h2>Correctness And Measurement Scope</h2>");
-    html.push_str(&render_correctness_matrix(rows));
-    html.push_str(&render_measurement_scope());
+    html.push_str(&render_validity_brief(rows));
     html.push_str("</section>");
 
     html.push_str("<section id=\"reliability\"><h2>Compile Reliability</h2>");
-    html.push_str(&render_compile_failure_matrix(rows));
+    html.push_str(&render_reliability_brief(rows));
     html.push_str("</section>");
 
     html.push_str("<section id=\"fixed\"><h2>Fixed Matched Suite</h2>");
-    html.push_str("<p class=\"muted small\">The fixed suite is the strongest cross-language comparison surface: handwritten, behaviorally matched Solidity and Vyper implementations with scenario-level runtime rows. Codegen views below default to metadata-off and use the solc legacy runs=200 metadata-off profile as the baseline.</p>");
-    html.push_str(&render_fixed_scenario_ratios(rows));
-    html.push_str(&render_fixed_pareto_svg(rows));
+    html.push_str(&render_fixed_suite_brief(rows));
     html.push_str("</section>");
 
     html.push_str("<section id=\"profiles\"><h2>Compiler Profile Tradeoffs</h2>");
-    html.push_str(&render_fixed_profile_tradeoffs(rows));
+    html.push_str(&render_profile_brief(rows));
     html.push_str("</section>");
 
     html.push_str("<section id=\"metadata\"><h2>Metadata Overhead</h2>");
-    html.push_str(&render_metadata_delta_summary(rows));
+    html.push_str(&render_metadata_brief(rows));
     html.push_str("</section>");
 
     html.push_str("<section id=\"compile\"><h2>Compile Time And RSS</h2>");
-    html.push_str(&render_compile_resource_summary(rows));
+    html.push_str(&render_compile_brief(rows));
     html.push_str("</section>");
 
     html.push_str("<section id=\"scale\"><h2>Generated Scale Studies</h2>");
-    html.push_str(&render_scale_max_n(rows));
-    html.push_str(&render_scale_summary(rows));
+    html.push_str(&render_scale_brief(rows));
     html.push_str("</section>");
 
     html.push_str("<section id=\"real\"><h2>Real-Derived Benchmark Models</h2>");
@@ -669,15 +672,17 @@ fn render_html(rows: &[serde_json::Value], toolchains: &Toolchains) -> Result<St
     Ok(html)
 }
 
-fn render_overview(summary: &ReportSummary) -> String {
+fn render_overview(rows: &[serde_json::Value], summary: &ReportSummary) -> String {
     let mut html = String::new();
-    html.push_str("<section class=\"hero scope\"><div>");
-    html.push_str("<div class=\"pill info\">Validity-bounded compiler tradeoffs</div>");
-    html.push_str("<p class=\"lede\">Given behaviorally matched workloads, pinned compiler versions, pinned EVM target, explicit metadata modes, and declared correctness coverage, these compiler profiles expose different tradeoffs in reliability, compile resources, bytecode and deploy cost, runtime gas, and scale behavior. The claim strength depends on the workload class.</p>");
-    html.push_str("<div class=\"notice small\"><strong>Claim scope:</strong> this is a compiler/profile evaluation over matched implementations. It is not a global Solidity vs Vyper language ranking, and real-derived rows are benchmark models rather than production gas reports.</div>");
+    html.push_str("<section class=\"hero brief\"><div>");
+    html.push_str("<div class=\"pill info\">Eval brief</div>");
+    html.push_str("<p class=\"lede\">This run compares compiler profiles across behaviorally matched workloads. The useful question is not which language wins globally; it is where compiler/profile choices change reliability, bytecode size, deployment cost, runtime gas, and compile resources.</p>");
+    html.push_str(&render_takeaways(rows, summary));
     html.push_str("</div><div class=\"card\">");
-    html.push_str("<div class=\"k\">Harness scope</div><div class=\"v\">Internal call</div>");
-    html.push_str("<div class=\"subv\">Foundry target calls; <span class=\"mono\">total_tx_gas</span> is intentionally null. The estimated transaction field is an internal-call plus intrinsic/calldata estimate, not a measured chain transaction.</div>");
+    html.push_str(
+        "<div class=\"k\">Safe reading</div><div class=\"v\">Tradeoffs, not a leaderboard</div>",
+    );
+    html.push_str("<div class=\"subv\">Default comparisons use metadata-off codegen profiles and scenario-level ratios. Full matrices and raw rows remain available as drilldowns.</div>");
     html.push_str("</div></section>");
 
     html.push_str("<section class=\"grid\">");
@@ -749,6 +754,262 @@ fn render_overview(summary: &ReportSummary) -> String {
     html.push_str("<div class=\"card\"><h3>What can be safely inferred?</h3><p class=\"small muted\">Fixed rows support matched-workload compiler/profile comparisons. Scale rows support compiler stress and growth-shape claims. Real-derived rows support scoped model hot-path claims only after reading their exclusions and mock assumptions.</p></div>");
     html.push_str("<div class=\"card\"><h3>Where are the tradeoffs?</h3><p class=\"small muted\">Read reliability before gas, compare ratios only within the same benchmark/scenario/metadata/state profile, and treat bytecode, deployment, runtime gas, compile time, and RSS as separate dimensions.</p></div>");
     html.push_str("</section>");
+    html
+}
+
+fn render_takeaways(rows: &[serde_json::Value], summary: &ReportSummary) -> String {
+    let metadata = metadata_overhead_summary(rows);
+    let fixed_deltas = collect_scenario_deltas(
+        rows,
+        "fixed",
+        &[SOL_VIAIR_CODEGEN, VYPER_GAS_CODEGEN, VYPER_CODESIZE_CODEGEN],
+    );
+    let largest_delta = fixed_deltas.iter().max_by(|left, right| {
+        left.ratio
+            .ln()
+            .abs()
+            .partial_cmp(&right.ratio.ln().abs())
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+    let failure = compile_failure_story(rows);
+
+    let mut html = String::new();
+    html.push_str("<div class=\"takeaways\">");
+    html.push_str("<div class=\"takeaway\"><strong>Reliability</strong><span class=\"small\">");
+    html.push_str(&escape(&failure));
+    html.push_str("</span></div>");
+    html.push_str(
+        "<div class=\"takeaway\"><strong>Correctness coverage</strong><span class=\"small\">",
+    );
+    html.push_str(&format!(
+        "{} scenario rows matched expected success/revert; {} rows have randomized checks and {} rows have property checks. Golden/log checks are not yet run.",
+        summary.scenario_status_pass, summary.randomized_rows, summary.property_rows
+    ));
+    html.push_str("</span></div>");
+    html.push_str(
+        "<div class=\"takeaway\"><strong>Runtime comparisons</strong><span class=\"small\">",
+    );
+    if let Some(delta) = largest_delta {
+        html.push_str(&format!(
+            "Largest fixed-suite headline delta is {} at {} ({:+} gas vs baseline). Ratios are scenario-level, metadata-off internal-call measurements.",
+            ratio_text(delta.ratio),
+            escape(&format!("{} / {}", delta.label, profile_short(&delta.profile))),
+            delta.delta
+        ));
+    } else {
+        html.push_str("No fixed-suite runtime ratios were available for the headline profiles.");
+    }
+    html.push_str("</span></div>");
+    html.push_str(
+        "<div class=\"takeaway\"><strong>Metadata is separate</strong><span class=\"small\">",
+    );
+    html.push_str(&format!(
+        "Across {} paired artifacts, metadata-on changes creation bytecode by about {} bytes on average; codegen views default to metadata-off.",
+        metadata.pairs,
+        signed(metadata.avg_creation_delta)
+    ));
+    html.push_str("</span></div>");
+    html.push_str("</div>");
+    html
+}
+
+fn render_validity_brief(rows: &[serde_json::Value]) -> String {
+    let summary = ReportSummary::from_rows(rows);
+    let mut html = String::new();
+    html.push_str("<p class=\"answer\">Can I trust the rows enough to compare gas and size?</p>");
+    html.push_str("<p class=\"section-lede\">Enough for scoped compiler-profile tradeoffs, not enough for a global language or production-protocol claim. Scenario status checks are broad; deeper semantic checks are layered and currently limited.</p>");
+    html.push_str("<section class=\"grid\">");
+    html.push_str(&metric_card(
+        "Scenario status",
+        &format!(
+            "{} pass / {} fail",
+            summary.scenario_status_pass, summary.scenario_status_fail
+        ),
+        "success or revert matched expectation",
+    ));
+    html.push_str(&metric_card(
+        "Baseline differential",
+        &format!("{} rows", summary.baseline_differential_rows),
+        "baseline pair coverage, not every profile pair",
+    ));
+    html.push_str(&metric_card(
+        "Randomized/property",
+        &format!("{} / {}", summary.randomized_rows, summary.property_rows),
+        "selected fixed benchmarks",
+    ));
+    html.push_str(&metric_card(
+        "Golden/log checks",
+        &format!("{} / {}", summary.golden_rows, summary.log_rows),
+        "not run in this result set",
+    ));
+    html.push_str("</section>");
+    html.push_str(&render_measurement_scope());
+    html.push_str("<details><summary>Show correctness coverage matrix</summary>");
+    html.push_str(&render_correctness_matrix(rows));
+    html.push_str("</details>");
+    html
+}
+
+fn render_reliability_brief(rows: &[serde_json::Value]) -> String {
+    let summary = ReportSummary::from_rows(rows);
+    let mut html = String::new();
+    html.push_str("<p class=\"answer\">Did everything compile?</p>");
+    html.push_str("<p class=\"section-lede\">");
+    html.push_str(&escape(&compile_failure_story(rows)));
+    html.push_str("</p><section class=\"grid\">");
+    html.push_str(&metric_card(
+        "Compiled artifacts",
+        &summary.successful_artifacts.len().to_string(),
+        "successful compiler/profile artifacts",
+    ));
+    html.push_str(&metric_card(
+        "Compile failures",
+        &summary.failed_artifacts.len().to_string(),
+        "kept as first-class benchmark results",
+    ));
+    html.push_str(&metric_card(
+        "Affected suite",
+        &compile_failure_suite_label(rows),
+        "where compiler errors occurred",
+    ));
+    html.push_str(&metric_card(
+        "Failure reason",
+        &compile_failure_reason_label(rows),
+        "summarized from compiler diagnostics",
+    ));
+    html.push_str("</section>");
+    html.push_str(&render_compile_failure_brief_table(rows));
+    html.push_str("<details><summary>Show full compile matrix</summary>");
+    html.push_str(&render_compile_failure_matrix(rows));
+    html.push_str("</details>");
+    html
+}
+
+fn render_fixed_suite_brief(rows: &[serde_json::Value]) -> String {
+    let deltas = collect_scenario_deltas(
+        rows,
+        "fixed",
+        &[SOL_VIAIR_CODEGEN, VYPER_GAS_CODEGEN, VYPER_CODESIZE_CODEGEN],
+    );
+    let mut cheaper = deltas
+        .iter()
+        .filter(|delta| delta.ratio < 1.0)
+        .cloned()
+        .collect::<Vec<_>>();
+    cheaper.sort_by(|left, right| {
+        left.ratio
+            .partial_cmp(&right.ratio)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+    let mut costlier = deltas
+        .iter()
+        .filter(|delta| delta.ratio > 1.0)
+        .cloned()
+        .collect::<Vec<_>>();
+    costlier.sort_by(|left, right| {
+        right
+            .ratio
+            .partial_cmp(&left.ratio)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+
+    let mut html = String::new();
+    html.push_str("<p class=\"answer\">Where does runtime gas actually move?</p>");
+    html.push_str(&format!(
+        "<p class=\"section-lede\">Headline runtime comparisons are same benchmark, same scenario, same state profile, metadata-off, relative to <span class=\"mono\">{}</span>. This keeps the first view readable and leaves the full scenario table as a drilldown.</p>",
+        escape(SOL_CODEGEN_BASELINE)
+    ));
+    html.push_str("<section class=\"two\">");
+    html.push_str(&render_delta_table(
+        "Largest cheaper headline rows",
+        &cheaper,
+        8,
+    ));
+    html.push_str(&render_delta_table(
+        "Largest costlier headline rows",
+        &costlier,
+        8,
+    ));
+    html.push_str("</section>");
+    html.push_str(
+        "<details><summary>Show all fixed-suite scenario ratios and Pareto scatter</summary>",
+    );
+    html.push_str(&render_fixed_scenario_ratios(rows));
+    html.push_str(&render_fixed_pareto_svg(rows));
+    html.push_str("</details>");
+    html
+}
+
+fn render_profile_brief(rows: &[serde_json::Value]) -> String {
+    let mut html = String::new();
+    html.push_str("<p class=\"answer\">What do the main compiler profiles buy or cost?</p>");
+    html.push_str("<p class=\"section-lede\">The default profile view hides metadata duplicates and noopt diagnostics. It compares the production-relevant codegen profiles first; the full profile table remains available below.</p>");
+    html.push_str(&render_profile_tradeoff_table(
+        rows,
+        Some(&PRIMARY_CODEGEN_PROFILES),
+    ));
+    html.push_str("<details><summary>Show all metadata-off profile tradeoffs, including noopt diagnostics</summary>");
+    html.push_str(&render_fixed_profile_tradeoffs(rows));
+    html.push_str("</details>");
+    html
+}
+
+fn render_metadata_brief(rows: &[serde_json::Value]) -> String {
+    let summary = metadata_overhead_summary(rows);
+    let mut html = String::new();
+    html.push_str("<p class=\"answer\">How much of bytecode/deploy cost is metadata?</p>");
+    html.push_str("<p class=\"section-lede\">Metadata is a deployment/verifiability dimension, not a codegen winner signal. The paired deltas below compare the same artifact/profile with metadata on versus off.</p>");
+    html.push_str("<section class=\"grid\">");
+    html.push_str(&metric_card(
+        "Paired artifacts",
+        &summary.pairs.to_string(),
+        "same benchmark/profile, metadata on vs off",
+    ));
+    html.push_str(&metric_card(
+        "Runtime bytes delta",
+        &signed(summary.avg_runtime_delta),
+        "average metadata-on minus metadata-off",
+    ));
+    html.push_str(&metric_card(
+        "Creation bytes delta",
+        &signed(summary.avg_creation_delta),
+        "average metadata-on minus metadata-off",
+    ));
+    html.push_str(&metric_card(
+        "Internal create gas delta",
+        &signed(summary.avg_create_gas_delta),
+        "average metadata-on minus metadata-off",
+    ));
+    html.push_str("</section>");
+    html.push_str("<details><summary>Show metadata deltas by profile family</summary>");
+    html.push_str(&render_metadata_delta_summary(rows));
+    html.push_str("</details>");
+    html
+}
+
+fn render_compile_brief(rows: &[serde_json::Value]) -> String {
+    let mut html = String::new();
+    html.push_str("<p class=\"answer\">What are the compile-time and memory tradeoffs?</p>");
+    html.push_str("<p class=\"section-lede\">Compile resources are artifact-level measurements. The default view shows the main codegen profiles; all metadata/noopt variants are available as a drilldown.</p>");
+    html.push_str(&render_compile_resource_summary_for_profiles(
+        rows,
+        Some(&PRIMARY_CODEGEN_PROFILES),
+    ));
+    html.push_str("<details><summary>Show compile resources for all profiles</summary>");
+    html.push_str(&render_compile_resource_summary(rows));
+    html.push_str("</details>");
+    html
+}
+
+fn render_scale_brief(rows: &[serde_json::Value]) -> String {
+    let mut html = String::new();
+    html.push_str("<p class=\"answer\">Where do generated workloads expose compiler cliffs?</p>");
+    html.push_str("<p class=\"section-lede\">Scale workloads are stress tests. They are best read as failure boundaries and growth curves, not as application-like gas averages.</p>");
+    html.push_str(&render_compile_failure_brief_table(rows));
+    html.push_str("<details><summary>Show scale max-N matrix and aggregate scale table</summary>");
+    html.push_str(&render_scale_max_n(rows));
+    html.push_str(&render_scale_summary(rows));
+    html.push_str("</details>");
     html
 }
 
@@ -1055,7 +1316,152 @@ struct ArtifactMetrics {
     peak_rss_kib: u64,
 }
 
-fn render_fixed_profile_tradeoffs(rows: &[serde_json::Value]) -> String {
+#[derive(Debug, Clone)]
+struct ScenarioDelta {
+    label: String,
+    profile: String,
+    ratio: f64,
+    delta: i64,
+    value: u64,
+    baseline: u64,
+}
+
+#[derive(Debug, Default)]
+struct MetadataOverheadSummary {
+    pairs: usize,
+    avg_runtime_delta: i64,
+    avg_creation_delta: i64,
+    avg_create_gas_delta: i64,
+}
+
+fn collect_scenario_deltas(
+    rows: &[serde_json::Value],
+    suite: &str,
+    profiles: &[&str],
+) -> Vec<ScenarioDelta> {
+    let mut baseline = BTreeMap::new();
+    let mut values: BTreeMap<String, BTreeMap<String, u64>> = BTreeMap::new();
+    let mut labels = BTreeMap::new();
+    for row in rows {
+        if str_at(row, "/status").as_deref() != Some("ok")
+            || str_at(row, "/suite").as_deref() != Some(suite)
+            || str_at(row, "/gas/metadata_mode").as_deref() != Some("off")
+        {
+            continue;
+        }
+        let key = scenario_key(row);
+        labels
+            .entry(key.clone())
+            .or_insert_with(|| scenario_label(row));
+        let profile = str_at(row, "/profile_id").unwrap_or_default();
+        let gas = u64_at(row, "/gas/harness_call_gas");
+        if profile == SOL_CODEGEN_BASELINE {
+            baseline.insert(key.clone(), gas);
+        }
+        if profiles.iter().any(|candidate| *candidate == profile) {
+            values.entry(key).or_default().insert(profile, gas);
+        }
+    }
+
+    let mut deltas = Vec::new();
+    for (key, by_profile) in values {
+        let Some(base) = baseline.get(&key).copied() else {
+            continue;
+        };
+        if base == 0 {
+            continue;
+        }
+        let label = labels.get(&key).cloned().unwrap_or(key);
+        for (profile, value) in by_profile {
+            if profile == SOL_CODEGEN_BASELINE || value == 0 {
+                continue;
+            }
+            deltas.push(ScenarioDelta {
+                label: label.clone(),
+                profile,
+                ratio: value as f64 / base as f64,
+                delta: value as i64 - base as i64,
+                value,
+                baseline: base,
+            });
+        }
+    }
+    deltas
+}
+
+fn render_delta_table(title: &str, deltas: &[ScenarioDelta], limit: usize) -> String {
+    let mut html = String::new();
+    html.push_str("<div class=\"card\"><h3>");
+    html.push_str(&escape(title));
+    html.push_str("</h3>");
+    if deltas.is_empty() {
+        html.push_str("<p class=\"small muted\">No rows in this direction for the selected profiles.</p></div>");
+        return html;
+    }
+    html.push_str("<table class=\"mini-table\"><thead><tr><th>Scenario</th><th>Profile</th><th>Ratio</th><th>Delta Gas</th></tr></thead><tbody>");
+    for delta in deltas.iter().take(limit) {
+        html.push_str("<tr><td class=\"mono\">");
+        html.push_str(&escape(&delta.label));
+        html.push_str("</td><td>");
+        html.push_str(&escape(&profile_short(&delta.profile)));
+        html.push_str("</td><td>");
+        html.push_str(&ratio_cell(Some(delta.ratio)));
+        html.push_str("</td><td title=\"value ");
+        html.push_str(&delta.value.to_string());
+        html.push_str(", baseline ");
+        html.push_str(&delta.baseline.to_string());
+        html.push_str("\">");
+        html.push_str(&signed(delta.delta));
+        html.push_str("</td></tr>");
+    }
+    html.push_str("</tbody></table></div>");
+    html
+}
+
+fn render_profile_tradeoff_table(
+    rows: &[serde_json::Value],
+    profile_filter: Option<&[&str]>,
+) -> String {
+    let aggregates = fixed_profile_tradeoff_aggregates(rows);
+    let mut html = String::new();
+    html.push_str(&format!(
+        "<p class=\"small muted\">Geometric mean ratios over fixed-suite metadata-off rows, relative to <span class=\"mono\">{}</span>. Runtime gas is scenario-level; bytecode, deploy, and compile metrics are artifact-level.</p>",
+        escape(SOL_CODEGEN_BASELINE)
+    ));
+    html.push_str("<table><thead><tr><th>Profile</th><th>Harness Gas</th><th>Runtime Bytes</th><th>Internal Create Gas</th><th>Compile Wall</th><th>Samples</th></tr></thead><tbody>");
+    for (profile, aggregate) in aggregates {
+        if let Some(filter) = profile_filter {
+            if !filter.iter().any(|candidate| *candidate == profile) {
+                continue;
+            }
+        }
+        html.push_str("<tr><td class=\"mono\">");
+        html.push_str(&escape(&profile_short(&profile)));
+        html.push_str("<br><span class=\"small muted\">");
+        html.push_str(&escape(&profile));
+        html.push_str("</span></td><td>");
+        html.push_str(&ratio_cell(geomean(&aggregate.gas)));
+        html.push_str("</td><td>");
+        html.push_str(&ratio_cell(geomean(&aggregate.runtime_bytes)));
+        html.push_str("</td><td>");
+        html.push_str(&ratio_cell(geomean(&aggregate.internal_create_gas)));
+        html.push_str("</td><td>");
+        html.push_str(&ratio_cell(geomean(&aggregate.compile_ms)));
+        html.push_str("</td><td>");
+        html.push_str(&format!(
+            "{} gas / {} artifact",
+            aggregate.gas.len(),
+            aggregate.runtime_bytes.len()
+        ));
+        html.push_str("</td></tr>");
+    }
+    html.push_str("</tbody></table>");
+    html
+}
+
+fn fixed_profile_tradeoff_aggregates(
+    rows: &[serde_json::Value],
+) -> BTreeMap<String, RatioAggregate> {
     let mut baseline_gas = BTreeMap::new();
     let mut baseline_artifacts = BTreeMap::new();
     let mut seen = BTreeSet::new();
@@ -1107,32 +1513,128 @@ fn render_fixed_profile_tradeoffs(rows: &[serde_json::Value]) -> String {
             }
         }
     }
+    aggregates
+}
+
+fn metadata_overhead_summary(rows: &[serde_json::Value]) -> MetadataOverheadSummary {
+    let mut pairs: BTreeMap<String, MetadataPair> = BTreeMap::new();
+    let mut seen = BTreeSet::new();
+    for row in rows {
+        if str_at(row, "/status").as_deref() != Some("ok") {
+            continue;
+        }
+        let artifact_key = artifact_key_from_row(row);
+        if !seen.insert(artifact_key) {
+            continue;
+        }
+        let profile = str_at(row, "/profile_id").unwrap_or_default();
+        let base_profile = profile_without_metadata(&profile);
+        let key = format!(
+            "{}\0{}\0{}",
+            str_at(row, "/benchmark_id").unwrap_or_default(),
+            str_at(row, "/implementation_id").unwrap_or_default(),
+            base_profile
+        );
+        let entry = pairs.entry(key).or_default();
+        match str_at(row, "/gas/metadata_mode").as_deref() {
+            Some("off") => entry.off = Some(artifact_metrics(row)),
+            Some("on") => entry.on = Some(artifact_metrics(row)),
+            _ => {}
+        }
+    }
+
+    let mut summary = MetadataOverheadSummary::default();
+    let mut runtime_delta = 0;
+    let mut creation_delta = 0;
+    let mut create_gas_delta = 0;
+    for pair in pairs.values() {
+        let Some(off) = pair.off else {
+            continue;
+        };
+        let Some(on) = pair.on else {
+            continue;
+        };
+        summary.pairs += 1;
+        runtime_delta += on.runtime_bytes as i64 - off.runtime_bytes as i64;
+        creation_delta += on.creation_bytes as i64 - off.creation_bytes as i64;
+        create_gas_delta += on.internal_create_gas as i64 - off.internal_create_gas as i64;
+    }
+    let pairs = summary.pairs.max(1) as i64;
+    summary.avg_runtime_delta = runtime_delta / pairs;
+    summary.avg_creation_delta = creation_delta / pairs;
+    summary.avg_create_gas_delta = create_gas_delta / pairs;
+    summary
+}
+
+fn render_compile_resource_summary_for_profiles(
+    rows: &[serde_json::Value],
+    profile_filter: Option<&[&str]>,
+) -> String {
+    let mut aggregates: BTreeMap<String, CompileAggregate> = BTreeMap::new();
+    let mut seen = BTreeSet::new();
+    for row in rows {
+        if str_at(row, "/status").as_deref() != Some("ok") {
+            continue;
+        }
+        let profile = str_at(row, "/profile_id").unwrap_or_default();
+        if let Some(filter) = profile_filter {
+            if !filter.iter().any(|candidate| *candidate == profile) {
+                continue;
+            }
+        }
+        let artifact_key = artifact_key_from_row(row);
+        if !seen.insert(artifact_key) {
+            continue;
+        }
+        let aggregate = aggregates.entry(profile).or_default();
+        let metrics = artifact_metrics(row);
+        aggregate.artifacts += 1;
+        aggregate.total_wall_ms += metrics.compile_ms;
+        aggregate.total_rss_kib += metrics.peak_rss_kib;
+        aggregate.max_rss_kib = aggregate.max_rss_kib.max(metrics.peak_rss_kib);
+    }
+    let max_wall = aggregates
+        .values()
+        .map(|aggregate| aggregate.total_wall_ms / aggregate.artifacts.max(1) as f64)
+        .fold(0.0, f64::max)
+        .max(1.0);
+    let max_rss = aggregates
+        .values()
+        .map(|aggregate| aggregate.max_rss_kib)
+        .max()
+        .unwrap_or(1)
+        .max(1);
 
     let mut html = String::new();
-    html.push_str(&format!(
-        "<p class=\"small muted\">Geometric mean ratios over fixed-suite metadata-off rows, grouped by profile, relative to <span class=\"mono\">{}</span>. Runtime gas is scenario-level; bytecode, deploy, and compile metrics are artifact-level.</p>",
-        escape(SOL_CODEGEN_BASELINE)
-    ));
-    html.push_str("<table><thead><tr><th>Profile</th><th>Harness Gas Ratio</th><th>Runtime Bytes Ratio</th><th>Internal Create Gas Ratio</th><th>Compile Wall Ratio</th><th>Gas Samples</th><th>Artifact Samples</th></tr></thead><tbody>");
+    html.push_str("<table><thead><tr><th>Profile</th><th>Artifacts</th><th>Avg Wall ms</th><th>Max RSS KiB</th><th>Avg RSS KiB</th></tr></thead><tbody>");
     for (profile, aggregate) in aggregates {
+        let artifacts = aggregate.artifacts.max(1);
+        let avg_wall = aggregate.total_wall_ms / artifacts as f64;
+        let avg_rss = aggregate.total_rss_kib / artifacts as u64;
         html.push_str("<tr><td class=\"mono\">");
+        html.push_str(&escape(&profile_short(&profile)));
+        html.push_str("<br><span class=\"small muted\">");
         html.push_str(&escape(&profile));
+        html.push_str("</span></td><td>");
+        html.push_str(&aggregate.artifacts.to_string());
         html.push_str("</td><td>");
-        html.push_str(&ratio_cell(geomean(&aggregate.gas)));
+        html.push_str(&bar_value(avg_wall, max_wall, &format!("{avg_wall:.2}")));
         html.push_str("</td><td>");
-        html.push_str(&ratio_cell(geomean(&aggregate.runtime_bytes)));
+        html.push_str(&bar_value(
+            aggregate.max_rss_kib as f64,
+            max_rss as f64,
+            &aggregate.max_rss_kib.to_string(),
+        ));
         html.push_str("</td><td>");
-        html.push_str(&ratio_cell(geomean(&aggregate.internal_create_gas)));
-        html.push_str("</td><td>");
-        html.push_str(&ratio_cell(geomean(&aggregate.compile_ms)));
-        html.push_str("</td><td>");
-        html.push_str(&aggregate.gas.len().to_string());
-        html.push_str("</td><td>");
-        html.push_str(&aggregate.runtime_bytes.len().to_string());
+        html.push_str(&avg_rss.to_string());
         html.push_str("</td></tr>");
     }
     html.push_str("</tbody></table>");
     html
+}
+
+fn render_fixed_profile_tradeoffs(rows: &[serde_json::Value]) -> String {
+    render_profile_tradeoff_table(rows, None)
 }
 
 #[derive(Debug, Default)]
@@ -1450,9 +1952,136 @@ fn render_real_derived_summary(rows: &[serde_json::Value]) -> String {
 
     let mut html = String::new();
     html.push_str("<div class=\"notice small\"><strong>Scope note:</strong> real-derived rows are simplified benchmark models, not production-equivalent ports. Read the model kind, mock assumptions, and excluded features before comparing runtime gas.</div>");
+    html.push_str(
+        "<p class=\"answer\">What can the recognizable protocol-shaped models tell us?</p>",
+    );
+    html.push_str("<p class=\"section-lede\">They are useful for compiler behavior on larger DeFi-like accounting paths, but the default view keeps provenance and exclusions ahead of gas. Runtime ratios here are scoped model hot-path deltas, not Uniswap, Curve, or Yearn production-gas claims.</p>");
+    html.push_str(&render_real_model_scope_table(&selected));
+
+    let deltas = collect_scenario_deltas(
+        rows,
+        BenchmarkSuite::RealDerived.as_str(),
+        &[SOL_VIAIR_CODEGEN, VYPER_GAS_CODEGEN, VYPER_CODESIZE_CODEGEN],
+    );
+    let mut cheaper = deltas
+        .iter()
+        .filter(|delta| delta.ratio < 1.0)
+        .cloned()
+        .collect::<Vec<_>>();
+    cheaper.sort_by(|left, right| {
+        left.ratio
+            .partial_cmp(&right.ratio)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+    let mut costlier = deltas
+        .iter()
+        .filter(|delta| delta.ratio > 1.0)
+        .cloned()
+        .collect::<Vec<_>>();
+    costlier.sort_by(|left, right| {
+        right
+            .ratio
+            .partial_cmp(&left.ratio)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+    html.push_str("<section class=\"two\">");
+    html.push_str(&render_delta_table(
+        "Largest cheaper model rows",
+        &cheaper,
+        6,
+    ));
+    html.push_str(&render_delta_table(
+        "Largest costlier model rows",
+        &costlier,
+        6,
+    ));
+    html.push_str("</section>");
+    html.push_str(
+        "<details><summary>Show real-derived scenario ratios and row-level provenance</summary>",
+    );
     html.push_str(&render_real_derived_scenario_ratios(&selected));
+    html.push_str(&render_real_derived_detail_table(&selected));
+    html.push_str("</details>");
+    html
+}
+
+#[derive(Debug, Default)]
+struct RealModelScope {
+    upstream: String,
+    model_kind: String,
+    production_equivalence: String,
+    source_language: String,
+    source_path: String,
+    scenarios: BTreeSet<String>,
+    artifacts: BTreeSet<String>,
+    assumptions: BTreeSet<String>,
+    exclusions: BTreeSet<String>,
+}
+
+fn render_real_model_scope_table(rows: &[&serde_json::Value]) -> String {
+    let mut models: BTreeMap<String, RealModelScope> = BTreeMap::new();
+    for row in rows {
+        let benchmark = str_at(row, "/benchmark_id").unwrap_or_default();
+        let entry = models.entry(benchmark.clone()).or_default();
+        if entry.upstream.is_empty() {
+            entry.upstream = str_at(row, "/provenance/upstream_project").unwrap_or_default();
+            entry.model_kind = str_at(row, "/provenance/model_kind").unwrap_or_default();
+            entry.production_equivalence =
+                str_at(row, "/provenance/production_equivalence").unwrap_or_default();
+            entry.source_language = str_at(row, "/provenance/source_language").unwrap_or_default();
+            entry.source_path = str_at(row, "/provenance/source_path").unwrap_or_default();
+        }
+        if str_at(row, "/status").as_deref() == Some("ok") {
+            let scenario = str_at(row, "/gas/scenario").unwrap_or_default();
+            if !scenario.is_empty() {
+                entry.scenarios.insert(scenario);
+            }
+        }
+        entry.artifacts.insert(artifact_key_from_row(row));
+        for assumption in array_strings_at(row, "/provenance/mock_assumptions") {
+            entry.assumptions.insert(assumption);
+        }
+        for exclusion in array_strings_at(row, "/provenance/excluded_features") {
+            entry.exclusions.insert(exclusion);
+        }
+    }
+
+    let mut html = String::new();
+    html.push_str("<table><thead><tr><th>Model</th><th>Scope</th><th>Coverage</th><th>Reader Guardrails</th></tr></thead><tbody>");
+    for (benchmark, scope) in models {
+        html.push_str("<tr><td class=\"mono\">");
+        html.push_str(&escape(&benchmark));
+        html.push_str("<br><span class=\"small muted\">");
+        html.push_str(&escape(&scope.upstream));
+        html.push_str("</span></td><td>");
+        html.push_str(&escape(&scope.model_kind));
+        html.push_str("<br><span class=\"small muted\">production_equivalence=");
+        html.push_str(&escape(&scope.production_equivalence));
+        html.push_str("<br>source ");
+        html.push_str(&escape(&scope.source_language));
+        html.push(':');
+        html.push_str(&escape(&scope.source_path));
+        html.push_str("</span></td><td>");
+        html.push_str(&format!(
+            "{} scenarios<br><span class=\"small muted\">{} compiled artifacts</span>",
+            scope.scenarios.len(),
+            scope.artifacts.len()
+        ));
+        html.push_str("</td><td class=\"small\">");
+        html.push_str("<span class=\"muted\">mocked:</span> ");
+        html.push_str(&escape(&summarize_set(&scope.assumptions, 2)));
+        html.push_str("<br><span class=\"muted\">excluded:</span> ");
+        html.push_str(&escape(&summarize_set(&scope.exclusions, 3)));
+        html.push_str("</td></tr>");
+    }
+    html.push_str("</tbody></table>");
+    html
+}
+
+fn render_real_derived_detail_table(rows: &[&serde_json::Value]) -> String {
+    let mut html = String::new();
     html.push_str("<table><thead><tr><th>Upstream</th><th>Benchmark</th><th>Model</th><th>Production Equivalent</th><th>Source</th><th>Port</th><th>Profile</th><th>Status</th><th>Scenario</th><th>Assumptions / Exclusions</th><th>Runtime Bytes</th><th>Internal Create Gas</th><th>Harness Call Gas</th><th>Harness Est. Tx Gas</th></tr></thead><tbody>");
-    for row in selected {
+    for row in rows {
         html.push_str("<tr><td>");
         html.push_str(&escape(
             &str_at(row, "/provenance/upstream_project").unwrap_or_default(),
@@ -1686,6 +2315,17 @@ fn scenario_key(row: &serde_json::Value) -> String {
     )
 }
 
+fn scenario_label(row: &serde_json::Value) -> String {
+    let benchmark = str_at(row, "/benchmark_id").unwrap_or_default();
+    let scenario = str_at(row, "/gas/scenario").unwrap_or_default();
+    let state = str_at(row, "/gas/state_access_profile").unwrap_or_default();
+    if state.is_empty() {
+        format!("{benchmark} / {scenario}")
+    } else {
+        format!("{benchmark} / {scenario} / {state}")
+    }
+}
+
 fn artifact_key_from_row(row: &serde_json::Value) -> String {
     artifact_key(
         &str_at(row, "/benchmark_id").unwrap_or_default(),
@@ -1816,6 +2456,164 @@ fn short_error(row: &serde_json::Value) -> String {
         .collect()
 }
 
+fn render_compile_failure_brief_table(rows: &[serde_json::Value]) -> String {
+    let mut groups: BTreeMap<String, (String, String, u64, String, BTreeSet<String>)> =
+        BTreeMap::new();
+    for row in rows {
+        if str_at(row, "/status").as_deref() != Some("compile_error") {
+            continue;
+        }
+        let suite = str_at(row, "/suite").unwrap_or_default();
+        let family = str_at(row, "/family")
+            .filter(|value| !value.is_empty())
+            .unwrap_or_else(|| str_at(row, "/benchmark_id").unwrap_or_default());
+        let n = u64_at(row, "/parameter_value");
+        let reason = short_error(row);
+        let key = format!("{suite}\0{family}\0{n:020}\0{reason}");
+        groups
+            .entry(key)
+            .or_insert_with(|| (suite, family, n, reason, BTreeSet::new()))
+            .4
+            .insert(str_at(row, "/profile_id").unwrap_or_default());
+    }
+
+    if groups.is_empty() {
+        return "<div class=\"callout\"><strong>All attempted artifacts compiled.</strong><div class=\"small muted\">No compile-error rows are present in this result set.</div></div>".to_string();
+    }
+
+    let mut html = String::new();
+    html.push_str("<table class=\"mini-table\"><thead><tr><th>Suite</th><th>Family</th><th>N</th><th>Reason</th><th>Affected Profiles</th></tr></thead><tbody>");
+    for (_, (suite, family, n, reason, profiles)) in groups {
+        html.push_str("<tr><td>");
+        html.push_str(&escape(&suite));
+        html.push_str("</td><td class=\"mono\">");
+        html.push_str(&escape(&family));
+        html.push_str("</td><td>");
+        if n == 0 {
+            html.push_str("-");
+        } else {
+            html.push_str(&n.to_string());
+        }
+        html.push_str("</td><td>");
+        html.push_str(&escape(&reason));
+        html.push_str("</td><td class=\"small\">");
+        html.push_str(
+            &profiles
+                .iter()
+                .map(|profile| escape(&profile_short(profile)))
+                .collect::<Vec<_>>()
+                .join("<br>"),
+        );
+        html.push_str("</td></tr>");
+    }
+    html.push_str("</tbody></table>");
+    html
+}
+
+fn compile_failure_story(rows: &[serde_json::Value]) -> String {
+    let failures = rows
+        .iter()
+        .filter(|row| str_at(row, "/status").as_deref() == Some("compile_error"))
+        .collect::<Vec<_>>();
+    if failures.is_empty() {
+        return "All attempted artifacts compile across the selected compiler profiles."
+            .to_string();
+    }
+
+    let mut suites = BTreeSet::new();
+    let mut families = BTreeSet::new();
+    let mut values = BTreeSet::new();
+    let mut profiles = BTreeSet::new();
+    let mut reasons = BTreeSet::new();
+    for row in failures {
+        suites.insert(str_at(row, "/suite").unwrap_or_default());
+        families.insert(
+            str_at(row, "/family")
+                .filter(|value| !value.is_empty())
+                .unwrap_or_else(|| str_at(row, "/benchmark_id").unwrap_or_default()),
+        );
+        let value = u64_at(row, "/parameter_value");
+        if value > 0 {
+            values.insert(value);
+        }
+        profiles.insert(profile_short(
+            &str_at(row, "/profile_id").unwrap_or_default(),
+        ));
+        reasons.insert(short_error(row));
+    }
+    format!(
+        "{} compile failures are isolated to {} / {} at N={} across {} profiles; reason: {}.",
+        rows.iter()
+            .filter(|row| str_at(row, "/status").as_deref() == Some("compile_error"))
+            .count(),
+        suites.into_iter().collect::<Vec<_>>().join(", "),
+        families.into_iter().collect::<Vec<_>>().join(", "),
+        values
+            .into_iter()
+            .map(|value| value.to_string())
+            .collect::<Vec<_>>()
+            .join(", "),
+        profiles.len(),
+        reasons.into_iter().collect::<Vec<_>>().join(", ")
+    )
+}
+
+fn compile_failure_suite_label(rows: &[serde_json::Value]) -> String {
+    let suites = rows
+        .iter()
+        .filter(|row| str_at(row, "/status").as_deref() == Some("compile_error"))
+        .filter_map(|row| str_at(row, "/suite"))
+        .collect::<BTreeSet<_>>();
+    if suites.is_empty() {
+        "none".to_string()
+    } else {
+        suites.into_iter().collect::<Vec<_>>().join(", ")
+    }
+}
+
+fn compile_failure_reason_label(rows: &[serde_json::Value]) -> String {
+    let reasons = rows
+        .iter()
+        .filter(|row| str_at(row, "/status").as_deref() == Some("compile_error"))
+        .map(short_error)
+        .collect::<BTreeSet<_>>();
+    if reasons.is_empty() {
+        "none".to_string()
+    } else {
+        reasons.into_iter().collect::<Vec<_>>().join(", ")
+    }
+}
+
+fn profile_short(profile: &str) -> String {
+    let base = profile_without_metadata(profile);
+    let label = match base.as_str() {
+        "solc-latest-legacy-runs200" => "solc legacy",
+        "solc-latest-viair-runs200" => "solc viaIR",
+        "solc-latest-noopt" => "solc noopt",
+        "vyper-latest-gas" => "vyper gas",
+        "vyper-latest-codesize" => "vyper codesize",
+        "vyper-latest-none" => "vyper none",
+        _ => profile,
+    };
+    if profile.ends_with("-metadata-on") {
+        format!("{label} metadata-on")
+    } else {
+        label.to_string()
+    }
+}
+
+fn ratio_text(ratio: f64) -> String {
+    format!("{ratio:.2}x")
+}
+
+fn signed(value: i64) -> String {
+    if value >= 0 {
+        format!("+{value}")
+    } else {
+        value.to_string()
+    }
+}
+
 fn artifact_key(benchmark_id: &str, implementation_id: &str, profile_id: &str) -> String {
     format!("{benchmark_id}\0{implementation_id}\0{profile_id}")
 }
@@ -1880,16 +2678,32 @@ fn mean_f64_array_at(row: &serde_json::Value, pointer: &str) -> f64 {
 }
 
 fn joined_array_at(row: &serde_json::Value, pointer: &str) -> String {
+    array_strings_at(row, pointer).join("; ")
+}
+
+fn array_strings_at(row: &serde_json::Value, pointer: &str) -> Vec<String> {
     row.pointer(pointer)
         .and_then(|value| value.as_array())
         .map(|items| {
             items
                 .iter()
                 .filter_map(|item| item.as_str())
+                .map(str::to_string)
                 .collect::<Vec<_>>()
-                .join("; ")
         })
         .unwrap_or_default()
+}
+
+fn summarize_set(values: &BTreeSet<String>, limit: usize) -> String {
+    if values.is_empty() {
+        return "none declared".to_string();
+    }
+    let mut selected = values.iter().take(limit).cloned().collect::<Vec<_>>();
+    let remaining = values.len().saturating_sub(selected.len());
+    if remaining > 0 {
+        selected.push(format!("+{remaining} more"));
+    }
+    selected.join("; ")
 }
 
 fn failure_links_html(row: &serde_json::Value) -> String {
