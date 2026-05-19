@@ -40,7 +40,7 @@ def predictClone(implementation: address, salt: bytes32) -> address:
     return self._predict_clone(implementation, salt)
 
 @external
-def cloneAndSet(implementation: address, salt: bytes32, amount: uint256) -> uint256:
+def recordClone(implementation: address, salt: bytes32, amount: uint256) -> uint256:
     predicted: address = self._predict_clone(implementation, salt)
     self.cloneValue[salt] = amount
     log Cloned(salt=salt, predicted=predicted, value=amount)

@@ -57,6 +57,7 @@ real_derived:
     - token balances are modeled as internal reserves and shadow balances instead of external ERC20 calls
     - block timestamp is advanced by explicit benchmark calls for deterministic cumulative price math
     - swap input amounts are explicit benchmark arguments instead of inferred from post-transfer token balances
+    - Vyper stores reserve fields with equivalent integer types but does not claim Solidity packed-slot storage layout compatibility
   included_features:
     - internal reserve/share accounting
     - first and subsequent mint paths
@@ -70,6 +71,7 @@ real_derived:
     - optimistic transfer and flash-swap callback path
     - INVALID_TO token-address receiver checks
     - lock reentrancy modifier
+    - exact Solidity reserve packing storage layout in the Vyper port
 semantics:
   - "Models selected Uniswap V2 pair reserve, LP share, fee-on, cumulative price, and invariant hot paths without external token transfers."
   - "Token transfers into the pair are represented by seedBalances calls before mint, swap, skim, or sync."

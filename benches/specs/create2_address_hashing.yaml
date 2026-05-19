@@ -1,0 +1,23 @@
+id: create2_address_hashing
+title: CREATE2 Address Hashing
+abi:
+  - "initCodeHash(uint256) returns (bytes32)"
+  - "computeAddress(bytes32,uint256) returns (address)"
+  - "record(bytes32,uint256) returns (uint256)"
+  - "saltValue(bytes32) returns (uint256)"
+semantics:
+  - "Exercises CREATE2-style address hashing and salt-indexed deployment bookkeeping."
+  - "Does not execute CREATE2; deployment behavior is intentionally out of scope for this hashing/bookkeeping benchmark."
+scenarios:
+  - name: init_code_hash
+    call: "initCodeHash(7)"
+    expected: "returns bytes32"
+  - name: record_value
+    call: "record(salt, 7)"
+    expected: "stores salt value"
+  - name: read_value
+    call: "saltValue(salt)"
+    expected: "returns stored value"
+implementations:
+  solidity: "benches/implementations/create2_address_hashing/solidity/Create2AddressHashing.sol"
+  vyper: "benches/implementations/create2_address_hashing/vyper/Create2AddressHashing.vy"

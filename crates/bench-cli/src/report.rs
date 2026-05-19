@@ -12,8 +12,9 @@ use chrono::Utc;
 use serde_json::json;
 use std::{
     collections::{BTreeMap, BTreeSet},
-    fs,
+    env, fs,
     path::{Path, PathBuf},
+    process::Command,
 };
 
 const SOL_BASELINE: &str = "solc-latest-legacy-runs200-metadata-on";
@@ -59,6 +60,7 @@ pub fn write_outputs(
         "real_derived": {
             "benchmarks": real_derived_manifest(compiled)
         },
+        "environment": environment_manifest(root),
         "artifacts": compiled.artifacts.len(),
         "compile_failures": compiled.failures.len(),
         "gas_records": gas_records.len()
@@ -186,6 +188,7 @@ fn row(
             "binary_path": artifact.compiler.binary_path,
             "binary_sha256": artifact.compiler.binary_sha256,
             "download_source": artifact.compiler.download_source,
+            "metadata": artifact.compiler.metadata,
             "settings": artifact.compiler_settings
         },
         "source_hash": artifact.source_hash,
@@ -201,26 +204,30 @@ fn row(
             "evm_fork": artifact.compiler_settings.get("evmVersion").cloned().unwrap_or_else(|| json!("unknown")),
             "state_access_profile": gas.state_access_profile.as_str(),
             "metadata_mode": gas.metadata_mode.as_str(),
-            "deploy_gas": gas.deploy_gas,
-            "execution_gas": gas.execution_gas,
+            "internal_create_gas": gas.internal_create_gas,
+            "harness_call_gas": gas.harness_call_gas,
             "intrinsic_gas": gas.intrinsic_gas,
             "calldata_gas": gas.calldata_gas,
-            "total_tx_gas": gas.total_tx_gas,
+            "harness_estimated_tx_gas": gas.harness_estimated_tx_gas,
+            "total_tx_gas": null,
+            "expected_success": gas.expected_success,
+            "call_succeeded": gas.call_succeeded,
+            "scenario_status_ok": gas.scenario_status_ok,
+            "measurement_scope": "foundry_internal_call_harness"
         },
         "correctness": {
-            "call_semantics": "pass",
-            "golden_tests": "not_run",
-            "differential_tests": baseline_status,
-            "baseline_differential": baseline_status,
-            "profile_differential": "not_run",
+            "scenario_status_check": if gas.scenario_status_ok { "pass" } else { "fail" },
+            "golden_behavior_check": "not_run",
+            "baseline_differential_check": baseline_status,
+            "profile_behavior_check": "not_run",
             "observer_check": if has_observers { baseline_status } else { "not_applicable" },
             "return_data_check": baseline_status,
             "log_check": "not_run",
-            "randomized_differential": randomized_status,
+            "randomized_differential_check": randomized_status,
             "property_tests": property_status,
             "properties": scenario_file.properties.iter().map(|property| property.name.clone()).collect::<Vec<_>>(),
             "failure_artifacts": failure_links,
-            "success": gas.success
+            "scenario_status_ok": gas.scenario_status_ok
         }
     })
 }
@@ -269,6 +276,7 @@ fn failure_row(failure: &CompileFailure) -> serde_json::Value {
             "binary_path": failure.compiler.binary_path,
             "binary_sha256": failure.compiler.binary_sha256,
             "download_source": failure.compiler.download_source,
+            "metadata": failure.compiler.metadata,
             "settings": failure.compiler_settings
         },
         "source_hash": failure.source_hash,
@@ -279,19 +287,18 @@ fn failure_row(failure: &CompileFailure) -> serde_json::Value {
         "bytecode": null,
         "gas": null,
         "correctness": {
-            "call_semantics": "not_applicable",
-            "golden_tests": "not_applicable",
-            "differential_tests": "not_applicable",
-            "baseline_differential": "not_applicable",
-            "profile_differential": "not_applicable",
+            "scenario_status_check": "not_applicable",
+            "golden_behavior_check": "not_applicable",
+            "baseline_differential_check": "not_applicable",
+            "profile_behavior_check": "not_applicable",
             "observer_check": "not_applicable",
             "return_data_check": "not_applicable",
             "log_check": "not_applicable",
-            "randomized_differential": "not_applicable",
+            "randomized_differential_check": "not_applicable",
             "property_tests": "not_applicable",
             "properties": [],
             "failure_artifacts": [],
-            "success": false
+            "scenario_status_ok": false
         }
     })
 }
@@ -375,6 +382,57 @@ fn provenance_value(
     })
 }
 
+fn environment_manifest(root: &Path) -> serde_json::Value {
+    json!({
+        "os": env::consts::OS,
+        "arch": env::consts::ARCH,
+        "family": env::consts::FAMILY,
+        "command_line": env::args().collect::<Vec<_>>(),
+        "git": {
+            "commit": command_output(root, "git", &["rev-parse", "HEAD"]),
+            "dirty": command_output(root, "git", &["status", "--porcelain"]).is_some_and(|output| !output.is_empty())
+        },
+        "tools": {
+            "forge": command_output(root, "forge", &["--version"]),
+            "cargo": command_output(root, "cargo", &["--version"]),
+            "rustc": command_output(root, "rustc", &["--version"]),
+            "uv": command_output(root, "uv", &["--version"])
+        },
+        "host": {
+            "kernel": command_output(root, "uname", &["-a"]),
+            "cpu": cpu_model(root)
+        }
+    })
+}
+
+fn cpu_model(root: &Path) -> Option<String> {
+    command_output(root, "sysctl", &["-n", "machdep.cpu.brand_string"]).or_else(|| {
+        fs::read_to_string("/proc/cpuinfo").ok().and_then(|text| {
+            text.lines()
+                .find_map(|line| line.split_once(':'))
+                .and_then(|(key, value)| {
+                    if key.trim() == "model name" {
+                        Some(value.trim().to_string())
+                    } else {
+                        None
+                    }
+                })
+        })
+    })
+}
+
+fn command_output(root: &Path, program: &str, args: &[&str]) -> Option<String> {
+    let output = Command::new(program)
+        .args(args)
+        .current_dir(root)
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    Some(String::from_utf8_lossy(&output.stdout).trim().to_string())
+}
+
 fn correctness_status(applicable: bool, failure_links: &[String], kind: &str) -> &'static str {
     if !applicable {
         return "not_applicable";
@@ -418,16 +476,13 @@ fn failure_links_by_benchmark(root: &Path) -> Result<BTreeMap<String, Vec<String
 }
 
 fn render_html(rows: &[serde_json::Value], toolchains: &Toolchains) -> Result<String> {
-    let mut by_profile: BTreeMap<String, (u64, usize)> = BTreeMap::new();
+    let mut by_profile: BTreeMap<String, usize> = BTreeMap::new();
     let mut by_benchmark: BTreeMap<String, usize> = BTreeMap::new();
     let mut compile_failures = 0;
     for row in rows {
         if str_at(row, "/status").as_deref() == Some("ok") {
             let profile_id = str_at(row, "/profile_id").unwrap_or_default();
-            let gas = u64_at(row, "/gas/execution_gas");
-            let entry = by_profile.entry(profile_id).or_default();
-            entry.0 += gas;
-            entry.1 += 1;
+            *by_profile.entry(profile_id).or_default() += 1;
         } else if str_at(row, "/status").as_deref() == Some("compile_error") {
             compile_failures += 1;
         }
@@ -464,12 +519,11 @@ fn render_html(rows: &[serde_json::Value], toolchains: &Toolchains) -> Result<St
     html.push_str(&card("Compile Failures", compile_failures));
     html.push_str("</section>");
 
-    html.push_str("<h2>Runtime Gas By Profile</h2><table><thead><tr><th>Profile</th><th>Average Execution Gas</th><th>Samples</th></tr></thead><tbody>");
-    for (profile, (total, count)) in by_profile {
+    html.push_str("<div class=\"notice small\"><strong>Claim scope:</strong> this report compares behaviorally matched Solidity and Vyper implementations under pinned compiler, EVM, optimizer, and metadata profiles. It is not a language-only or compiler-only leaderboard. Gas columns are harness/internal measurements unless explicitly named otherwise.</div>");
+    html.push_str("<h2>Profile Coverage</h2><table><thead><tr><th>Profile</th><th>Successful Scenario Rows</th></tr></thead><tbody>");
+    for (profile, count) in by_profile {
         html.push_str("<tr><td>");
         html.push_str(&escape(&profile));
-        html.push_str("</td><td>");
-        html.push_str(&(total / count as u64).to_string());
         html.push_str("</td><td>");
         html.push_str(&count.to_string());
         html.push_str("</td></tr>");
@@ -482,7 +536,7 @@ fn render_html(rows: &[serde_json::Value], toolchains: &Toolchains) -> Result<St
     html.push_str("<h2>Real-Derived Benchmarks</h2>");
     html.push_str(&render_real_derived_summary(rows));
 
-    html.push_str("<h2>Runtime Size vs Runtime Gas</h2><div class=\"chart\"><svg width=\"1080\" height=\"360\" viewBox=\"0 0 1080 360\" role=\"img\">");
+    html.push_str("<h2>Runtime Size vs Harness Call Gas</h2><div class=\"chart\"><svg width=\"1080\" height=\"360\" viewBox=\"0 0 1080 360\" role=\"img\">");
     html.push_str("<line x1=\"45\" y1=\"315\" x2=\"1040\" y2=\"315\" stroke=\"#999\"/><line x1=\"45\" y1=\"20\" x2=\"45\" y2=\"315\" stroke=\"#999\"/>");
     let max_size = rows
         .iter()
@@ -491,12 +545,12 @@ fn render_html(rows: &[serde_json::Value], toolchains: &Toolchains) -> Result<St
         .unwrap_or(1);
     let max_gas = rows
         .iter()
-        .map(|row| u64_at(row, "/gas/execution_gas"))
+        .map(|row| u64_at(row, "/gas/harness_call_gas"))
         .max()
         .unwrap_or(1);
     for row in rows {
         let size = u64_at(row, "/bytecode/runtime_bytes");
-        let gas = u64_at(row, "/gas/execution_gas");
+        let gas = u64_at(row, "/gas/harness_call_gas");
         let x = 45 + (size * 980 / max_size) as i32;
         let y = 315 - (gas * 285 / max_gas) as i32;
         html.push_str(&format!(
@@ -506,7 +560,7 @@ fn render_html(rows: &[serde_json::Value], toolchains: &Toolchains) -> Result<St
     }
     html.push_str("</svg></div>");
 
-    html.push_str("<h2>Result Rows</h2><table><thead><tr><th>Status</th><th>Suite</th><th>Family</th><th>N</th><th>Benchmark</th><th>Implementation</th><th>Compiler</th><th>Profile</th><th>Metadata</th><th>State</th><th>Scenario</th><th>Differential</th><th>Randomized</th><th>Property</th><th>Failures</th><th>Runtime Bytes</th><th>Deploy Gas</th><th>Execution Gas</th><th>Calldata Gas</th><th>Total Tx Gas</th></tr></thead><tbody>");
+    html.push_str("<h2>Result Rows</h2><table><thead><tr><th>Status</th><th>Suite</th><th>Family</th><th>N</th><th>Benchmark</th><th>Implementation</th><th>Compiler</th><th>Profile</th><th>Metadata</th><th>State</th><th>Scenario</th><th>Status Check</th><th>Baseline Diff</th><th>Randomized</th><th>Property</th><th>Failures</th><th>Runtime Bytes</th><th>Internal Create Gas</th><th>Harness Call Gas</th><th>Calldata Gas</th><th>Harness Est. Tx Gas</th></tr></thead><tbody>");
     for row in rows {
         html.push_str("<tr><td>");
         html.push_str(&escape(&str_at(row, "/status").unwrap_or_default()));
@@ -544,11 +598,15 @@ fn render_html(rows: &[serde_json::Value], toolchains: &Toolchains) -> Result<St
         html.push_str(&escape(&str_at(row, "/gas/scenario").unwrap_or_default()));
         html.push_str("</td><td>");
         html.push_str(&escape(
-            &str_at(row, "/correctness/differential_tests").unwrap_or_default(),
+            &str_at(row, "/correctness/scenario_status_check").unwrap_or_default(),
         ));
         html.push_str("</td><td>");
         html.push_str(&escape(
-            &str_at(row, "/correctness/randomized_differential").unwrap_or_default(),
+            &str_at(row, "/correctness/baseline_differential_check").unwrap_or_default(),
+        ));
+        html.push_str("</td><td>");
+        html.push_str(&escape(
+            &str_at(row, "/correctness/randomized_differential_check").unwrap_or_default(),
         ));
         html.push_str("</td><td>");
         html.push_str(&escape(
@@ -559,13 +617,13 @@ fn render_html(rows: &[serde_json::Value], toolchains: &Toolchains) -> Result<St
         html.push_str("</td><td>");
         html.push_str(&u64_at(row, "/bytecode/runtime_bytes").to_string());
         html.push_str("</td><td>");
-        html.push_str(&u64_at(row, "/gas/deploy_gas").to_string());
+        html.push_str(&u64_at(row, "/gas/internal_create_gas").to_string());
         html.push_str("</td><td>");
-        html.push_str(&u64_at(row, "/gas/execution_gas").to_string());
+        html.push_str(&u64_at(row, "/gas/harness_call_gas").to_string());
         html.push_str("</td><td>");
         html.push_str(&u64_at(row, "/gas/calldata_gas").to_string());
         html.push_str("</td><td>");
-        html.push_str(&u64_at(row, "/gas/total_tx_gas").to_string());
+        html.push_str(&u64_at(row, "/gas/harness_estimated_tx_gas").to_string());
         html.push_str("</td></tr>");
     }
     html.push_str("</tbody></table></main></body></html>");
@@ -585,7 +643,7 @@ fn render_real_derived_summary(rows: &[serde_json::Value]) -> String {
 
     let mut html = String::new();
     html.push_str("<div class=\"notice small\"><strong>Scope note:</strong> real-derived rows are simplified benchmark models, not production-equivalent ports. Read the model kind, mock assumptions, and excluded features before comparing runtime gas.</div>");
-    html.push_str("<table><thead><tr><th>Upstream</th><th>Benchmark</th><th>Model</th><th>Production Equivalent</th><th>Source</th><th>Port</th><th>Profile</th><th>Status</th><th>Scenario</th><th>Assumptions / Exclusions</th><th>Runtime Bytes</th><th>Deploy Gas</th><th>Runtime Gas</th><th>Total Tx Gas</th></tr></thead><tbody>");
+    html.push_str("<table><thead><tr><th>Upstream</th><th>Benchmark</th><th>Model</th><th>Production Equivalent</th><th>Source</th><th>Port</th><th>Profile</th><th>Status</th><th>Scenario</th><th>Assumptions / Exclusions</th><th>Runtime Bytes</th><th>Internal Create Gas</th><th>Harness Call Gas</th><th>Harness Est. Tx Gas</th></tr></thead><tbody>");
     for row in selected {
         html.push_str("<tr><td>");
         html.push_str(&escape(
@@ -630,11 +688,11 @@ fn render_real_derived_summary(rows: &[serde_json::Value]) -> String {
         html.push_str("</td><td>");
         html.push_str(&u64_at(row, "/bytecode/runtime_bytes").to_string());
         html.push_str("</td><td>");
-        html.push_str(&u64_at(row, "/gas/deploy_gas").to_string());
+        html.push_str(&u64_at(row, "/gas/internal_create_gas").to_string());
         html.push_str("</td><td>");
-        html.push_str(&u64_at(row, "/gas/execution_gas").to_string());
+        html.push_str(&u64_at(row, "/gas/harness_call_gas").to_string());
         html.push_str("</td><td>");
-        html.push_str(&u64_at(row, "/gas/total_tx_gas").to_string());
+        html.push_str(&u64_at(row, "/gas/harness_estimated_tx_gas").to_string());
         html.push_str("</td></tr>");
     }
     html.push_str("</tbody></table>");
@@ -650,8 +708,8 @@ struct ScaleAggregate {
     compile_wall_ms: f64,
     compile_metric_artifacts: BTreeSet<String>,
     runtime_bytes: u64,
-    deploy_gas: u64,
-    execution_gas: u64,
+    internal_create_gas: u64,
+    harness_call_gas: u64,
     metric_samples: u64,
     compile_failures: u64,
 }
@@ -687,8 +745,8 @@ fn render_scale_summary(rows: &[serde_json::Value]) -> String {
                 entry.compile_wall_ms += mean_f64_array_at(row, "/compile/wall_ms_samples");
             }
             entry.runtime_bytes += u64_at(row, "/bytecode/runtime_bytes");
-            entry.deploy_gas += u64_at(row, "/gas/deploy_gas");
-            entry.execution_gas += u64_at(row, "/gas/execution_gas");
+            entry.internal_create_gas += u64_at(row, "/gas/internal_create_gas");
+            entry.harness_call_gas += u64_at(row, "/gas/harness_call_gas");
             entry.metric_samples += 1;
         }
     }
@@ -698,7 +756,7 @@ fn render_scale_summary(rows: &[serde_json::Value]) -> String {
     }
 
     let mut html = String::new();
-    html.push_str("<table><thead><tr><th>Family</th><th>N</th><th>Language</th><th>Profile</th><th>Avg Compile ms</th><th>Avg Runtime Bytes</th><th>Avg Deploy Gas</th><th>Avg Runtime Gas</th><th>Run Samples</th><th>Compile Failures</th></tr></thead><tbody>");
+    html.push_str("<table><thead><tr><th>Family</th><th>N</th><th>Language</th><th>Profile</th><th>Avg Compile ms</th><th>Avg Runtime Bytes</th><th>Avg Internal Create Gas</th><th>Avg Harness Call Gas</th><th>Run Samples</th><th>Compile Failures</th></tr></thead><tbody>");
     for aggregate in groups.values() {
         let samples = aggregate.metric_samples.max(1) as f64;
         let compile_samples = aggregate.compile_metric_artifacts.len().max(1) as f64;
@@ -718,9 +776,11 @@ fn render_scale_summary(rows: &[serde_json::Value]) -> String {
         html.push_str("</td><td>");
         html.push_str(&((aggregate.runtime_bytes as f64 / samples).round() as u64).to_string());
         html.push_str("</td><td>");
-        html.push_str(&((aggregate.deploy_gas as f64 / samples).round() as u64).to_string());
+        html.push_str(
+            &((aggregate.internal_create_gas as f64 / samples).round() as u64).to_string(),
+        );
         html.push_str("</td><td>");
-        html.push_str(&((aggregate.execution_gas as f64 / samples).round() as u64).to_string());
+        html.push_str(&((aggregate.harness_call_gas as f64 / samples).round() as u64).to_string());
         html.push_str("</td><td>");
         html.push_str(&aggregate.metric_samples.to_string());
         html.push_str("</td><td>");
@@ -755,12 +815,12 @@ fn tooltip(row: &serde_json::Value) -> String {
         );
     }
     format!(
-        "{} / {} / {} / {} / gas {}",
+        "{} / {} / {} / {} / harness call gas {}",
         str_at(row, "/benchmark_id").unwrap_or_default(),
         str_at(row, "/implementation_id").unwrap_or_default(),
         str_at(row, "/profile_id").unwrap_or_default(),
         str_at(row, "/gas/scenario").unwrap_or_default(),
-        u64_at(row, "/gas/execution_gas")
+        u64_at(row, "/gas/harness_call_gas")
     )
 }
 

@@ -10,6 +10,7 @@
     "profiles",
     "scale_generator",
     "real_derived",
+    "environment",
     "artifacts",
     "compile_failures",
     "gas_records"
@@ -82,9 +83,17 @@
               "source_path",
               "source_language",
               "source_contract",
+              "model_kind",
+              "production_equivalence",
+              "api_compatibility",
+              "storage_layout_compatibility",
+              "external_token_semantics",
+              "source_derivation",
               "equivalence_scope",
               "scenario_coverage",
-              "mock_assumptions"
+              "mock_assumptions",
+              "included_features",
+              "excluded_features"
             ],
             "properties": {
               "benchmark_id": { "type": "string" },
@@ -97,12 +106,33 @@
               "source_blob": { "type": ["string", "null"] },
               "upstream_license": { "type": "string" },
               "checked_at": { "type": "string" },
+              "model_kind": { "type": "string" },
+              "production_equivalence": { "type": "boolean" },
+              "api_compatibility": { "type": "string" },
+              "storage_layout_compatibility": { "type": "boolean" },
+              "external_token_semantics": { "type": "string" },
+              "source_derivation": { "type": "string" },
               "equivalence_scope": { "type": "array", "items": { "type": "string" } },
               "scenario_coverage": { "type": "array", "items": { "type": "string" } },
-              "mock_assumptions": { "type": "array", "items": { "type": "string" } }
+              "mock_assumptions": { "type": "array", "items": { "type": "string" } },
+              "included_features": { "type": "array", "items": { "type": "string" } },
+              "excluded_features": { "type": "array", "items": { "type": "string" } }
             }
           }
         }
+      }
+    },
+    "environment": {
+      "type": "object",
+      "required": ["os", "arch", "family", "command_line", "git", "tools", "host"],
+      "properties": {
+        "os": { "type": "string" },
+        "arch": { "type": "string" },
+        "family": { "type": "string" },
+        "command_line": { "type": "array", "items": { "type": "string" } },
+        "git": { "type": "object" },
+        "tools": { "type": "object" },
+        "host": { "type": "object" }
       }
     },
     "artifacts": { "type": "integer", "minimum": 0 },

@@ -18,8 +18,8 @@ Implement the ten-contract starter set:
 3. `erc20_permit_hashing`
 4. `ownable_pausable`
 5. `vault_deposit_withdraw`
-6. `factory_create2`
-7. `minimal_proxy`
+6. `create2_address_hashing`
+7. `eip1167_codehash_bookkeeping`
 8. `merkle_verifier`
 9. `amm_pair_subset`
 10. `scaling_dispatch_N`
@@ -173,19 +173,21 @@ Foundry is useful because it can emit gas reports, deployment size, deployment c
 
 A `revm` runner remains acceptable for deterministic execution, cross-checking Foundry gas, or eventually replacing Foundry as the canonical execution path. `revm` is a Rust EVM implementation used broadly in Ethereum tooling and exposes an execution API suitable for deterministic transaction execution. ([GitHub][11])
 
-Each scenario should report:
+Each Foundry-harness scenario should report:
 
 ```text
-execution_gas
-tx_intrinsic_gas
+harness_call_gas
+internal_create_gas
+intrinsic_gas
 calldata_gas
 calldata_floor_gas_if_applicable
-total_tx_gas
+harness_estimated_tx_gas
+total_tx_gas: null until a top-level transaction runner is implemented
 state_access_profile: cold | warm | mixed
 evm_fork: latest-shared:<resolved-name>
 ```
 
-Include both **execution gas** and **transaction gas**. EIP-7623 changes calldata pricing for data-heavy transactions, so calldata-heavy ABI benchmarks can look different if you only report raw EVM execution gas. ([Ethereum Improvement Proposals][12])
+Do not call the Foundry internal-call measurement a full transaction cost. EIP-7623 changes calldata pricing for data-heavy transactions, so calldata-heavy ABI benchmarks can look different if you only report raw EVM execution gas. ([Ethereum Improvement Proposals][12])
 
 ## Bytecode measurement rules
 
@@ -260,8 +262,8 @@ evm-compiler-bench/
       erc20_permit_hashing.yaml
       ownable_pausable.yaml
       vault.yaml
-      factory_create2.yaml
-      minimal_proxy.yaml
+      create2_address_hashing.yaml
+      eip1167_codehash_bookkeeping.yaml
       merkle_verifier.yaml
       amm_pair_subset.yaml
       scaling_dispatch_n.yaml
@@ -337,12 +339,18 @@ Every result row should be joinable by benchmark, implementation, compiler, and 
   "gas": {
     "scenario": "transfer_cold_success",
     "evm_fork": "latest-shared:<resolved-name>",
-    "execution_gas": 51732,
-    "total_tx_gas": 73988
+    "harness_call_gas": 51732,
+    "internal_create_gas": 184200,
+    "intrinsic_gas": 21000,
+    "calldata_gas": 1256,
+    "harness_estimated_tx_gas": 73988,
+    "total_tx_gas": null
   },
   "correctness": {
-    "golden_tests": "pass",
-    "differential_tests": "pass",
+    "scenario_status_check": "pass",
+    "golden_behavior_check": "not_run",
+    "baseline_differential_check": "baseline_only",
+    "profile_behavior_check": "not_run",
     "fuzz_seed": "0x..."
   }
 }
@@ -377,7 +385,7 @@ For aggregation, use group-weighted geometric means for ratios, but keep raw per
 
 Implement:
 
-* 10 specs: Counter, ERC20 minimal, ERC20 permit hashing, Ownable/Pausable, Vault deposit/withdraw, Factory CREATE2, Minimal proxy, Merkle verifier, AMM pair subset, `scaling_dispatch_N`
+* 10 specs: Counter, ERC20 minimal, ERC20 permit hashing, Ownable/Pausable, Vault deposit/withdraw, CREATE2 address hashing, EIP-1167 codehash bookkeeping, Merkle verifier, AMM pair subset, `scaling_dispatch_N`
 * Solidity and Vyper only, with credible source provenance for the first implementation and a hand-written opposing-language implementation
 * Compiler profiles:
 
@@ -391,8 +399,8 @@ Implement:
 * EVM fork: latest mutually supported target only
 * Toolchain manager that downloads missing compilers, verifies checksums, and records binary metadata
 * Foundry-based scenario runner orchestrated by Rust, with `revm` available as an optional cross-check path
-* Golden scenario tests and deterministic differential checks before result rows are accepted
-* Metrics: compile wall time, peak RSS, creation/runtime size, deploy gas, runtime gas for 5–10 scenarios per contract
+* Scenario status checks for every row, baseline deterministic differential checks where both baseline profiles compile, and golden behavior checks only when exact return/log/observer expectations are specified
+* Metrics: compile wall time samples, peak RSS, creation/runtime size, internal-create gas, harness-call gas, calldata gas, and harness-estimated transaction gas for 5–10 scenarios per contract
 * Outputs: raw machine-readable results, normalized JSON, run manifests, and a static HTML report
 
 ### Milestone 2: correctness and result hardening
@@ -547,8 +555,8 @@ Start with these ten:
 3. `erc20_permit_hashing`
 4. `ownable_pausable`
 5. `vault_deposit_withdraw`
-6. `factory_create2`
-7. `minimal_proxy`
+6. `create2_address_hashing`
+7. `eip1167_codehash_bookkeeping`
 8. `merkle_verifier`
 9. `amm_pair_subset`
 10. `scaling_dispatch_N`

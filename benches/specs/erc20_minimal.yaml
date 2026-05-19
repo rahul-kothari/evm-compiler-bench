@@ -11,6 +11,7 @@ semantics:
   - "Initial supply is assigned to deployer."
   - "Transfers and transferFrom conserve total supply."
   - "Allowance decreases after transferFrom."
+  - "Both implementations use checked arithmetic in transfer paths."
 scenarios:
   - name: total_supply
     call: "totalSupply()"

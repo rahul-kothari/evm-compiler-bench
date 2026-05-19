@@ -106,10 +106,25 @@ pub fn stripped_cbor_len(hex_value: &str) -> Result<usize> {
     let metadata_len =
         u16::from_be_bytes([bytes[bytes.len() - 2], bytes[bytes.len() - 1]]) as usize;
     if metadata_len + 2 <= bytes.len() {
-        Ok(bytes.len() - metadata_len - 2)
+        let start = bytes.len() - metadata_len - 2;
+        let metadata = &bytes[start..bytes.len() - 2];
+        if looks_like_solc_or_vyper_metadata(metadata) {
+            Ok(start)
+        } else {
+            Ok(bytes.len())
+        }
     } else {
         Ok(bytes.len())
     }
+}
+
+fn looks_like_solc_or_vyper_metadata(metadata: &[u8]) -> bool {
+    if metadata.is_empty() || !matches!(metadata[0], 0xa1..=0xbf) {
+        return false;
+    }
+    metadata
+        .windows(4)
+        .any(|window| matches!(window, b"solc" | b"vyper" | b"ipfs" | b"bzzr"))
 }
 
 pub fn ensure_dir(path: &Path) -> Result<()> {
@@ -159,13 +174,28 @@ fn wait_with_usage(mut child: std::process::Child) -> Result<(std::process::Exit
 }
 
 #[cfg(not(unix))]
-fn wait_with_usage(child: std::process::Child) -> Result<(std::process::ExitStatus, Usage)> {
-    let output = child.wait_with_output()?;
+fn wait_with_usage(mut child: std::process::Child) -> Result<(std::process::ExitStatus, Usage)> {
+    let status = child.wait()?;
     Ok((
-        output.status,
+        status,
         Usage {
             cpu_ms: 0.0,
             peak_rss_kib: 0,
         },
     ))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::stripped_cbor_len;
+
+    #[test]
+    fn strips_known_metadata_trailer() {
+        assert_eq!(stripped_cbor_len("0x6000a164736f6c630006").unwrap(), 2);
+    }
+
+    #[test]
+    fn keeps_plain_bytecode_with_trailing_length_like_bytes() {
+        assert_eq!(stripped_cbor_len("0x6000aabb0002").unwrap(), 6);
+    }
 }

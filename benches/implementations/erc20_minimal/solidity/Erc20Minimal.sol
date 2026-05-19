@@ -21,10 +21,8 @@ contract Erc20Minimal {
 
     function transfer(address to, uint256 amount) external returns (bool) {
         require(balanceOf[msg.sender] >= amount, "balance");
-        unchecked {
-            balanceOf[msg.sender] -= amount;
-            balanceOf[to] += amount;
-        }
+        balanceOf[msg.sender] -= amount;
+        balanceOf[to] += amount;
         emit Transfer(msg.sender, to, amount);
         return true;
     }
@@ -39,11 +37,9 @@ contract Erc20Minimal {
         uint256 allowed = allowance[from][msg.sender];
         require(allowed >= amount, "allowance");
         require(balanceOf[from] >= amount, "balance");
-        unchecked {
-            allowance[from][msg.sender] = allowed - amount;
-            balanceOf[from] -= amount;
-            balanceOf[to] += amount;
-        }
+        allowance[from][msg.sender] = allowed - amount;
+        balanceOf[from] -= amount;
+        balanceOf[to] += amount;
         emit Transfer(from, to, amount);
         return true;
     }

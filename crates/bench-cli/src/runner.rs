@@ -183,6 +183,23 @@ fn helper_functions() -> &'static str {
         proof = new bytes32[](0);
     }
 
+    function proofMany(uint256 n) internal pure returns (bytes32[] memory proof) {
+        proof = new bytes32[](n);
+        for (uint256 i = 0; i < n; i++) {
+            proof[i] = keccak256(abi.encodePacked("sibling", i));
+        }
+    }
+
+    function proofRoot(bytes32[] memory proof, bytes32 leaf) internal pure returns (bytes32 computed) {
+        computed = leaf;
+        for (uint256 i = 0; i < proof.length; i++) {
+            bytes32 sibling = proof[i];
+            computed = computed < sibling
+                ? keccak256(abi.encodePacked(computed, sibling))
+                : keccak256(abi.encodePacked(sibling, computed));
+        }
+    }
+
     function _deploy(bytes memory code) internal returns (address target) {
         assembly {
             target := create(0, add(code, 0x20), mload(code))
@@ -228,12 +245,14 @@ fn helper_functions() -> &'static str {
         string memory scenario,
         string memory stateAccessProfile,
         string memory metadataMode,
-        uint256 deployGas,
-        uint256 executionGas,
+        uint256 internalCreateGas,
+        uint256 harnessCallGas,
         uint256 intrinsicGas,
         uint256 calldataGas,
-        uint256 totalTxGas,
-        bool success
+        uint256 harnessEstimatedTxGas,
+        bool expectedSuccess,
+        bool callSucceeded,
+        bool scenarioStatusOk
     ) internal {
         vm.writeLine(
             "../results/raw/foundry-gas.jsonl",
@@ -244,12 +263,14 @@ fn helper_functions() -> &'static str {
                 "\",\"scenario\":\"", scenario,
                 "\",\"state_access_profile\":\"", stateAccessProfile,
                 "\",\"metadata_mode\":\"", metadataMode,
-                "\",\"deploy_gas\":", vm.toString(deployGas),
-                ",\"execution_gas\":", vm.toString(executionGas),
+                "\",\"internal_create_gas\":", vm.toString(internalCreateGas),
+                ",\"harness_call_gas\":", vm.toString(harnessCallGas),
                 ",\"intrinsic_gas\":", vm.toString(intrinsicGas),
                 ",\"calldata_gas\":", vm.toString(calldataGas),
-                ",\"total_tx_gas\":", vm.toString(totalTxGas),
-                ",\"success\":", _bool(success),
+                ",\"harness_estimated_tx_gas\":", vm.toString(harnessEstimatedTxGas),
+                ",\"expected_success\":", _bool(expectedSuccess),
+                ",\"call_succeeded\":", _bool(callSucceeded),
+                ",\"scenario_status_ok\":", _bool(scenarioStatusOk),
                 "}"
             )
         );
@@ -861,13 +882,14 @@ fn write_gas_test(
     out.push_str("        (bool ok,, uint256 executionGas) = _run(target, ");
     write_call_args(out, &scenario.measured);
     out.push_str(");\n");
-    out.push_str("        require(ok == ");
+    out.push_str("        bool scenarioStatusOk = ok == ");
     out.push_str(if scenario.expect_success {
         "true"
     } else {
         "false"
     });
-    out.push_str(", \"unexpected scenario status\");\n");
+    out.push_str(";\n");
+    out.push_str("        require(scenarioStatusOk, \"unexpected scenario status\");\n");
     out.push_str("        _writeRow(\"");
     out.push_str(&artifact.benchmark_id);
     out.push_str("\", \"");
@@ -880,7 +902,15 @@ fn write_gas_test(
     out.push_str(scenario.state_access_profile.as_str());
     out.push_str("\", \"");
     out.push_str(artifact.metadata_mode.as_str());
-    out.push_str("\", deployGas, executionGas, 21000, calldataGas, executionGas + 21000 + calldataGas, ok);\n");
+    out.push_str(
+        "\", deployGas, executionGas, 21000, calldataGas, executionGas + 21000 + calldataGas, ",
+    );
+    out.push_str(if scenario.expect_success {
+        "true"
+    } else {
+        "false"
+    });
+    out.push_str(", ok, scenarioStatusOk);\n");
     out.push_str("    }\n\n");
 }
 

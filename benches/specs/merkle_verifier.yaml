@@ -4,7 +4,7 @@ abi:
   - "verify(bytes32[],bytes32,bytes32) returns (bool)"
   - "hashPair(bytes32,bytes32) returns (bytes32)"
 semantics:
-  - "Hashes sorted pairs while walking a Merkle proof."
+  - "Hashes sorted pairs while walking a Merkle proof up to 16 elements."
 scenarios:
   - name: hash_pair
     call: "hashPair(left, right)"
@@ -12,6 +12,15 @@ scenarios:
   - name: verify_single
     call: "verify([sibling], root, leaf)"
     expected: "returns true"
+  - name: verify_proof_8
+    call: "verify(proof length 8, computed root, leaf)"
+    expected: "returns true"
+  - name: verify_proof_16
+    call: "verify(proof length 16, computed root, leaf)"
+    expected: "returns true"
+  - name: verify_proof_16_false
+    call: "verify(proof length 16, wrong root, leaf)"
+    expected: "returns false"
   - name: verify_empty_false
     call: "verify([], root, leaf)"
     expected: "returns false"

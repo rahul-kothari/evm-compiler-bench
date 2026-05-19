@@ -8,7 +8,7 @@ abi:
   - "withdraw(uint256) returns (uint256)"
 semantics:
   - "ETH deposits mint one share per wei."
-  - "Withdraw burns shares and sends ETH to caller."
+  - "Withdraw burns shares and sends ETH to caller through a forwarding call primitive."
 scenarios:
   - name: deposit_one_eth
     call: "deposit() with 1 ether"

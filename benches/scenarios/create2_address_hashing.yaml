@@ -1,0 +1,27 @@
+benchmark_id: create2_address_hashing
+scenarios:
+  - name: init_code_hash
+    state_access_profile: cold
+    measured:
+      data: 'abi.encodeWithSignature("initCodeHash(uint256)", uint256(7))'
+    expect_success: true
+  - name: record_value
+    state_access_profile: warm
+    warmup:
+      - data: 'abi.encodeWithSignature("saltValue(bytes32)", SALT)'
+    measured:
+      data: 'abi.encodeWithSignature("record(bytes32,uint256)", SALT, uint256(7))'
+    expect_success: true
+    observers:
+      - data: 'abi.encodeWithSignature("saltValue(bytes32)", SALT)'
+  - name: read_value
+    state_access_profile: mixed
+    setup:
+      - data: 'abi.encodeWithSignature("record(bytes32,uint256)", SALT, uint256(7))'
+    warmup:
+      - data: 'abi.encodeWithSignature("saltValue(bytes32)", SALT)'
+    measured:
+      data: 'abi.encodeWithSignature("saltValue(bytes32)", SALT)'
+    expect_success: true
+    observers:
+      - data: 'abi.encodeWithSignature("saltValue(bytes32)", SALT)'

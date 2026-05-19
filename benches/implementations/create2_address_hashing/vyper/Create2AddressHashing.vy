@@ -1,9 +1,9 @@
 # pragma version 0.4.3
 
-deployedValue: public(HashMap[bytes32, uint256])
+saltValue: public(HashMap[bytes32, uint256])
 ADDRESS_MODULUS: constant(uint256) = 1461501637330902918203684832716283019655932542976
 
-event Deployed:
+event Recorded:
     salt: indexed(bytes32)
     predicted: address
     value: uint256
@@ -25,8 +25,8 @@ def computeAddress(salt: bytes32, amount: uint256) -> address:
     return self._compute_address(salt, amount)
 
 @external
-def deploy(salt: bytes32, amount: uint256) -> uint256:
+def record(salt: bytes32, amount: uint256) -> uint256:
     predicted: address = self._compute_address(salt, amount)
-    self.deployedValue[salt] = amount
-    log Deployed(salt=salt, predicted=predicted, value=amount)
+    self.saltValue[salt] = amount
+    log Recorded(salt=salt, predicted=predicted, value=amount)
     return amount

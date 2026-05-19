@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.30;
 
-contract FactoryCreate2 {
-    mapping(bytes32 => uint256) public deployedValue;
+contract Create2AddressHashing {
+    mapping(bytes32 => uint256) public saltValue;
 
-    event Deployed(bytes32 indexed salt, address predicted, uint256 value);
+    event Recorded(bytes32 indexed salt, address predicted, uint256 value);
 
     function initCodeHash(uint256 value) public pure returns (bytes32) {
         return keccak256(abi.encodePacked(bytes32(value)));
@@ -15,10 +15,10 @@ contract FactoryCreate2 {
         return address(uint160(uint256(digest)));
     }
 
-    function deploy(bytes32 salt, uint256 value) external returns (uint256) {
+    function record(bytes32 salt, uint256 value) external returns (uint256) {
         address predicted = computeAddress(salt, value);
-        deployedValue[salt] = value;
-        emit Deployed(salt, predicted, value);
+        saltValue[salt] = value;
+        emit Recorded(salt, predicted, value);
         return value;
     }
 }

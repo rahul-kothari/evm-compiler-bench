@@ -297,20 +297,29 @@ fn validate_outputs_if_present(root: &Path) -> Result<usize> {
             require_json_pointer(row, "/provenance", &results_path)?;
             require_json_pointer(row, "/compiler/name", &results_path)?;
             require_json_pointer(row, "/compiler/version", &results_path)?;
+            require_json_pointer(row, "/compiler/metadata", &results_path)?;
             require_json_pointer(row, "/compiler/settings", &results_path)?;
             require_json_pointer(row, "/compiler/settings/metadataMode", &results_path)?;
             require_json_pointer(row, "/compile/status", &results_path)?;
-            require_json_pointer(row, "/correctness/call_semantics", &results_path)?;
-            require_json_pointer(row, "/correctness/golden_tests", &results_path)?;
-            require_json_pointer(row, "/correctness/differential_tests", &results_path)?;
-            require_json_pointer(row, "/correctness/baseline_differential", &results_path)?;
-            require_json_pointer(row, "/correctness/profile_differential", &results_path)?;
+            require_json_pointer(row, "/correctness/scenario_status_check", &results_path)?;
+            require_json_pointer(row, "/correctness/golden_behavior_check", &results_path)?;
+            require_json_pointer(
+                row,
+                "/correctness/baseline_differential_check",
+                &results_path,
+            )?;
+            require_json_pointer(row, "/correctness/profile_behavior_check", &results_path)?;
             require_json_pointer(row, "/correctness/observer_check", &results_path)?;
             require_json_pointer(row, "/correctness/return_data_check", &results_path)?;
             require_json_pointer(row, "/correctness/log_check", &results_path)?;
-            require_json_pointer(row, "/correctness/randomized_differential", &results_path)?;
+            require_json_pointer(
+                row,
+                "/correctness/randomized_differential_check",
+                &results_path,
+            )?;
             require_json_pointer(row, "/correctness/property_tests", &results_path)?;
             require_json_pointer(row, "/correctness/failure_artifacts", &results_path)?;
+            require_json_pointer(row, "/correctness/scenario_status_ok", &results_path)?;
             require_enum(row, "/status", &["ok", "compile_error"], &results_path)?;
             require_enum(
                 row,
@@ -326,11 +335,10 @@ fn validate_outputs_if_present(root: &Path) -> Result<usize> {
             )?;
             validate_row_status(row, &results_path)?;
             for pointer in [
-                "/correctness/call_semantics",
-                "/correctness/golden_tests",
-                "/correctness/differential_tests",
-                "/correctness/baseline_differential",
-                "/correctness/profile_differential",
+                "/correctness/scenario_status_check",
+                "/correctness/golden_behavior_check",
+                "/correctness/baseline_differential_check",
+                "/correctness/profile_behavior_check",
                 "/correctness/observer_check",
                 "/correctness/return_data_check",
                 "/correctness/log_check",
@@ -344,7 +352,7 @@ fn validate_outputs_if_present(root: &Path) -> Result<usize> {
             }
             require_enum(
                 row,
-                "/correctness/randomized_differential",
+                "/correctness/randomized_differential_check",
                 &["pass", "fail", "not_applicable"],
                 &results_path,
             )?;
@@ -363,6 +371,7 @@ fn validate_outputs_if_present(root: &Path) -> Result<usize> {
                     results_path.display()
                 );
             }
+            require_bool_pointer(row, "/correctness/scenario_status_ok", &results_path)?;
             validate_suite_metadata(row, &results_path)?;
             rows += 1;
         }
@@ -387,6 +396,7 @@ fn validate_outputs_if_present(root: &Path) -> Result<usize> {
             "/artifacts",
             "/compile_failures",
             "/gas_records",
+            "/environment",
         ] {
             require_json_pointer(&value, pointer, &manifest_path)?;
         }
@@ -536,9 +546,16 @@ fn validate_row_status(row: &Value, path: &Path) -> Result<()> {
             require_json_pointer(row, "/gas/scenario", path)?;
             require_json_pointer(row, "/gas/state_access_profile", path)?;
             require_json_pointer(row, "/gas/metadata_mode", path)?;
+            require_json_pointer(row, "/gas/internal_create_gas", path)?;
+            require_json_pointer(row, "/gas/harness_call_gas", path)?;
             require_json_pointer(row, "/gas/intrinsic_gas", path)?;
             require_json_pointer(row, "/gas/calldata_gas", path)?;
+            require_json_pointer(row, "/gas/harness_estimated_tx_gas", path)?;
             require_json_pointer(row, "/gas/total_tx_gas", path)?;
+            require_json_pointer(row, "/gas/expected_success", path)?;
+            require_json_pointer(row, "/gas/call_succeeded", path)?;
+            require_json_pointer(row, "/gas/scenario_status_ok", path)?;
+            require_json_pointer(row, "/gas/measurement_scope", path)?;
             require_enum(
                 row,
                 "/gas/state_access_profile",
@@ -546,6 +563,16 @@ fn validate_row_status(row: &Value, path: &Path) -> Result<()> {
                 path,
             )?;
             require_enum(row, "/gas/metadata_mode", &["on", "off"], path)?;
+            require_enum(
+                row,
+                "/gas/measurement_scope",
+                &["foundry_internal_call_harness"],
+                path,
+            )?;
+            require_null(row, "/gas/total_tx_gas", path)?;
+            require_bool_pointer(row, "/gas/expected_success", path)?;
+            require_bool_pointer(row, "/gas/call_succeeded", path)?;
+            require_bool_pointer(row, "/gas/scenario_status_ok", path)?;
             if row.pointer("/gas/metadata_mode") != row.pointer("/compiler/settings/metadataMode") {
                 bail!("{} metadata mode mismatch in result row", path.display());
             }

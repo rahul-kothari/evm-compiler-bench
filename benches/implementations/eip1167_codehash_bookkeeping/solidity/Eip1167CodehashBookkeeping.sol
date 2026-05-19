@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.30;
 
-contract MinimalProxy {
+contract Eip1167CodehashBookkeeping {
     mapping(bytes32 => uint256) public cloneValue;
 
     event Cloned(bytes32 indexed salt, address predicted, uint256 value);
@@ -22,7 +22,7 @@ contract MinimalProxy {
         return address(uint160(uint256(digest)));
     }
 
-    function cloneAndSet(address implementation, bytes32 salt, uint256 value) external returns (uint256) {
+    function recordClone(address implementation, bytes32 salt, uint256 value) external returns (uint256) {
         address predicted = predictClone(implementation, salt);
         cloneValue[salt] = value;
         emit Cloned(salt, predicted, value);

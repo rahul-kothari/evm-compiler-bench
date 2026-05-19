@@ -71,6 +71,12 @@ fn resolve_solc(root: &Path, offline: bool) -> Result<Toolchain> {
         binary_path: target,
         download_source: source,
         version_output,
+        metadata: BTreeMap::from([
+            ("resolver".to_string(), "solidity_binary_index".to_string()),
+            ("index_root".to_string(), SOLC_INDEX_ROOT.to_string()),
+            ("platform".to_string(), platform.to_string()),
+            ("release".to_string(), index.latest_release),
+        ]),
     })
 }
 
@@ -110,6 +116,21 @@ fn resolve_vyper(root: &Path, offline: bool) -> Result<Toolchain> {
         )?;
     }
     let version_output = command_stdout(Command::new(&binary).arg("--version"))?;
+    let python = venv.join(bin_dir()).join(binary_name("python"));
+    let mut metadata = BTreeMap::from([
+        ("resolver".to_string(), "pypi_uv_venv".to_string()),
+        ("pypi_json".to_string(), PYPI_VYPER_JSON.to_string()),
+        ("package".to_string(), format!("vyper=={latest}")),
+    ]);
+    if let Ok(uv_version) = command_stdout(Command::new("uv").arg("--version")) {
+        metadata.insert("uv_version".to_string(), uv_version.trim().to_string());
+    }
+    if let Ok(python_version) = command_stdout(Command::new(&python).arg("--version")) {
+        metadata.insert(
+            "python_version".to_string(),
+            python_version.trim().to_string(),
+        );
+    }
     Ok(Toolchain {
         name: "vyper".to_string(),
         version: parse_vyper_version(&version_output)?,
@@ -117,6 +138,7 @@ fn resolve_vyper(root: &Path, offline: bool) -> Result<Toolchain> {
         binary_path: binary,
         download_source: format!("https://pypi.org/project/vyper/{latest}/"),
         version_output,
+        metadata,
     })
 }
 
@@ -138,6 +160,7 @@ fn resolve_path_toolchain(name: &str, env_path: Option<PathBuf>) -> Result<Toolc
         binary_path,
         download_source: "local".to_string(),
         version_output,
+        metadata: BTreeMap::from([("resolver".to_string(), "local_path".to_string())]),
     })
 }
 
@@ -169,6 +192,7 @@ fn local_toolchain_if_version(
         binary_path,
         download_source: "local".to_string(),
         version_output,
+        metadata: BTreeMap::from([("resolver".to_string(), "local_path".to_string())]),
     }))
 }
 

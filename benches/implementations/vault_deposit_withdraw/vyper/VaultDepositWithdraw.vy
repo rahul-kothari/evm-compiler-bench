@@ -25,7 +25,7 @@ def withdraw(amount: uint256) -> uint256:
     assert self.balanceOf[msg.sender] >= amount, "shares"
     self.balanceOf[msg.sender] -= amount
     self.totalShares -= amount
-    send(msg.sender, amount)
+    raw_call(msg.sender, b"", value=amount)
     log Withdraw(account=msg.sender, amount=amount)
     return amount
 

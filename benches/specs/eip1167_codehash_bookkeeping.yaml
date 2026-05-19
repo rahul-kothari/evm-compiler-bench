@@ -1,0 +1,23 @@
+id: eip1167_codehash_bookkeeping
+title: EIP-1167 Codehash Bookkeeping
+abi:
+  - "proxyCodeHash(address) returns (bytes32)"
+  - "predictClone(address,bytes32) returns (address)"
+  - "recordClone(address,bytes32,uint256) returns (uint256)"
+  - "cloneValue(bytes32) returns (uint256)"
+semantics:
+  - "Exercises EIP-1167 bytecode hashing and salt-indexed clone bookkeeping."
+  - "Does not deploy a minimal proxy or delegatecall; proxy runtime behavior is intentionally out of scope."
+scenarios:
+  - name: proxy_code_hash
+    call: "proxyCodeHash(implementation)"
+    expected: "returns EIP-1167 bytecode hash"
+  - name: record_clone
+    call: "recordClone(implementation, salt, 42)"
+    expected: "stores clone value"
+  - name: clone_value
+    call: "cloneValue(salt)"
+    expected: "returns stored value"
+implementations:
+  solidity: "benches/implementations/eip1167_codehash_bookkeeping/solidity/Eip1167CodehashBookkeeping.sol"
+  vyper: "benches/implementations/eip1167_codehash_bookkeeping/vyper/Eip1167CodehashBookkeeping.vy"

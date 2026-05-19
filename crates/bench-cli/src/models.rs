@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
+use std::{collections::BTreeMap, path::PathBuf};
 
 #[derive(Debug, Clone, Copy, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "lowercase")]
@@ -233,6 +233,7 @@ pub struct Toolchain {
     pub binary_sha256: String,
     pub download_source: String,
     pub version_output: String,
+    pub metadata: BTreeMap<String, String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -334,12 +335,14 @@ pub struct GasRecord {
     pub scenario: String,
     pub state_access_profile: StateAccessProfile,
     pub metadata_mode: MetadataMode,
-    pub deploy_gas: u64,
-    pub execution_gas: u64,
+    pub internal_create_gas: u64,
+    pub harness_call_gas: u64,
     pub intrinsic_gas: u64,
     pub calldata_gas: u64,
-    pub total_tx_gas: u64,
-    pub success: bool,
+    pub harness_estimated_tx_gas: u64,
+    pub expected_success: bool,
+    pub call_succeeded: bool,
+    pub scenario_status_ok: bool,
 }
 
 fn default_call_value() -> String {

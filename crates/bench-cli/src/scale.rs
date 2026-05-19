@@ -495,17 +495,18 @@ fn abi_args_family(n: u64) -> GeneratedSource {
         .map(|value| format!("uint256({value})"))
         .collect::<Vec<_>>()
         .join(", ");
+    let sol_params = (0..n)
+        .map(|i| format!("uint256 a{i:03}"))
+        .collect::<Vec<_>>()
+        .join(", ");
+    let sol_sum = (0..n)
+        .map(|i| format!("a{i:03}"))
+        .collect::<Vec<_>>()
+        .join(" + ");
     let mut sol = solidity_header(&contract_name);
     sol.push_str(&format!(
-        "    function sum({signature}) external pure returns (uint256 out) {{\n        assembly {{\n"
+        "    function sum({sol_params}) external pure returns (uint256 out) {{\n        return {sol_sum};\n    }}\n}}\n"
     ));
-    for i in 0..n {
-        sol.push_str(&format!(
-            "            out := add(out, calldataload({}))\n",
-            4 + i * 32
-        ));
-    }
-    sol.push_str("        }\n    }\n}\n");
 
     let mut vy = vyper_header();
     let params = (0..n)
@@ -536,7 +537,9 @@ fn abi_args_family(n: u64) -> GeneratedSource {
             Vec::new(),
         )],
         abi: vec![format!("sum({signature}) returns (uint256)")],
-        semantics: vec![format!("Accepts and sums {n} uint256 ABI arguments.")],
+        semantics: vec![format!(
+            "Accepts and sums {n} high-level uint256 ABI arguments."
+        )],
     }
 }
 
