@@ -7,8 +7,8 @@ use anyhow::{Context, Result, bail};
 use std::{collections::BTreeMap, fs, path::Path, process::Command};
 
 const GAS_JSONL: &str = "../results/raw/foundry-gas.jsonl";
-const SOL_BASELINE: &str = "solc-latest-legacy-runs200";
-const VYPER_BASELINE: &str = "vyper-latest-gas";
+const SOL_BASELINE: &str = "solc-latest-legacy-runs200-metadata-on";
+const VYPER_BASELINE: &str = "vyper-latest-gas-metadata-on";
 
 pub fn run_foundry(
     root: &Path,
@@ -250,7 +250,7 @@ fn write_gas_test(
     out.push_str("\", \"");
     out.push_str(scenario.state_access_profile.as_str());
     out.push_str("\", \"");
-    out.push_str(&artifact.metadata_mode);
+    out.push_str(artifact.metadata_mode.as_str());
     out.push_str("\", deployGas, executionGas, ok);\n");
     out.push_str("    }\n\n");
 }

@@ -2,7 +2,7 @@ use crate::{
     catalog::benchmarks,
     models::{
         Benchmark, BytecodeMetrics, CompileMetrics, CompileSet, CompiledArtifact, CompilerProfile,
-        Language, Toolchain, Toolchains,
+        Language, MetadataMode, Toolchain, Toolchains,
     },
     util::{byte_len, require_success, run_measured, sha256_bytes, stripped_cbor_len},
 };
@@ -55,12 +55,24 @@ fn load_profiles(root: &Path) -> Result<Vec<CompilerProfile>> {
             continue;
         }
         let text = fs::read_to_string(entry.path())?;
-        profiles.push(
-            toml::from_str(&text).with_context(|| format!("parsing {}", entry.path().display()))?,
-        );
+        let base: CompilerProfile =
+            toml::from_str(&text).with_context(|| format!("parsing {}", entry.path().display()))?;
+        profiles.extend(expand_metadata_profiles(&base));
     }
     profiles.sort_by(|a, b| a.id.cmp(&b.id));
     Ok(profiles)
+}
+
+fn expand_metadata_profiles(base: &CompilerProfile) -> Vec<CompilerProfile> {
+    [MetadataMode::On, MetadataMode::Off]
+        .into_iter()
+        .map(|metadata_mode| {
+            let mut profile = base.clone();
+            profile.metadata_mode = metadata_mode;
+            profile.id = format!("{}-metadata-{}", base.id, metadata_mode.as_str());
+            profile
+        })
+        .collect()
 }
 
 fn compile_solidity(
@@ -76,6 +88,7 @@ fn compile_solidity(
         .file_name()
         .and_then(|name| name.to_str())
         .context("solidity file name")?;
+    let metadata_settings = solidity_metadata_settings(profile.metadata_mode);
     let input = json!({
         "language": "Solidity",
         "sources": {
@@ -83,6 +96,7 @@ fn compile_solidity(
         },
         "settings": {
             "evmVersion": evm_version,
+            "metadata": metadata_settings,
             "optimizer": {
                 "enabled": profile.optimizer,
                 "runs": profile.optimizer_runs
@@ -137,6 +151,8 @@ fn compile_solidity(
         measured.stats.peak_rss_kib,
         json!({
             "evmVersion": evm_version,
+            "metadataMode": profile.metadata_mode.as_str(),
+            "metadata": solidity_metadata_settings(profile.metadata_mode),
             "optimizer": profile.optimizer,
             "optimizerRuns": profile.optimizer_runs,
             "viaIR": profile.via_ir
@@ -158,6 +174,19 @@ fn reject_solc_errors(output: &serde_json::Value) -> Result<()> {
     bail!("{}", serde_json::to_string_pretty(&fatal)?);
 }
 
+fn solidity_metadata_settings(metadata_mode: MetadataMode) -> serde_json::Value {
+    match metadata_mode {
+        MetadataMode::On => json!({
+            "bytecodeHash": "ipfs",
+            "appendCBOR": true
+        }),
+        MetadataMode::Off => json!({
+            "bytecodeHash": "none",
+            "appendCBOR": false
+        }),
+    }
+}
+
 fn compile_vyper(
     root: &Path,
     benchmark: &Benchmark,
@@ -167,20 +196,19 @@ fn compile_vyper(
 ) -> Result<CompiledArtifact> {
     let source_path = root.join(benchmark.vyper_path);
     let optimizer_mode = profile.optimizer_mode.as_deref().unwrap_or("gas");
-    let measured = require_success(
-        run_measured(
-            Command::new(&vyper.binary_path)
-                .arg("-f")
-                .arg("abi,bytecode,bytecode_runtime")
-                .arg("--evm-version")
-                .arg(evm_version)
-                .arg("-O")
-                .arg(optimizer_mode)
-                .arg(&source_path),
-            None,
-        )?,
-        "vyper compile",
-    )?;
+    let mut command = Command::new(&vyper.binary_path);
+    command
+        .arg("-f")
+        .arg("abi,bytecode,bytecode_runtime")
+        .arg("--evm-version")
+        .arg(evm_version)
+        .arg("-O")
+        .arg(optimizer_mode);
+    if profile.metadata_mode == MetadataMode::Off {
+        command.arg("--no-bytecode-metadata");
+    }
+    command.arg(&source_path);
+    let measured = require_success(run_measured(&mut command, None)?, "vyper compile")?;
     let stdout = String::from_utf8(measured.output.stdout)?;
     let mut lines = stdout.lines();
     let abi_line = lines.next().context("missing vyper abi output")?;
@@ -206,6 +234,8 @@ fn compile_vyper(
         measured.stats.peak_rss_kib,
         json!({
             "evmVersion": evm_version,
+            "metadataMode": profile.metadata_mode.as_str(),
+            "bytecodeMetadata": profile.metadata_mode == MetadataMode::On,
             "optimize": optimizer_mode
         }),
     )
@@ -236,7 +266,7 @@ fn artifact(
         profile_id: profile.id.clone(),
         compiler: toolchain.clone(),
         compiler_settings,
-        metadata_mode: "on".to_string(),
+        metadata_mode: profile.metadata_mode,
         source_path: source_path.to_path_buf(),
         source_hash: sha256_bytes(&source),
         abi,

@@ -52,6 +52,22 @@ impl StateAccessProfile {
     }
 }
 
+#[derive(Debug, Clone, Copy, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum MetadataMode {
+    On,
+    Off,
+}
+
+impl MetadataMode {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::On => "on",
+            Self::Off => "off",
+        }
+    }
+}
+
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Scenario {
     pub name: String,
@@ -103,6 +119,8 @@ pub struct CompilerProfile {
     pub optimizer_mode: Option<String>,
     #[serde(default)]
     pub via_ir: bool,
+    #[serde(default = "default_metadata_mode")]
+    pub metadata_mode: MetadataMode,
     pub evm_version: String,
 }
 
@@ -159,7 +177,7 @@ pub struct CompiledArtifact {
     pub profile_id: String,
     pub compiler: Toolchain,
     pub compiler_settings: serde_json::Value,
-    pub metadata_mode: String,
+    pub metadata_mode: MetadataMode,
     pub source_path: PathBuf,
     pub source_hash: String,
     pub abi: serde_json::Value,
@@ -182,7 +200,7 @@ pub struct GasRecord {
     pub profile_id: String,
     pub scenario: String,
     pub state_access_profile: StateAccessProfile,
-    pub metadata_mode: String,
+    pub metadata_mode: MetadataMode,
     pub deploy_gas: u64,
     pub execution_gas: u64,
     pub success: bool,
@@ -194,6 +212,10 @@ fn default_call_value() -> String {
 
 fn default_state_access_profile() -> StateAccessProfile {
     StateAccessProfile::Cold
+}
+
+fn default_metadata_mode() -> MetadataMode {
+    MetadataMode::On
 }
 
 fn default_random_iterations() -> usize {

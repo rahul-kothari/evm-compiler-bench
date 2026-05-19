@@ -98,6 +98,7 @@ fn row(artifact: &CompiledArtifact, gas: &GasRecord) -> serde_json::Value {
     json!({
         "benchmark_id": gas.benchmark_id,
         "implementation_id": gas.implementation_id,
+        "profile_id": artifact.profile_id,
         "language": artifact.language.as_str(),
         "compiler": {
             "name": artifact.compiler.name,
@@ -114,7 +115,7 @@ fn row(artifact: &CompiledArtifact, gas: &GasRecord) -> serde_json::Value {
             "scenario": gas.scenario,
             "evm_fork": artifact.compiler_settings.get("evmVersion").cloned().unwrap_or_else(|| json!("unknown")),
             "state_access_profile": gas.state_access_profile.as_str(),
-            "metadata_mode": gas.metadata_mode,
+            "metadata_mode": gas.metadata_mode.as_str(),
             "deploy_gas": gas.deploy_gas,
             "execution_gas": gas.execution_gas,
             "total_tx_gas": gas.execution_gas + 21_000,
@@ -131,9 +132,7 @@ fn render_html(rows: &[serde_json::Value], toolchains: &Toolchains) -> Result<St
     let mut by_profile: BTreeMap<String, (u64, usize)> = BTreeMap::new();
     let mut by_benchmark: BTreeMap<String, usize> = BTreeMap::new();
     for row in rows {
-        let profile = str_at(row, "/compiler/settings/optimize")
-            .unwrap_or_else(|| str_at(row, "/compiler/settings/viaIR").unwrap_or_default());
-        let profile_id = str_at(row, "/compiler/name").unwrap_or_default() + " " + &profile;
+        let profile_id = str_at(row, "/profile_id").unwrap_or_default();
         let gas = u64_at(row, "/gas/execution_gas");
         let entry = by_profile.entry(profile_id).or_default();
         entry.0 += gas;
@@ -205,7 +204,7 @@ fn render_html(rows: &[serde_json::Value], toolchains: &Toolchains) -> Result<St
     }
     html.push_str("</svg></div>");
 
-    html.push_str("<h2>Result Rows</h2><table><thead><tr><th>Benchmark</th><th>Implementation</th><th>Compiler</th><th>Scenario</th><th>Runtime Bytes</th><th>Deploy Gas</th><th>Execution Gas</th></tr></thead><tbody>");
+    html.push_str("<h2>Result Rows</h2><table><thead><tr><th>Benchmark</th><th>Implementation</th><th>Compiler</th><th>Profile</th><th>Metadata</th><th>State</th><th>Scenario</th><th>Runtime Bytes</th><th>Deploy Gas</th><th>Execution Gas</th></tr></thead><tbody>");
     for row in rows {
         html.push_str("<tr><td>");
         html.push_str(&escape(&str_at(row, "/benchmark_id").unwrap_or_default()));
@@ -219,6 +218,16 @@ fn render_html(rows: &[serde_json::Value], toolchains: &Toolchains) -> Result<St
             str_at(row, "/compiler/name").unwrap_or_default(),
             str_at(row, "/compiler/version").unwrap_or_default()
         )));
+        html.push_str("</td><td>");
+        html.push_str(&escape(&str_at(row, "/profile_id").unwrap_or_default()));
+        html.push_str("</td><td>");
+        html.push_str(&escape(
+            &str_at(row, "/gas/metadata_mode").unwrap_or_default(),
+        ));
+        html.push_str("</td><td>");
+        html.push_str(&escape(
+            &str_at(row, "/gas/state_access_profile").unwrap_or_default(),
+        ));
         html.push_str("</td><td>");
         html.push_str(&escape(&str_at(row, "/gas/scenario").unwrap_or_default()));
         html.push_str("</td><td>");
@@ -242,16 +251,17 @@ fn sort_key(row: &serde_json::Value) -> String {
         "{}\0{}\0{}\0{}",
         str_at(row, "/benchmark_id").unwrap_or_default(),
         str_at(row, "/implementation_id").unwrap_or_default(),
-        str_at(row, "/compiler/name").unwrap_or_default(),
+        str_at(row, "/profile_id").unwrap_or_default(),
         str_at(row, "/gas/scenario").unwrap_or_default()
     )
 }
 
 fn tooltip(row: &serde_json::Value) -> String {
     format!(
-        "{} / {} / {} / gas {}",
+        "{} / {} / {} / {} / gas {}",
         str_at(row, "/benchmark_id").unwrap_or_default(),
         str_at(row, "/implementation_id").unwrap_or_default(),
+        str_at(row, "/profile_id").unwrap_or_default(),
         str_at(row, "/gas/scenario").unwrap_or_default(),
         u64_at(row, "/gas/execution_gas")
     )
