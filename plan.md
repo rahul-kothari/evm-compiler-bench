@@ -364,11 +364,21 @@ Publish machine-readable outputs and an HTML report in the MVP:
 * `results/normalized/*.json`: joined, schema-validated results ready for downstream analysis.
 * `results/reports/index.html`: static report with tables, ratios, and Pareto-style charts.
 
-The report should grow toward three views:
+The report's first story should be **validity-bounded compiler tradeoffs**:
 
-1. **Benchmark detail page**: one contract/scenario with all compiler profiles.
-2. **Compiler profile page**: one compiler/settings profile across all benchmarks.
-3. **Trend page**: compiler versions over time. This is out of MVP because the first scope uses latest compilers only.
+> Given behaviorally matched workloads, pinned compiler versions, pinned EVM target, explicit metadata modes, and declared correctness coverage, these compiler profiles expose different tradeoffs in reliability, compile resources, bytecode/deploy cost, runtime gas, and scale behavior. The claim strength depends on the workload class.
+
+Show validity before performance. The first screen should make clear that this is a compiler/profile evaluation over matched implementations, not a global Solidity vs Vyper language ranking and not a production-gas report for real protocols. Then show compile coverage, correctness coverage, harness measurement scope, and only after that the tradeoff charts.
+
+The report should grow toward these views:
+
+1. **Run validity page**: workload composition, compile coverage, correctness coverage, measurement scope, harness limitations, and claim-strength notes by suite.
+2. **Compiler reliability page**: compile success/failure heatmaps by workload, generated family, `N`, compiler, profile, and metadata mode.
+3. **Benchmark detail page**: one contract/scenario with all compiler profiles, correctness badges, raw values, and baseline ratios.
+4. **Compiler profile page**: one compiler/settings profile across all benchmarks, with artifact-level compile/resource/bytecode/deploy metrics separated from scenario-level runtime metrics.
+5. **Scale-study page**: `N` curves and failure cliffs for generated families, not mixed into fixed-suite aggregates.
+6. **Real-derived model page**: upstream provenance, model scope, mock assumptions, excluded production features, and scoped hot-path charts.
+7. **Trend page**: compiler versions over time. This is out of MVP because the first scope uses latest compilers only.
 
 Use relative ratios against a clear baseline, for example:
 
@@ -378,6 +388,8 @@ secondary_baseline = solc latest, optimizer=true, runs=200, viaIR=true, evmVersi
 ```
 
 For aggregation, use group-weighted geometric means for ratios, but keep raw per-scenario data prominent. Otherwise a large number of artificial microbenchmarks will dominate the score.
+
+Avoid global winner language, composite scores, and arithmetic averages of raw gas across unrelated scenarios. Keep fixed, generated scale, and real-derived workloads separate because they support different claim strengths. Use metadata-off as the default codegen/runtime comparison view, and show metadata-on/off deltas as a separate deployment/verifiability dimension.
 
 ## MVP plan
 
@@ -529,7 +541,28 @@ Acceptance criteria:
 * Scenario coverage is mechanically checked: every real-derived `scenario_coverage` entry must match a checked-in scenario ID, and every checked-in scenario must be listed.
 * Setup and warmup calls are fatal on unexpected failure so measured calls cannot run against unintended state.
 
-### Milestone 5: experimental tier
+### Milestone 5: report evaluation surface
+
+Redesign the static report so it reads like an evaluation artifact rather than a raw data dump:
+
+* Open with claim scope: compiler/profile tradeoffs over behaviorally matched workloads, not a global language leaderboard.
+* Show workload composition as fixed matched contracts, generated scale families, and real-derived benchmark models instead of a single benchmark count.
+* Add a validity gate before performance charts: compile coverage, scenario status coverage, baseline differential coverage, randomized/property coverage, golden/log coverage, and harness measurement scope.
+* Add compile reliability views, including failure heatmaps and max-`N` compiled summaries for generated scale families.
+* Add fixed-suite scenario gas ratios against explicit baselines, defaulting codegen/runtime views to metadata-off.
+* Add artifact-level profile tradeoff summaries for runtime bytes, internal create gas, compile wall time, and RSS.
+* Add metadata-on/off paired delta views so metadata overhead is a controlled dimension, not hidden in compiler/codegen comparisons.
+* Keep real-derived rows separate and show model kind, `production_equivalence=false`, mock assumptions, and excluded production features near the charts.
+* Move raw result rows into a filterable or collapsible drilldown table.
+
+Acceptance criteria:
+
+* `results/reports/index.html` opens with validity-bounded compiler tradeoffs and visible claim scope.
+* The report includes at least one visual comparison for compile reliability, fixed-suite runtime ratios, artifact profile tradeoffs, metadata deltas, scale failure/max-`N`, and real-derived model rows.
+* Raw rows remain available without dominating the first reading path.
+* `cargo run -- run`, `cargo run -- validate`, and `cargo test` pass after the report redesign.
+
+### Milestone 6: experimental tier
 
 Add:
 
