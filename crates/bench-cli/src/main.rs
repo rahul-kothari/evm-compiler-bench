@@ -1,6 +1,7 @@
 mod catalog;
 mod compiler;
 mod models;
+mod report;
 mod runner;
 mod toolchain;
 mod util;
@@ -8,6 +9,7 @@ mod util;
 use anyhow::Result;
 use clap::{Parser, Subcommand};
 use compiler::compile_all;
+use report::write_outputs;
 use runner::run_foundry;
 use std::path::PathBuf;
 use toolchain::resolve_toolchains;
@@ -57,7 +59,11 @@ fn main() -> Result<()> {
             let toolchains = resolve_toolchains(&root, offline)?;
             let compiled = compile_all(&root, &toolchains, benchmark.as_deref())?;
             let gas_records = run_foundry(&root, &toolchains.evm_version, &compiled)?;
+            let report = write_outputs(&root, &toolchains, &compiled, &gas_records)?;
             println!("foundry produced {} gas records", gas_records.len());
+            println!("normalized results: {}", report.normalized_results.display());
+            println!("run manifest: {}", report.run_manifest.display());
+            println!("html report: {}", report.html_report.display());
             println!(
                 "compiled {} artifacts across {} profiles for EVM {}",
                 compiled.artifacts.len(),

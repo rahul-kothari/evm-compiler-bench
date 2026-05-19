@@ -21,7 +21,6 @@ impl Language {
 pub struct Benchmark {
     pub id: &'static str,
     pub contract_name: &'static str,
-    pub constructor_args: &'static str,
     pub solidity_path: &'static str,
     pub vyper_path: &'static str,
 }
