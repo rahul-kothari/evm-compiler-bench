@@ -1,0 +1,6 @@
+id = "vyper-latest-codesize"
+language = "vyper"
+compiler = "vyper"
+optimizer = true
+optimizer_mode = "codesize"
+evm_version = "latest-shared"

@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "EVM Compiler Bench benchmark spec",
+  "type": "object",
+  "required": ["id", "title", "abi", "scenarios", "implementations"],
+  "properties": {
+    "id": { "type": "string" },
+    "title": { "type": "string" },
+    "abi": { "type": "array", "items": { "type": "string" } },
+    "semantics": { "type": "array", "items": { "type": "string" } },
+    "scenarios": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "call"],
+        "properties": {
+          "name": { "type": "string" },
+          "call": { "type": "string" },
+          "expected": { "type": "string" }
+        }
+      }
+    },
+    "implementations": {
+      "type": "object",
+      "required": ["solidity", "vyper"],
+      "properties": {
+        "solidity": { "type": "string" },
+        "vyper": { "type": "string" }
+      }
+    }
+  }
+}

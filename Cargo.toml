@@ -1,0 +1,8 @@
+[workspace]
+members = ["crates/bench-cli"]
+resolver = "3"
+
+[workspace.package]
+edition = "2024"
+license = "MIT"
+repository = "https://github.com/banteg/evm-compiler-bench"

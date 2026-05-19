@@ -1,0 +1,6 @@
+id = "vyper-latest-gas"
+language = "vyper"
+compiler = "vyper"
+optimizer = true
+optimizer_mode = "gas"
+evm_version = "latest-shared"

@@ -1,0 +1,11 @@
+/target/
+/.cache/
+/foundry/cache/
+/foundry/out/
+/foundry/test/GeneratedBench.t.sol
+/results/raw/*
+!/results/raw/.gitkeep
+/results/normalized/*
+!/results/normalized/.gitkeep
+/results/reports/*
+!/results/reports/.gitkeep

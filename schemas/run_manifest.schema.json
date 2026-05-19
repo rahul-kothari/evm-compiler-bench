@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "EVM Compiler Bench run manifest",
+  "type": "object",
+  "required": ["run_id", "started_at", "evm_version", "toolchains", "profiles"],
+  "properties": {
+    "run_id": { "type": "string" },
+    "started_at": { "type": "string", "format": "date-time" },
+    "evm_version": { "type": "string" },
+    "toolchains": { "type": "array", "items": { "type": "object" } },
+    "profiles": { "type": "array", "items": { "type": "object" } }
+  }
+}

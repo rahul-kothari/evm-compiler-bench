@@ -1,0 +1,6 @@
+id = "vyper-latest-none"
+language = "vyper"
+compiler = "vyper"
+optimizer = false
+optimizer_mode = "none"
+evm_version = "latest-shared"
