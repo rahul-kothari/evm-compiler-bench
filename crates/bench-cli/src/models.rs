@@ -26,6 +26,48 @@ pub struct Benchmark {
     pub vyper_path: &'static str,
 }
 
+#[derive(Debug, Clone)]
+pub struct CallSpec {
+    pub sender: Option<&'static str>,
+    pub value: &'static str,
+    pub data: &'static str,
+}
+
+impl CallSpec {
+    pub const fn new(data: &'static str) -> Self {
+        Self {
+            sender: None,
+            value: "0",
+            data,
+        }
+    }
+
+    pub const fn sender(data: &'static str, sender: &'static str) -> Self {
+        Self {
+            sender: Some(sender),
+            value: "0",
+            data,
+        }
+    }
+
+    pub const fn value(data: &'static str, value: &'static str) -> Self {
+        Self {
+            sender: None,
+            value,
+            data,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct Scenario {
+    pub name: &'static str,
+    pub setup: Vec<CallSpec>,
+    pub measured: CallSpec,
+    pub expect_success: bool,
+    pub observers: Vec<CallSpec>,
+}
+
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct CompilerProfile {
     pub id: String,
@@ -108,4 +150,15 @@ pub struct CompiledArtifact {
 pub struct CompileSet {
     pub profiles: Vec<CompilerProfile>,
     pub artifacts: Vec<CompiledArtifact>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct GasRecord {
+    pub benchmark_id: String,
+    pub implementation_id: String,
+    pub profile_id: String,
+    pub scenario: String,
+    pub deploy_gas: u64,
+    pub execution_gas: u64,
+    pub success: bool,
 }

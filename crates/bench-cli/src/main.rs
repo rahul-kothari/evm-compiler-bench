@@ -1,12 +1,14 @@
 mod catalog;
 mod compiler;
 mod models;
+mod runner;
 mod toolchain;
 mod util;
 
 use anyhow::Result;
 use clap::{Parser, Subcommand};
 use compiler::compile_all;
+use runner::run_foundry;
 use std::path::PathBuf;
 use toolchain::resolve_toolchains;
 
@@ -51,7 +53,29 @@ fn main() -> Result<()> {
     let cli = Cli::parse();
     let root = cli.root.canonicalize()?;
     match cli.command {
-        Command::Run { offline, benchmark } | Command::Compile { offline, benchmark } => {
+        Command::Run { offline, benchmark } => {
+            let toolchains = resolve_toolchains(&root, offline)?;
+            let compiled = compile_all(&root, &toolchains, benchmark.as_deref())?;
+            let gas_records = run_foundry(&root, &toolchains.evm_version, &compiled)?;
+            println!("foundry produced {} gas records", gas_records.len());
+            println!(
+                "compiled {} artifacts across {} profiles for EVM {}",
+                compiled.artifacts.len(),
+                compiled.profiles.len(),
+                toolchains.evm_version
+            );
+            for artifact in &compiled.artifacts {
+                println!(
+                    "{} {} {} creation={} runtime={}",
+                    artifact.benchmark_id,
+                    artifact.implementation_id,
+                    artifact.profile_id,
+                    artifact.bytecode.creation_bytes,
+                    artifact.bytecode.runtime_bytes
+                );
+            }
+        }
+        Command::Compile { offline, benchmark } => {
             let toolchains = resolve_toolchains(&root, offline)?;
             let compiled = compile_all(&root, &toolchains, benchmark.as_deref())?;
             println!(

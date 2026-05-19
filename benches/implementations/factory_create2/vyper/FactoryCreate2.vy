@@ -1,6 +1,7 @@
 # pragma version 0.4.3
 
 deployedValue: public(HashMap[bytes32, uint256])
+ADDRESS_MODULUS: constant(uint256) = 1461501637330902918203684832716283019655932542976
 
 event Deployed:
     salt: indexed(bytes32)
@@ -16,7 +17,7 @@ def initCodeHash(amount: uint256) -> bytes32:
 @view
 def _compute_address(salt: bytes32, amount: uint256) -> address:
     digest: bytes32 = keccak256(concat(0xff, convert(self, bytes20), salt, keccak256(convert(amount, bytes32))))
-    return convert(convert(digest, uint256), address)
+    return convert(convert(digest, uint256) % ADDRESS_MODULUS, address)
 
 @external
 @view

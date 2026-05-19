@@ -1,6 +1,7 @@
 # pragma version 0.4.3
 
 cloneValue: public(HashMap[bytes32, uint256])
+ADDRESS_MODULUS: constant(uint256) = 1461501637330902918203684832716283019655932542976
 
 event Cloned:
     salt: indexed(bytes32)
@@ -31,7 +32,7 @@ def _predict_clone(implementation: address, salt: bytes32) -> address:
         )
     )
     digest: bytes32 = keccak256(concat(0xff, convert(self, bytes20), salt, code_hash))
-    return convert(convert(digest, uint256), address)
+    return convert(convert(digest, uint256) % ADDRESS_MODULUS, address)
 
 @external
 @view
