@@ -61,7 +61,10 @@ fn main() -> Result<()> {
             let gas_records = run_foundry(&root, &toolchains.evm_version, &compiled)?;
             let report = write_outputs(&root, &toolchains, &compiled, &gas_records)?;
             println!("foundry produced {} gas records", gas_records.len());
-            println!("normalized results: {}", report.normalized_results.display());
+            println!(
+                "normalized results: {}",
+                report.normalized_results.display()
+            );
             println!("run manifest: {}", report.run_manifest.display());
             println!("html report: {}", report.html_report.display());
             println!(

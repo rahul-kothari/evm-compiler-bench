@@ -91,7 +91,9 @@ pub fn scenarios(benchmark_id: &str) -> Vec<Scenario> {
             },
             Scenario {
                 name: "reset",
-                setup: vec![CallSpec::new(r#"abi.encodeWithSignature("add(uint256)", uint256(11))"#)],
+                setup: vec![CallSpec::new(
+                    r#"abi.encodeWithSignature("add(uint256)", uint256(11))"#,
+                )],
                 measured: CallSpec::new(r#"abi.encodeWithSignature("reset()")"#),
                 expect_success: true,
                 observers: vec![CallSpec::new(r#"abi.encodeWithSignature("value()")"#)],
@@ -108,20 +110,26 @@ pub fn scenarios(benchmark_id: &str) -> Vec<Scenario> {
             Scenario {
                 name: "transfer_success",
                 setup: vec![],
-                measured: CallSpec::new(r#"abi.encodeWithSignature("transfer(address,uint256)", BOB, uint256(10 ether))"#),
+                measured: CallSpec::new(
+                    r#"abi.encodeWithSignature("transfer(address,uint256)", BOB, uint256(10 ether))"#,
+                ),
                 expect_success: true,
                 observers: erc20_observers(),
             },
             Scenario {
                 name: "approve_success",
                 setup: vec![],
-                measured: CallSpec::new(r#"abi.encodeWithSignature("approve(address,uint256)", BOB, uint256(7 ether))"#),
+                measured: CallSpec::new(
+                    r#"abi.encodeWithSignature("approve(address,uint256)", BOB, uint256(7 ether))"#,
+                ),
                 expect_success: true,
                 observers: erc20_observers(),
             },
             Scenario {
                 name: "transfer_from_success",
-                setup: vec![CallSpec::new(r#"abi.encodeWithSignature("approve(address,uint256)", BOB, uint256(9 ether))"#)],
+                setup: vec![CallSpec::new(
+                    r#"abi.encodeWithSignature("approve(address,uint256)", BOB, uint256(9 ether))"#,
+                )],
                 measured: CallSpec::sender(
                     r#"abi.encodeWithSignature("transferFrom(address,address,uint256)", address(this), CAROL, uint256(5 ether))"#,
                     "BOB",
@@ -148,23 +156,33 @@ pub fn scenarios(benchmark_id: &str) -> Vec<Scenario> {
                     r#"abi.encodeWithSignature("hashPermit(address,address,uint256,uint256,uint256)", address(this), BOB, uint256(1), uint256(0), uint256(999))"#,
                 ),
                 expect_success: true,
-                observers: vec![CallSpec::new(r#"abi.encodeWithSignature("nonces(address)", address(this))"#)],
+                observers: vec![CallSpec::new(
+                    r#"abi.encodeWithSignature("nonces(address)", address(this))"#,
+                )],
             },
             Scenario {
                 name: "use_nonce",
                 setup: vec![],
-                measured: CallSpec::new(r#"abi.encodeWithSignature("useNonce(address)", address(this))"#),
+                measured: CallSpec::new(
+                    r#"abi.encodeWithSignature("useNonce(address)", address(this))"#,
+                ),
                 expect_success: true,
-                observers: vec![CallSpec::new(r#"abi.encodeWithSignature("nonces(address)", address(this))"#)],
+                observers: vec![CallSpec::new(
+                    r#"abi.encodeWithSignature("nonces(address)", address(this))"#,
+                )],
             },
             Scenario {
                 name: "hash_current_after_nonce",
-                setup: vec![CallSpec::new(r#"abi.encodeWithSignature("useNonce(address)", address(this))"#)],
+                setup: vec![CallSpec::new(
+                    r#"abi.encodeWithSignature("useNonce(address)", address(this))"#,
+                )],
                 measured: CallSpec::new(
                     r#"abi.encodeWithSignature("hashCurrentPermit(address,address,uint256,uint256)", address(this), BOB, uint256(1), uint256(999))"#,
                 ),
                 expect_success: true,
-                observers: vec![CallSpec::new(r#"abi.encodeWithSignature("nonces(address)", address(this))"#)],
+                observers: vec![CallSpec::new(
+                    r#"abi.encodeWithSignature("nonces(address)", address(this))"#,
+                )],
             },
         ],
         "ownable_pausable" => vec![
@@ -207,15 +225,22 @@ pub fn scenarios(benchmark_id: &str) -> Vec<Scenario> {
             },
             Scenario {
                 name: "withdraw_half_eth",
-                setup: vec![CallSpec::value(r#"abi.encodeWithSignature("deposit()")"#, "1 ether")],
-                measured: CallSpec::new(r#"abi.encodeWithSignature("withdraw(uint256)", uint256(0.5 ether))"#),
+                setup: vec![CallSpec::value(
+                    r#"abi.encodeWithSignature("deposit()")"#,
+                    "1 ether",
+                )],
+                measured: CallSpec::new(
+                    r#"abi.encodeWithSignature("withdraw(uint256)", uint256(0.5 ether))"#,
+                ),
                 expect_success: true,
                 observers: vault_observers(),
             },
             Scenario {
                 name: "withdraw_revert",
                 setup: vec![],
-                measured: CallSpec::new(r#"abi.encodeWithSignature("withdraw(uint256)", uint256(1 ether))"#),
+                measured: CallSpec::new(
+                    r#"abi.encodeWithSignature("withdraw(uint256)", uint256(1 ether))"#,
+                ),
                 expect_success: false,
                 observers: vault_observers(),
             },
@@ -224,30 +249,44 @@ pub fn scenarios(benchmark_id: &str) -> Vec<Scenario> {
             Scenario {
                 name: "init_code_hash",
                 setup: vec![],
-                measured: CallSpec::new(r#"abi.encodeWithSignature("initCodeHash(uint256)", uint256(7))"#),
+                measured: CallSpec::new(
+                    r#"abi.encodeWithSignature("initCodeHash(uint256)", uint256(7))"#,
+                ),
                 expect_success: true,
                 observers: vec![],
             },
             Scenario {
                 name: "deploy_value",
                 setup: vec![],
-                measured: CallSpec::new(r#"abi.encodeWithSignature("deploy(bytes32,uint256)", SALT, uint256(7))"#),
+                measured: CallSpec::new(
+                    r#"abi.encodeWithSignature("deploy(bytes32,uint256)", SALT, uint256(7))"#,
+                ),
                 expect_success: true,
-                observers: vec![CallSpec::new(r#"abi.encodeWithSignature("deployedValue(bytes32)", SALT)"#)],
+                observers: vec![CallSpec::new(
+                    r#"abi.encodeWithSignature("deployedValue(bytes32)", SALT)"#,
+                )],
             },
             Scenario {
                 name: "deployed_value",
-                setup: vec![CallSpec::new(r#"abi.encodeWithSignature("deploy(bytes32,uint256)", SALT, uint256(7))"#)],
-                measured: CallSpec::new(r#"abi.encodeWithSignature("deployedValue(bytes32)", SALT)"#),
+                setup: vec![CallSpec::new(
+                    r#"abi.encodeWithSignature("deploy(bytes32,uint256)", SALT, uint256(7))"#,
+                )],
+                measured: CallSpec::new(
+                    r#"abi.encodeWithSignature("deployedValue(bytes32)", SALT)"#,
+                ),
                 expect_success: true,
-                observers: vec![CallSpec::new(r#"abi.encodeWithSignature("deployedValue(bytes32)", SALT)"#)],
+                observers: vec![CallSpec::new(
+                    r#"abi.encodeWithSignature("deployedValue(bytes32)", SALT)"#,
+                )],
             },
         ],
         "minimal_proxy" => vec![
             Scenario {
                 name: "proxy_code_hash",
                 setup: vec![],
-                measured: CallSpec::new(r#"abi.encodeWithSignature("proxyCodeHash(address)", IMPLEMENTATION)"#),
+                measured: CallSpec::new(
+                    r#"abi.encodeWithSignature("proxyCodeHash(address)", IMPLEMENTATION)"#,
+                ),
                 expect_success: true,
                 observers: vec![],
             },
@@ -258,7 +297,9 @@ pub fn scenarios(benchmark_id: &str) -> Vec<Scenario> {
                     r#"abi.encodeWithSignature("cloneAndSet(address,bytes32,uint256)", IMPLEMENTATION, SALT, uint256(42))"#,
                 ),
                 expect_success: true,
-                observers: vec![CallSpec::new(r#"abi.encodeWithSignature("cloneValue(bytes32)", SALT)"#)],
+                observers: vec![CallSpec::new(
+                    r#"abi.encodeWithSignature("cloneValue(bytes32)", SALT)"#,
+                )],
             },
             Scenario {
                 name: "clone_value",
@@ -267,28 +308,36 @@ pub fn scenarios(benchmark_id: &str) -> Vec<Scenario> {
                 )],
                 measured: CallSpec::new(r#"abi.encodeWithSignature("cloneValue(bytes32)", SALT)"#),
                 expect_success: true,
-                observers: vec![CallSpec::new(r#"abi.encodeWithSignature("cloneValue(bytes32)", SALT)"#)],
+                observers: vec![CallSpec::new(
+                    r#"abi.encodeWithSignature("cloneValue(bytes32)", SALT)"#,
+                )],
             },
         ],
         "merkle_verifier" => vec![
             Scenario {
                 name: "hash_pair",
                 setup: vec![],
-                measured: CallSpec::new(r#"abi.encodeWithSignature("hashPair(bytes32,bytes32)", LEAF, SIBLING)"#),
+                measured: CallSpec::new(
+                    r#"abi.encodeWithSignature("hashPair(bytes32,bytes32)", LEAF, SIBLING)"#,
+                ),
                 expect_success: true,
                 observers: vec![],
             },
             Scenario {
                 name: "verify_single",
                 setup: vec![],
-                measured: CallSpec::new(r#"abi.encodeWithSignature("verify(bytes32[],bytes32,bytes32)", proofOne(), ROOT, LEAF)"#),
+                measured: CallSpec::new(
+                    r#"abi.encodeWithSignature("verify(bytes32[],bytes32,bytes32)", proofOne(), ROOT, LEAF)"#,
+                ),
                 expect_success: true,
                 observers: vec![],
             },
             Scenario {
                 name: "verify_empty_false",
                 setup: vec![],
-                measured: CallSpec::new(r#"abi.encodeWithSignature("verify(bytes32[],bytes32,bytes32)", proofEmpty(), ROOT, LEAF)"#),
+                measured: CallSpec::new(
+                    r#"abi.encodeWithSignature("verify(bytes32[],bytes32,bytes32)", proofEmpty(), ROOT, LEAF)"#,
+                ),
                 expect_success: true,
                 observers: vec![],
             },
@@ -297,20 +346,28 @@ pub fn scenarios(benchmark_id: &str) -> Vec<Scenario> {
             Scenario {
                 name: "mint",
                 setup: vec![],
-                measured: CallSpec::new(r#"abi.encodeWithSignature("mint(uint256,uint256)", uint256(100), uint256(200))"#),
+                measured: CallSpec::new(
+                    r#"abi.encodeWithSignature("mint(uint256,uint256)", uint256(100), uint256(200))"#,
+                ),
                 expect_success: true,
                 observers: amm_observers(),
             },
             Scenario {
                 name: "burn",
-                setup: vec![CallSpec::new(r#"abi.encodeWithSignature("mint(uint256,uint256)", uint256(100), uint256(200))"#)],
-                measured: CallSpec::new(r#"abi.encodeWithSignature("burn(uint256)", uint256(150))"#),
+                setup: vec![CallSpec::new(
+                    r#"abi.encodeWithSignature("mint(uint256,uint256)", uint256(100), uint256(200))"#,
+                )],
+                measured: CallSpec::new(
+                    r#"abi.encodeWithSignature("burn(uint256)", uint256(150))"#,
+                ),
                 expect_success: true,
                 observers: amm_observers(),
             },
             Scenario {
                 name: "swap",
-                setup: vec![CallSpec::new(r#"abi.encodeWithSignature("mint(uint256,uint256)", uint256(100), uint256(200))"#)],
+                setup: vec![CallSpec::new(
+                    r#"abi.encodeWithSignature("mint(uint256,uint256)", uint256(100), uint256(200))"#,
+                )],
                 measured: CallSpec::new(
                     r#"abi.encodeWithSignature("swap(uint256,uint256,uint256,uint256)", uint256(10), uint256(0), uint256(0), uint256(20))"#,
                 ),
@@ -320,7 +377,9 @@ pub fn scenarios(benchmark_id: &str) -> Vec<Scenario> {
             Scenario {
                 name: "sync",
                 setup: vec![],
-                measured: CallSpec::new(r#"abi.encodeWithSignature("sync(uint256,uint256)", uint256(5), uint256(9))"#),
+                measured: CallSpec::new(
+                    r#"abi.encodeWithSignature("sync(uint256,uint256)", uint256(5), uint256(9))"#,
+                ),
                 expect_success: true,
                 observers: amm_observers(),
             },
@@ -350,7 +409,9 @@ pub fn scenarios(benchmark_id: &str) -> Vec<Scenario> {
             Scenario {
                 name: "set_sink",
                 setup: vec![],
-                measured: CallSpec::new(r#"abi.encodeWithSignature("setSink(uint256)", uint256(99))"#),
+                measured: CallSpec::new(
+                    r#"abi.encodeWithSignature("setSink(uint256)", uint256(99))"#,
+                ),
                 expect_success: true,
                 observers: vec![CallSpec::new(r#"abi.encodeWithSignature("sink()")"#)],
             },
@@ -365,7 +426,9 @@ fn erc20_observers() -> Vec<CallSpec> {
         CallSpec::new(r#"abi.encodeWithSignature("balanceOf(address)", address(this))"#),
         CallSpec::new(r#"abi.encodeWithSignature("balanceOf(address)", BOB)"#),
         CallSpec::new(r#"abi.encodeWithSignature("balanceOf(address)", CAROL)"#),
-        CallSpec::new(r#"abi.encodeWithSignature("allowance(address,address)", address(this), BOB)"#),
+        CallSpec::new(
+            r#"abi.encodeWithSignature("allowance(address,address)", address(this), BOB)"#,
+        ),
     ]
 }
 

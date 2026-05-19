@@ -54,16 +54,30 @@ pub fn write_outputs(
     })
 }
 
-fn normalized_rows(compiled: &CompileSet, gas_records: &[GasRecord]) -> Result<Vec<serde_json::Value>> {
+fn normalized_rows(
+    compiled: &CompileSet,
+    gas_records: &[GasRecord],
+) -> Result<Vec<serde_json::Value>> {
     let mut artifacts = BTreeMap::new();
     for artifact in &compiled.artifacts {
-        artifacts.insert(artifact_key(&artifact.benchmark_id, &artifact.implementation_id, &artifact.profile_id), artifact);
+        artifacts.insert(
+            artifact_key(
+                &artifact.benchmark_id,
+                &artifact.implementation_id,
+                &artifact.profile_id,
+            ),
+            artifact,
+        );
     }
 
     let mut rows = Vec::with_capacity(gas_records.len());
     for gas in gas_records {
         let artifact = artifacts
-            .get(&artifact_key(&gas.benchmark_id, &gas.implementation_id, &gas.profile_id))
+            .get(&artifact_key(
+                &gas.benchmark_id,
+                &gas.implementation_id,
+                &gas.profile_id,
+            ))
             .with_context(|| {
                 format!(
                     "missing artifact for {}/{}/{}",
@@ -123,7 +137,9 @@ fn render_html(rows: &[serde_json::Value], toolchains: &Toolchains) -> Result<St
         let entry = by_profile.entry(profile_id).or_default();
         entry.0 += gas;
         entry.1 += 1;
-        *by_benchmark.entry(str_at(row, "/benchmark_id").unwrap_or_default()).or_default() += 1;
+        *by_benchmark
+            .entry(str_at(row, "/benchmark_id").unwrap_or_default())
+            .or_default() += 1;
     }
 
     let mut html = String::new();
@@ -166,14 +182,25 @@ fn render_html(rows: &[serde_json::Value], toolchains: &Toolchains) -> Result<St
 
     html.push_str("<h2>Runtime Size vs Runtime Gas</h2><div class=\"chart\"><svg width=\"1080\" height=\"360\" viewBox=\"0 0 1080 360\" role=\"img\">");
     html.push_str("<line x1=\"45\" y1=\"315\" x2=\"1040\" y2=\"315\" stroke=\"#999\"/><line x1=\"45\" y1=\"20\" x2=\"45\" y2=\"315\" stroke=\"#999\"/>");
-    let max_size = rows.iter().map(|row| u64_at(row, "/bytecode/runtime_bytes")).max().unwrap_or(1);
-    let max_gas = rows.iter().map(|row| u64_at(row, "/gas/execution_gas")).max().unwrap_or(1);
+    let max_size = rows
+        .iter()
+        .map(|row| u64_at(row, "/bytecode/runtime_bytes"))
+        .max()
+        .unwrap_or(1);
+    let max_gas = rows
+        .iter()
+        .map(|row| u64_at(row, "/gas/execution_gas"))
+        .max()
+        .unwrap_or(1);
     for row in rows {
         let size = u64_at(row, "/bytecode/runtime_bytes");
         let gas = u64_at(row, "/gas/execution_gas");
         let x = 45 + (size * 980 / max_size) as i32;
         let y = 315 - (gas * 285 / max_gas) as i32;
-        html.push_str(&format!("<circle cx=\"{x}\" cy=\"{y}\" r=\"3\"><title>{}</title></circle>", escape(&tooltip(row))));
+        html.push_str(&format!(
+            "<circle cx=\"{x}\" cy=\"{y}\" r=\"3\"><title>{}</title></circle>",
+            escape(&tooltip(row))
+        ));
     }
     html.push_str("</svg></div>");
 
@@ -182,7 +209,9 @@ fn render_html(rows: &[serde_json::Value], toolchains: &Toolchains) -> Result<St
         html.push_str("<tr><td>");
         html.push_str(&escape(&str_at(row, "/benchmark_id").unwrap_or_default()));
         html.push_str("</td><td>");
-        html.push_str(&escape(&str_at(row, "/implementation_id").unwrap_or_default()));
+        html.push_str(&escape(
+            &str_at(row, "/implementation_id").unwrap_or_default(),
+        ));
         html.push_str("</td><td>");
         html.push_str(&escape(&format!(
             "{} {}",
@@ -237,11 +266,17 @@ fn str_at(row: &serde_json::Value, pointer: &str) -> Option<String> {
 }
 
 fn u64_at(row: &serde_json::Value, pointer: &str) -> u64 {
-    row.pointer(pointer).and_then(|value| value.as_u64()).unwrap_or(0)
+    row.pointer(pointer)
+        .and_then(|value| value.as_u64())
+        .unwrap_or(0)
 }
 
 fn card(label: &str, value: usize) -> String {
-    format!("<div class=\"card\"><div class=\"k\">{}</div><div class=\"v\">{}</div></div>", escape(label), value)
+    format!(
+        "<div class=\"card\"><div class=\"k\">{}</div><div class=\"v\">{}</div></div>",
+        escape(label),
+        value
+    )
 }
 
 fn escape(value: &str) -> String {

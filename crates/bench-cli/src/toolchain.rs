@@ -32,17 +32,21 @@ fn resolve_solc(root: &Path, offline: bool) -> Result<Toolchain> {
         return resolve_path_toolchain("solc", env::var_os("EVM_BENCH_SOLC").map(PathBuf::from));
     }
     let index = fetch_solc_index()?;
-    let release_path = index
-        .releases
-        .get(&index.latest_release)
-        .with_context(|| format!("solc latest release {} missing from index", index.latest_release))?;
+    let release_path = index.releases.get(&index.latest_release).with_context(|| {
+        format!(
+            "solc latest release {} missing from index",
+            index.latest_release
+        )
+    })?;
     let build = index
         .builds
         .iter()
         .find(|build| build.path == *release_path)
         .with_context(|| format!("solc build {release_path} missing from index"))?;
     let platform = solc_platform()?;
-    let target_dir = root.join(".cache/toolchains/solc").join(&index.latest_release);
+    let target_dir = root
+        .join(".cache/toolchains/solc")
+        .join(&index.latest_release);
     ensure_dir(&target_dir)?;
     let target = target_dir.join(&build.path);
     let source = format!("{SOLC_INDEX_ROOT}/{platform}/{}", build.path);
@@ -75,7 +79,11 @@ fn resolve_vyper(root: &Path, offline: bool) -> Result<Toolchain> {
         return resolve_path_toolchain("vyper", env::var_os("EVM_BENCH_VYPER").map(PathBuf::from));
     }
     let latest = fetch_vyper_latest()?;
-    if let Some(local) = local_toolchain_if_version("vyper", env::var_os("EVM_BENCH_VYPER").map(PathBuf::from), &latest)? {
+    if let Some(local) = local_toolchain_if_version(
+        "vyper",
+        env::var_os("EVM_BENCH_VYPER").map(PathBuf::from),
+        &latest,
+    )? {
         return Ok(local);
     }
 
@@ -133,7 +141,11 @@ fn resolve_path_toolchain(name: &str, env_path: Option<PathBuf>) -> Result<Toolc
     })
 }
 
-fn local_toolchain_if_version(name: &str, env_path: Option<PathBuf>, latest: &str) -> Result<Option<Toolchain>> {
+fn local_toolchain_if_version(
+    name: &str,
+    env_path: Option<PathBuf>,
+    latest: &str,
+) -> Result<Option<Toolchain>> {
     let binary_path = match env_path {
         Some(path) => path,
         None => match which::which(name) {
@@ -282,6 +294,9 @@ mod tests {
 
     #[test]
     fn parses_vyper_version() {
-        assert_eq!(parse_vyper_version("0.4.3+commit.bff19ea2").unwrap(), "0.4.3");
+        assert_eq!(
+            parse_vyper_version("0.4.3+commit.bff19ea2").unwrap(),
+            "0.4.3"
+        );
     }
 }

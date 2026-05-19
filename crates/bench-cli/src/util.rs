@@ -79,7 +79,8 @@ pub fn stripped_cbor_len(hex_value: &str) -> Result<usize> {
     if bytes.len() < 2 {
         return Ok(bytes.len());
     }
-    let metadata_len = u16::from_be_bytes([bytes[bytes.len() - 2], bytes[bytes.len() - 1]]) as usize;
+    let metadata_len =
+        u16::from_be_bytes([bytes[bytes.len() - 2], bytes[bytes.len() - 1]]) as usize;
     if metadata_len + 2 <= bytes.len() {
         Ok(bytes.len() - metadata_len - 2)
     } else {

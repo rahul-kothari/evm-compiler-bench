@@ -10,7 +10,11 @@ const GAS_JSONL: &str = "../results/raw/foundry-gas.jsonl";
 const SOL_BASELINE: &str = "solc-latest-legacy-runs200";
 const VYPER_BASELINE: &str = "vyper-latest-gas";
 
-pub fn run_foundry(root: &Path, evm_version: &str, compiled: &CompileSet) -> Result<Vec<GasRecord>> {
+pub fn run_foundry(
+    root: &Path,
+    evm_version: &str,
+    compiled: &CompileSet,
+) -> Result<Vec<GasRecord>> {
     ensure_dir(&root.join("results/raw"))?;
     let test_path = root.join("foundry/test/GeneratedBench.t.sol");
     fs::write(&test_path, generate_test(compiled)?)?;
@@ -30,13 +34,17 @@ pub fn run_foundry(root: &Path, evm_version: &str, compiled: &CompileSet) -> Res
         "forge test",
     )?;
     let rows_path = root.join("results/raw/foundry-gas.jsonl");
-    let rows = fs::read_to_string(&rows_path).with_context(|| format!("reading {}", rows_path.display()))?;
+    let rows = fs::read_to_string(&rows_path)
+        .with_context(|| format!("reading {}", rows_path.display()))?;
     let mut records = Vec::new();
     for (index, line) in rows.lines().enumerate() {
         if line.trim().is_empty() {
             continue;
         }
-        records.push(serde_json::from_str(line).with_context(|| format!("parsing gas jsonl line {}", index + 1))?);
+        records.push(
+            serde_json::from_str(line)
+                .with_context(|| format!("parsing gas jsonl line {}", index + 1))?,
+        );
     }
     Ok(records)
 }
@@ -56,7 +64,9 @@ fn generate_test(compiled: &CompileSet) -> Result<String> {
     out.push_str("    function deal(address account, uint256 newBalance) external;\n");
     out.push_str("}\n\n");
     out.push_str("contract GeneratedBenchTest {\n");
-    out.push_str("    Vm constant vm = Vm(address(uint160(uint256(keccak256(\"hevm cheat code\")))));\n");
+    out.push_str(
+        "    Vm constant vm = Vm(address(uint160(uint256(keccak256(\"hevm cheat code\")))));\n",
+    );
     out.push_str("    address constant BOB = address(0xB0B);\n");
     out.push_str("    address constant CAROL = address(0xCAFe);\n");
     out.push_str("    address constant IMPLEMENTATION = address(0x1000000000000000000000000000000000000001);\n");
@@ -93,8 +103,14 @@ fn generate_test(compiled: &CompileSet) -> Result<String> {
                 &benchmark_id,
                 solidity_idx,
                 vyper_idx,
-                compiled.artifacts.get(solidity_idx).context("missing solidity baseline")?,
-                compiled.artifacts.get(vyper_idx).context("missing vyper baseline")?,
+                compiled
+                    .artifacts
+                    .get(solidity_idx)
+                    .context("missing solidity baseline")?,
+                compiled
+                    .artifacts
+                    .get(vyper_idx)
+                    .context("missing vyper baseline")?,
                 &scenario,
             );
         }
@@ -192,7 +208,12 @@ fn write_deploy_function(out: &mut String, index: usize, artifact: &CompiledArti
     out.push_str("    }\n\n");
 }
 
-fn write_gas_test(out: &mut String, index: usize, artifact: &CompiledArtifact, scenario: &Scenario) {
+fn write_gas_test(
+    out: &mut String,
+    index: usize,
+    artifact: &CompiledArtifact,
+    scenario: &Scenario,
+) {
     out.push_str("    function testGas_");
     out.push_str(&index.to_string());
     out.push('_');
@@ -206,7 +227,11 @@ fn write_gas_test(out: &mut String, index: usize, artifact: &CompiledArtifact, s
     write_call_args(out, &scenario.measured);
     out.push_str(");\n");
     out.push_str("        require(ok == ");
-    out.push_str(if scenario.expect_success { "true" } else { "false" });
+    out.push_str(if scenario.expect_success {
+        "true"
+    } else {
+        "false"
+    });
     out.push_str(", \"unexpected scenario status\");\n");
     out.push_str("        _writeRow(\"");
     out.push_str(&artifact.benchmark_id);
@@ -250,9 +275,15 @@ fn write_diff_test(
     out.push_str(");\n");
     out.push_str("        require(solOk == vyperOk, \"differential status mismatch\");\n");
     out.push_str("        require(solOk == ");
-    out.push_str(if scenario.expect_success { "true" } else { "false" });
+    out.push_str(if scenario.expect_success {
+        "true"
+    } else {
+        "false"
+    });
     out.push_str(", \"differential unexpected status\");\n");
-    out.push_str("        if (solOk) require(solHash == vyperHash, \"differential return mismatch\");\n");
+    out.push_str(
+        "        if (solOk) require(solHash == vyperHash, \"differential return mismatch\");\n",
+    );
     out.push_str("        require(_observeAll_");
     out.push_str(&sanitize(&solidity.benchmark_id));
     out.push('_');
@@ -311,11 +342,9 @@ fn baseline_pairs(artifacts: &[CompiledArtifact]) -> BTreeMap<String, (usize, us
         if artifact.profile_id != SOL_BASELINE {
             continue;
         }
-        if let Some((vyper_idx, _)) = artifacts
-            .iter()
-            .enumerate()
-            .find(|(_, other)| other.benchmark_id == artifact.benchmark_id && other.profile_id == VYPER_BASELINE)
-        {
+        if let Some((vyper_idx, _)) = artifacts.iter().enumerate().find(|(_, other)| {
+            other.benchmark_id == artifact.benchmark_id && other.profile_id == VYPER_BASELINE
+        }) {
             pairs.insert(artifact.benchmark_id.clone(), (index, vyper_idx));
         }
     }

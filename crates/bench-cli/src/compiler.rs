@@ -1,8 +1,8 @@
 use crate::{
     catalog::benchmarks,
     models::{
-        Benchmark, BytecodeMetrics, CompileMetrics, CompileSet, CompiledArtifact, CompilerProfile, Language,
-        Toolchain, Toolchains,
+        Benchmark, BytecodeMetrics, CompileMetrics, CompileSet, CompiledArtifact, CompilerProfile,
+        Language, Toolchain, Toolchains,
     },
     util::{byte_len, require_success, run_measured, sha256_bytes, stripped_cbor_len},
 };
@@ -10,7 +10,11 @@ use anyhow::{Context, Result, bail};
 use serde_json::json;
 use std::{fs, path::Path, process::Command};
 
-pub fn compile_all(root: &Path, toolchains: &Toolchains, only_benchmark: Option<&str>) -> Result<CompileSet> {
+pub fn compile_all(
+    root: &Path,
+    toolchains: &Toolchains,
+    only_benchmark: Option<&str>,
+) -> Result<CompileSet> {
     let profiles = load_profiles(root)?;
     let mut artifacts = Vec::new();
     for benchmark in benchmarks() {
@@ -19,13 +23,28 @@ pub fn compile_all(root: &Path, toolchains: &Toolchains, only_benchmark: Option<
         }
         for profile in &profiles {
             let artifact = match profile.language {
-                Language::Solidity => compile_solidity(root, &benchmark, profile, &toolchains.solc, &toolchains.evm_version)?,
-                Language::Vyper => compile_vyper(root, &benchmark, profile, &toolchains.vyper, &toolchains.evm_version)?,
+                Language::Solidity => compile_solidity(
+                    root,
+                    &benchmark,
+                    profile,
+                    &toolchains.solc,
+                    &toolchains.evm_version,
+                )?,
+                Language::Vyper => compile_vyper(
+                    root,
+                    &benchmark,
+                    profile,
+                    &toolchains.vyper,
+                    &toolchains.evm_version,
+                )?,
             };
             artifacts.push(artifact);
         }
     }
-    Ok(CompileSet { profiles, artifacts })
+    Ok(CompileSet {
+        profiles,
+        artifacts,
+    })
 }
 
 fn load_profiles(root: &Path) -> Result<Vec<CompilerProfile>> {
@@ -36,7 +55,9 @@ fn load_profiles(root: &Path) -> Result<Vec<CompilerProfile>> {
             continue;
         }
         let text = fs::read_to_string(entry.path())?;
-        profiles.push(toml::from_str(&text).with_context(|| format!("parsing {}", entry.path().display()))?);
+        profiles.push(
+            toml::from_str(&text).with_context(|| format!("parsing {}", entry.path().display()))?,
+        );
     }
     profiles.sort_by(|a, b| a.id.cmp(&b.id));
     Ok(profiles)
@@ -84,9 +105,15 @@ fn compile_solidity(
     let output: serde_json::Value = serde_json::from_slice(&measured.output.stdout)?;
     reject_solc_errors(&output)?;
     let contract = output
-        .pointer(&format!("/contracts/{file_name}/{}", benchmark.contract_name))
+        .pointer(&format!(
+            "/contracts/{file_name}/{}",
+            benchmark.contract_name
+        ))
         .with_context(|| format!("missing solc contract {}", benchmark.contract_name))?;
-    let abi = contract.pointer("/abi").context("missing solidity abi")?.clone();
+    let abi = contract
+        .pointer("/abi")
+        .context("missing solidity abi")?
+        .clone();
     let creation = contract
         .pointer("/evm/bytecode/object")
         .and_then(|value| value.as_str())
@@ -157,8 +184,14 @@ fn compile_vyper(
     let stdout = String::from_utf8(measured.output.stdout)?;
     let mut lines = stdout.lines();
     let abi_line = lines.next().context("missing vyper abi output")?;
-    let creation = lines.next().context("missing vyper bytecode output")?.to_string();
-    let runtime = lines.next().context("missing vyper runtime output")?.to_string();
+    let creation = lines
+        .next()
+        .context("missing vyper bytecode output")?
+        .to_string();
+    let runtime = lines
+        .next()
+        .context("missing vyper runtime output")?
+        .to_string();
     let abi: serde_json::Value = serde_json::from_str(abi_line)?;
     artifact(
         benchmark,
