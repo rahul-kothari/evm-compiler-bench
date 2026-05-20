@@ -10,8 +10,8 @@ use std::{collections::BTreeMap, fs, path::Path, process::Command};
 
 const GAS_JSONL: &str = "../results/raw/foundry-gas.jsonl";
 const FAILURE_DIR: &str = "../results/raw/failures";
-const SOL_BASELINE: &str = "solc-latest-legacy-runs200-metadata-off";
-const VYPER_BASELINE: &str = "vyper-latest-gas-metadata-off";
+const SOL_BASELINE: &str = "solc-latest-legacy-runs200";
+const VYPER_BASELINE: &str = "vyper-latest-gas";
 
 pub fn run_foundry(
     root: &Path,

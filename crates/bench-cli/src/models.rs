@@ -357,7 +357,7 @@ fn default_state_access_profile() -> StateAccessProfile {
 }
 
 fn default_metadata_mode() -> MetadataMode {
-    MetadataMode::On
+    MetadataMode::Off
 }
 
 fn default_random_iterations() -> usize {

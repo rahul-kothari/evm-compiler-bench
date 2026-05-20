@@ -82,17 +82,16 @@ fn load_profiles(root: &Path) -> Result<Vec<CompilerProfile>> {
         let text = fs::read_to_string(entry.path())?;
         let base: CompilerProfile =
             toml::from_str(&text).with_context(|| format!("parsing {}", entry.path().display()))?;
-        profiles.extend(expand_metadata_profiles(&base));
+        profiles.push(no_metadata_profile(&base));
     }
     profiles.sort_by(|a, b| a.id.cmp(&b.id));
     Ok(profiles)
 }
 
-fn expand_metadata_profiles(base: &CompilerProfile) -> Vec<CompilerProfile> {
+fn no_metadata_profile(base: &CompilerProfile) -> CompilerProfile {
     let mut profile = base.clone();
     profile.metadata_mode = MetadataMode::Off;
-    profile.id = format!("{}-metadata-off", base.id);
-    vec![profile]
+    profile
 }
 
 fn compile_solidity(

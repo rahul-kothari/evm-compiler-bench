@@ -17,21 +17,21 @@ use std::{
     process::Command,
 };
 
-const SOL_CODEGEN_BASELINE: &str = "solc-latest-legacy-runs200-metadata-off";
-const SOL_NOOPT_CODEGEN: &str = "solc-latest-noopt-metadata-off";
-const SOL_VIAIR_CODEGEN: &str = "solc-latest-viair-runs200-metadata-off";
-const VYPER_GAS_CODEGEN: &str = "vyper-latest-gas-metadata-off";
-const VYPER_GAS_VENOM_CODEGEN: &str = "vyper-latest-gas-venom-metadata-off";
-const VYPER_CODESIZE_CODEGEN: &str = "vyper-latest-codesize-metadata-off";
-const VYPER_CODESIZE_VENOM_CODEGEN: &str = "vyper-latest-codesize-venom-metadata-off";
-const VYPER_NONE_CODEGEN: &str = "vyper-latest-none-metadata-off";
-const VYPER_NONE_VENOM_CODEGEN: &str = "vyper-latest-none-venom-metadata-off";
-const VYPER_ALPHA_GAS_CODEGEN: &str = "vyper-0.5.0a1-gas-metadata-off";
-const VYPER_ALPHA_GAS_VENOM_CODEGEN: &str = "vyper-0.5.0a1-gas-venom-metadata-off";
-const VYPER_ALPHA_CODESIZE_CODEGEN: &str = "vyper-0.5.0a1-codesize-metadata-off";
-const VYPER_ALPHA_CODESIZE_VENOM_CODEGEN: &str = "vyper-0.5.0a1-codesize-venom-metadata-off";
-const VYPER_ALPHA_NONE_CODEGEN: &str = "vyper-0.5.0a1-none-metadata-off";
-const VYPER_ALPHA_NONE_VENOM_CODEGEN: &str = "vyper-0.5.0a1-none-venom-metadata-off";
+const SOL_CODEGEN_BASELINE: &str = "solc-latest-legacy-runs200";
+const SOL_NOOPT_CODEGEN: &str = "solc-latest-noopt";
+const SOL_VIAIR_CODEGEN: &str = "solc-latest-viair-runs200";
+const VYPER_GAS_CODEGEN: &str = "vyper-latest-gas";
+const VYPER_GAS_VENOM_CODEGEN: &str = "vyper-latest-gas-venom";
+const VYPER_CODESIZE_CODEGEN: &str = "vyper-latest-codesize";
+const VYPER_CODESIZE_VENOM_CODEGEN: &str = "vyper-latest-codesize-venom";
+const VYPER_NONE_CODEGEN: &str = "vyper-latest-none";
+const VYPER_NONE_VENOM_CODEGEN: &str = "vyper-latest-none-venom";
+const VYPER_ALPHA_GAS_CODEGEN: &str = "vyper-0.5.0a1-gas";
+const VYPER_ALPHA_GAS_VENOM_CODEGEN: &str = "vyper-0.5.0a1-gas-venom";
+const VYPER_ALPHA_CODESIZE_CODEGEN: &str = "vyper-0.5.0a1-codesize";
+const VYPER_ALPHA_CODESIZE_VENOM_CODEGEN: &str = "vyper-0.5.0a1-codesize-venom";
+const VYPER_ALPHA_NONE_CODEGEN: &str = "vyper-0.5.0a1-none";
+const VYPER_ALPHA_NONE_VENOM_CODEGEN: &str = "vyper-0.5.0a1-none-venom";
 const PRIMARY_CODEGEN_PROFILES: [&str; 14] = [
     SOL_CODEGEN_BASELINE,
     SOL_VIAIR_CODEGEN,
@@ -1120,7 +1120,7 @@ fn render_fixed_suite_brief(rows: &[serde_json::Value]) -> String {
     html.push_str(
         "<details><summary>Show cross-language ratios against Solidity baseline</summary>",
     );
-    html.push_str("<p class=\"small muted\">This drilldown is intentionally labelled cross-language. It compares matched fixed-suite scenario rows against the Solidity legacy no-metadata baseline and should not be aggregated into a language score.</p>");
+    html.push_str("<p class=\"small muted\">This drilldown is intentionally labelled cross-language. It compares matched fixed-suite scenario rows against the Solidity legacy baseline and should not be aggregated into a language score.</p>");
     html.push_str(&render_delta_table(
         "Largest cross-language fixed-suite deltas",
         &cross_language,
@@ -1141,7 +1141,9 @@ fn render_profile_brief(rows: &[serde_json::Value]) -> String {
         rows,
         Some(&PRIMARY_CODEGEN_PROFILES),
     ));
-    html.push_str("<details><summary>Show all no-metadata profile tradeoffs, including noopt diagnostics</summary>");
+    html.push_str(
+        "<details><summary>Show all profile tradeoffs, including noopt diagnostics</summary>",
+    );
     html.push_str(&render_fixed_profile_tradeoffs(rows));
     html.push_str("</details>");
     html
@@ -1389,7 +1391,7 @@ fn render_fixed_scenario_ratios(rows: &[serde_json::Value]) -> String {
     let mut html = String::new();
     html.push_str("<h3>Scenario Gas Ratios</h3>");
     html.push_str(&format!(
-        "<p class=\"small muted\">Ratios compare the same benchmark, scenario, state profile, language, and no-metadata mode against that language's baseline: Solidity <span class=\"mono\">{}</span>, Vyper <span class=\"mono\">{}</span>. Lower is less harness call gas.</p>",
+        "<p class=\"small muted\">Ratios compare the same benchmark, scenario, state profile, and language against that language's baseline: Solidity <span class=\"mono\">{}</span>, Vyper <span class=\"mono\">{}</span>. Lower is less harness call gas.</p>",
         escape(SOL_CODEGEN_BASELINE),
         escape(VYPER_GAS_CODEGEN)
     ));
@@ -1606,7 +1608,7 @@ fn render_profile_tradeoff_table(
     let aggregates = fixed_profile_tradeoff_aggregates(rows);
     let mut html = String::new();
     html.push_str(&format!(
-        "<p class=\"small muted\">Geometric mean ratios over fixed-suite no-metadata rows. Solidity profiles are relative to <span class=\"mono\">{}</span>; Vyper profiles are relative to <span class=\"mono\">{}</span>. Runtime gas is scenario-level; bytecode, deploy, and compile metrics are artifact-level.</p>",
+        "<p class=\"small muted\">Geometric mean ratios over fixed-suite rows. Solidity profiles are relative to <span class=\"mono\">{}</span>; Vyper profiles are relative to <span class=\"mono\">{}</span>. Runtime gas is scenario-level; bytecode, deploy, and compile metrics are artifact-level.</p>",
         escape(SOL_CODEGEN_BASELINE),
         escape(VYPER_GAS_CODEGEN)
     ));
@@ -2227,19 +2229,13 @@ fn render_scale_family_summary(rows: &[serde_json::Value]) -> String {
         let family = str_at(row, "/family").unwrap_or_default();
         let n = u64_at(row, "/parameter_value");
         let profile_id = str_at(row, "/profile_id").unwrap_or_default();
-        if !profile_id.ends_with("metadata-off") {
-            continue;
-        }
         let entry = groups.entry(family).or_default();
         entry.n_values.insert(n);
-        let is_metadata_off = str_at(row, "/gas/metadata_mode").as_deref() == Some("off");
-        if is_metadata_off {
-            entry.profiles.insert(profile_id.clone());
-        }
+        entry.profiles.insert(profile_id.clone());
         if str_at(row, "/status").as_deref() == Some("compile_error") {
             entry.compile_failures += 1;
             entry.failure_profiles.insert(profile_short(&profile_id));
-        } else if is_metadata_off {
+        } else {
             entry.successful_points.insert(format!("{n}\0{profile_id}"));
             entry.max_runtime_bytes = entry
                 .max_runtime_bytes
@@ -2260,7 +2256,7 @@ fn render_scale_family_summary(rows: &[serde_json::Value]) -> String {
     let mut html = String::new();
     html.push_str("<h3>Scale Family Summary</h3>");
     html.push_str("<p class=\"small muted\">One row per generated family. Detailed N/profile rows are intentionally left to the JSON export; curves and failure surface above are the primary scale reading path.</p>");
-    html.push_str("<table><thead><tr><th>Family</th><th>N Range</th><th>No-Metadata Profiles</th><th>Successful N/Profile Points</th><th>Compile Failures</th><th>Failure Profiles</th><th>Max Runtime Bytes</th><th>Max Harness Call Gas</th><th>Max Compile ms</th></tr></thead><tbody>");
+    html.push_str("<table><thead><tr><th>Family</th><th>N Range</th><th>Profiles</th><th>Successful N/Profile Points</th><th>Compile Failures</th><th>Failure Profiles</th><th>Max Runtime Bytes</th><th>Max Harness Call Gas</th><th>Max Compile ms</th></tr></thead><tbody>");
     for (family, aggregate) in groups {
         let min_n = aggregate
             .n_values
@@ -2514,9 +2510,6 @@ fn render_scale_failure_surface(rows: &[serde_json::Value]) -> String {
             continue;
         }
         let profile = str_at(row, "/profile_id").unwrap_or_default();
-        if !profile.ends_with("metadata-off") {
-            continue;
-        }
         profiles.insert(profile.clone());
         let family = str_at(row, "/family").unwrap_or_default();
         let value = u64_at(row, "/parameter_value");
@@ -2539,7 +2532,7 @@ fn render_scale_failure_surface(rows: &[serde_json::Value]) -> String {
     }
     let mut html = String::new();
     html.push_str("<h3>Compile Failure Surface</h3>");
-    html.push_str("<p class=\"small muted\">No-metadata scale family/N/profile tiles. The visible failure boundary matters more than any average failure count.</p>");
+    html.push_str("<p class=\"small muted\">Scale family/N/profile tiles. The visible failure boundary matters more than any average failure count.</p>");
     html.push_str("<div class=\"chart\"><table><thead><tr><th>Family / N</th>");
     for profile in &profiles {
         html.push_str("<th>");
@@ -3022,8 +3015,7 @@ fn baseline_profile_for_language(language: &str) -> Option<&'static str> {
 }
 
 fn profile_color(profile: &str) -> &'static str {
-    let base = profile_without_metadata(profile);
-    match base.as_str() {
+    match profile {
         "solc-latest-legacy-runs200" => "#2563eb",
         "solc-latest-viair-runs200" => "#7c3aed",
         "solc-latest-noopt" => "#b91c1c",
@@ -3176,14 +3168,6 @@ fn bar_value(value: f64, max: f64, label: &str) -> String {
     )
 }
 
-fn profile_without_metadata(profile: &str) -> String {
-    profile
-        .strip_suffix("-metadata-on")
-        .or_else(|| profile.strip_suffix("-metadata-off"))
-        .unwrap_or(profile)
-        .to_string()
-}
-
 fn short_error(row: &serde_json::Value) -> String {
     let error = str_at(row, "/compile/error").unwrap_or_default();
     if error.contains("Stack too deep") {
@@ -3327,8 +3311,7 @@ fn compile_failure_reason_label(rows: &[serde_json::Value]) -> String {
 }
 
 fn profile_short(profile: &str) -> String {
-    let base = profile_without_metadata(profile);
-    let label = match base.as_str() {
+    let label = match profile {
         "solc-latest-legacy-runs200" => "solc legacy",
         "solc-latest-viair-runs200" => "solc viaIR",
         "solc-latest-noopt" => "solc noopt",
