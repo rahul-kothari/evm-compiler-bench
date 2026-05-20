@@ -44,6 +44,7 @@ pub struct ReportPaths {
     pub normalized_results: PathBuf,
     pub run_manifest: PathBuf,
     pub html_report: PathBuf,
+    pub methodology_report: PathBuf,
 }
 
 #[derive(Debug, Default)]
@@ -207,11 +208,17 @@ pub fn write_outputs(
 
     let html_report = reports_dir.join("index.html");
     fs::write(&html_report, render_html(&rows, toolchains, &manifest)?)?;
+    let methodology_report = reports_dir.join("methodology.html");
+    fs::write(
+        &methodology_report,
+        render_methodology_html(&rows, toolchains, &manifest)?,
+    )?;
 
     Ok(ReportPaths {
         normalized_results,
         run_manifest,
         html_report,
+        methodology_report,
     })
 }
 
@@ -641,11 +648,7 @@ fn render_html(
     html.push_str("<h1>EVM Compiler Bench</h1>");
     html.push_str(&render_run_identity(toolchains, manifest, &summary));
     html.push_str(&render_overview(rows, &summary));
-    html.push_str("<nav><a href=\"#validity\">Validity</a><a href=\"#reliability\">Reliability</a><a href=\"#fixed\">Fixed Suite</a><a href=\"#scale\">Scale Suite</a><a href=\"#real\">Real-Derived</a><a href=\"#profiles\">Profiles</a><a href=\"#benchmarks\">Benchmarks</a><a href=\"#compile\">Compile Resources</a><a href=\"#methodology\">Methodology</a><a href=\"#raw\">Data Export</a></nav>");
-
-    html.push_str("<section id=\"validity\"><h2>Correctness And Measurement Scope</h2>");
-    html.push_str(&render_validity_brief(rows));
-    html.push_str("</section>");
+    html.push_str("<nav><a href=\"#reliability\">Reliability</a><a href=\"#fixed\">Fixed Suite</a><a href=\"#scale\">Scale Suite</a><a href=\"#real\">Real-Derived</a><a href=\"#profiles\">Profiles</a><a href=\"#benchmarks\">Benchmarks</a><a href=\"#compile\">Compile Resources</a><a href=\"methodology.html\">Methodology</a><a href=\"#raw\">Data Export</a></nav>");
 
     html.push_str("<section id=\"reliability\"><h2>Compile Reliability</h2>");
     html.push_str(&render_reliability_brief(rows));
@@ -675,11 +678,47 @@ fn render_html(
     html.push_str(&render_compile_brief(rows));
     html.push_str("</section>");
 
-    html.push_str("<section id=\"methodology\"><h2>Methodology And Limitations</h2>");
+    html.push_str("<section id=\"raw\"><h2>Data Export</h2>");
+    html.push_str(&render_data_export(rows));
+    html.push_str("</section></main></body></html>");
+    Ok(html)
+}
+
+fn render_methodology_html(
+    rows: &[serde_json::Value],
+    toolchains: &Toolchains,
+    manifest: &serde_json::Value,
+) -> Result<String> {
+    let summary = ReportSummary::from_rows(rows);
+    let mut html = String::new();
+    html.push_str("<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><title>EVM Compiler Bench Methodology</title>");
+    html.push_str("<style>");
+    html.push_str(":root{color-scheme:light;--bg:#f6f7f8;--panel:#fff;--ink:#172033;--muted:#657083;--line:#d9dee7;--soft:#eef2f7;--blue:#2563eb;--green:#0f8a5f;--amber:#b45309;--red:#b91c1c}");
+    html.push_str("*{box-sizing:border-box}body{font-family:Inter,system-ui,-apple-system,sans-serif;margin:0;background:var(--bg);color:var(--ink)}main{max-width:1180px;margin:0 auto;padding:28px 24px 56px}h1{font-size:32px;margin:0 0 6px}h2{font-size:21px;margin:34px 0 12px}h3{font-size:15px;margin:18px 0 8px}p{line-height:1.45}.meta{color:var(--muted);margin-bottom:16px}.lede{font-size:16px;max-width:920px;margin:8px 0;color:#273449}");
+    html.push_str("nav{display:flex;flex-wrap:wrap;gap:8px;margin:18px 0 4px}nav a{font-size:12px;text-decoration:none;color:#1d4ed8;background:#e8eefc;border:1px solid #c7d2fe;border-radius:999px;padding:6px 10px}.grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}.two{display:grid;grid-template-columns:1fr 1fr;gap:14px}.card,.scope-card,.callout{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:14px}.scope-cards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-top:12px}.scope-card{background:#f8fafc}.scope-card strong{display:block;margin-bottom:4px}");
+    html.push_str(".k{font-size:12px;color:var(--muted);line-height:1.3}.v{font-size:23px;font-weight:700;margin-top:3px}.subv{font-size:12px;color:var(--muted);margin-top:3px}.small{font-size:11px;line-height:1.35}.muted{color:var(--muted)}.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace}.section-lede{font-size:13px;color:var(--muted);max-width:900px}.answer{font-size:18px;font-weight:700;margin:0 0 6px}.pill{display:inline-flex;align-items:center;border-radius:999px;padding:3px 8px;font-size:11px;border:1px solid var(--line);background:#f9fafb;white-space:nowrap}.info{background:#eff6ff;border-color:#bfdbfe;color:#1e3a8a}.critical{background:#fff7ed;border-color:#fb923c;color:#7c2d12}");
+    html.push_str("table{width:100%;border-collapse:collapse;background:var(--panel);border:1px solid var(--line);border-radius:8px;overflow:hidden}th,td{font-size:12px;text-align:left;padding:8px 10px;border-bottom:1px solid #edf0f4;vertical-align:top}th{background:#eef1f5;color:#2c3444}.notice{background:#fff7ed;border:1px solid #fdba74;border-radius:8px;padding:12px;margin:12px 0;color:#7c2d12}.bar{height:9px;background:#e5e7eb;border-radius:999px;min-width:92px;position:relative;overflow:hidden}.bar span{display:block;height:100%;border-radius:999px;background:var(--blue)}.bar.good span{background:var(--green)}.bar.warn span{background:var(--amber)}.bar.fail span{background:var(--red)}.ratio{display:grid;grid-template-columns:58px 1fr;gap:8px;align-items:center;min-width:160px}");
+    html.push_str(".heat-ok{background:#dcfce7;color:#166534;text-align:center}.heat-fail{background:#fee2e2;color:#991b1b;text-align:center}.heat-na{background:#f4f4f5;color:#71717a;text-align:center}.heat-warn{background:#fef3c7;color:#92400e;text-align:center}.heat-info{background:#dbeafe;color:#1e40af;text-align:center}.legend{display:flex;flex-wrap:wrap;gap:12px;align-items:center;font-size:12px;color:var(--muted);margin:8px 0}.dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:4px}.strip{display:flex;height:22px;border-radius:999px;overflow:hidden;border:1px solid var(--line);background:#eef2f7;margin:8px 0}.seg{display:flex;align-items:center;justify-content:center;min-width:2px;color:#fff;font-size:10px;white-space:nowrap}.seg-fuzz{background:#0f8a5f}.seg-baseline{background:#2563eb}.seg-status{background:#b45309}.seg-fail{background:#b91c1c}.seg-na{background:#6b7280}details{margin-top:12px}details>summary{cursor:pointer;font-weight:700;margin:12px 0}pre{white-space:pre-wrap;overflow:auto;background:#111827;color:#e5e7eb;border-radius:8px;padding:12px}@media(max-width:900px){.grid,.two,.scope-cards{grid-template-columns:1fr}main{padding:20px 14px}.v{font-size:20px}}");
+    html.push_str("</style></head><body><main>");
+    html.push_str("<h1>EVM Compiler Bench Methodology</h1>");
+    html.push_str(&render_run_identity(toolchains, manifest, &summary));
+    html.push_str("<p class=\"lede\">This companion file carries the scope, correctness, measurement, and reproducibility details that would otherwise crowd the findings report.</p>");
+    html.push_str("<nav><a href=\"index.html\">Findings Report</a><a href=\"#scope\">Scope</a><a href=\"#correctness\">Correctness</a><a href=\"#environment\">Environment</a><a href=\"#data\">Data Export</a></nav>");
+
+    html.push_str("<section id=\"scope\"><h2>Scope Summary</h2>");
+    html.push_str(&render_scope_cards(rows, &summary));
+    html.push_str(&render_coverage_strip(rows));
+    html.push_str("</section>");
+
+    html.push_str("<section id=\"correctness\"><h2>Correctness And Measurement Scope</h2>");
+    html.push_str(&render_validity_brief(rows));
+    html.push_str("</section>");
+
+    html.push_str("<section id=\"environment\"><h2>Environment And Settings</h2>");
     html.push_str(&render_methodology(rows, toolchains, manifest));
     html.push_str("</section>");
 
-    html.push_str("<section id=\"raw\"><h2>Data Export</h2>");
+    html.push_str("<section id=\"data\"><h2>Data Export</h2>");
     html.push_str(&render_data_export(rows));
     html.push_str("</section></main></body></html>");
     Ok(html)
@@ -716,17 +755,14 @@ fn render_run_identity(
 fn render_overview(rows: &[serde_json::Value], summary: &ReportSummary) -> String {
     let mut html = String::new();
     html.push_str("<section class=\"hero brief\"><div>");
-    html.push_str("<div class=\"pill info\">Eval brief</div>");
-    html.push_str("<p class=\"lede\">This report is a validity-bounded compiler-profile evaluation. It varies optimizer/profile, Vyper's experimental Venom codegen path, and generated scale size across pinned solc, Vyper, and Prague EVM settings. Compiler metadata is disabled for the active comparison matrix. It is not a global language ranking and it is not production transaction gas.</p>");
-    html.push_str(&render_scope_cards(rows, summary));
-    html.push_str(&render_coverage_strip(rows));
+    html.push_str("<div class=\"pill info\">Findings brief</div>");
+    html.push_str("<p class=\"lede\">This run compares pinned compiler profiles across fixed matched workloads, generated scale studies, and real-derived benchmark models. The main report leads with the largest tradeoffs; methodology, correctness coverage, profile settings, and scope details live in <a href=\"methodology.html\">methodology.html</a>.</p>");
     html.push_str(&render_signature_findings(rows, summary));
     html.push_str("</div><div class=\"card\">");
-    html.push_str(
-        "<div class=\"k\">Gas scope</div><div class=\"v\">Harness call, not transaction gas</div>",
-    );
-    html.push_str("<div class=\"subv\">The headline gas number is the Foundry internal target call. End-user cost also includes intrinsic gas and calldata pricing; the schema keeps <span class=\"mono\">total_tx_gas</span> null until a top-level transaction runner exists.</div>");
-    html.push_str("<div class=\"notice small critical\"><strong>Read before comparing:</strong> baseline ratios are within a language. Solidity rows use solc legacy no-metadata as their baseline; Vyper rows use Vyper gas no-metadata. Cross-language rows are shown side by side, not collapsed into a score.</div>");
+    html.push_str("<h3>Run basis</h3>");
+    html.push_str("<p class=\"small muted\">No-metadata artifacts, Prague EVM, latest pinned solc/Vyper, Foundry internal-call gas, and per-language baseline ratios.</p>");
+    html.push_str("<p class=\"small muted\">The full method, correctness heatmap, profile settings JSON, and limitations are split out so this page can stay focused on comparisons.</p>");
+    html.push_str("<p><a class=\"pill info\" href=\"methodology.html\">Open methodology</a></p>");
     html.push_str("</div></section>");
 
     html.push_str("<section class=\"grid\">");
@@ -780,23 +816,19 @@ fn render_overview(rows: &[serde_json::Value], summary: &ReportSummary) -> Strin
         "successful measured scenario rows",
     ));
     html.push_str(&metric_card(
-        "Scenario status",
+        "Fixed fuzz+property",
         &format!(
-            "{} pass / {} fail",
-            summary.scenario_status_pass, summary.scenario_status_fail
+            "{}/{}",
+            behavior_fuzz_benchmark_count(rows, "fixed"),
+            summary.fixed_benchmarks.len()
         ),
-        "success or revert matched expectation",
+        "benchmarks with strongest behavioral checks",
     ));
     html.push_str(&metric_card(
-        "Golden/log checks",
-        &format!("{} / {}", summary.golden_rows, summary.log_rows),
-        "exact golden behavior / log checks currently run",
+        "Methodology",
+        "separate file",
+        "correctness, scope, settings, and limitations",
     ));
-    html.push_str("</section>");
-
-    html.push_str("<section class=\"two\">");
-    html.push_str("<div class=\"card\"><h3>What can be safely inferred?</h3><p class=\"small muted\">Fixed rows support matched-workload compiler/profile comparisons. Scale rows support compiler stress and growth-shape claims. Real-derived rows support scoped model hot-path claims only after reading their exclusions and mock assumptions.</p></div>");
-    html.push_str("<div class=\"card\"><h3>Where are the tradeoffs?</h3><p class=\"small muted\">Read reliability before gas, compare ratios only within the same benchmark, scenario, state profile, and language baseline, and treat bytecode, deployment, runtime gas, compile time, and RSS as separate dimensions.</p></div>");
     html.push_str("</section>");
     html
 }

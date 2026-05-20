@@ -94,6 +94,10 @@ fn main() -> Result<()> {
             println!("run manifest: {}", report.run_manifest.display());
             println!("html report: {}", report.html_report.display());
             println!(
+                "methodology report: {}",
+                report.methodology_report.display()
+            );
+            println!(
                 "compiled {} artifacts with {} failures across {} profiles for EVM {}",
                 compiled.artifacts.len(),
                 compiled.failures.len(),
