@@ -996,6 +996,7 @@ fn render_version_axis(rows: &[serde_json::Value]) -> String {
             "compiler": compiler_family(profile),
             "compiler_line": compiler_line(profile),
             "config": version_axis_config(profile).unwrap_or_else(|| "other".to_string()),
+            "series": version_axis_series(profile),
             "version": compiler_version_label(profile),
             "version_order": compiler_version_order(profile),
             "gas_ratio": gas_ratio,
@@ -1031,10 +1032,7 @@ fn render_version_axis(rows: &[serde_json::Value]) -> String {
                     "field": "version_order",
                     "type": "quantitative",
                     "title": "compiler version",
-                    "axis": {
-                        "values": [216, 310, 400, 430, 500, 830, 835],
-                        "labelExpr": "datum.value == 216 ? '0.2.16' : datum.value == 310 ? '0.3.10' : datum.value == 400 ? '0.4.0' : datum.value == 430 ? '0.4.x' : datum.value == 500 ? '0.5 alpha' : datum.value == 830 ? '0.8.30' : datum.value == 835 ? 'latest' : datum.value"
-                    }
+                    "axis": version_axis_axis()
                 },
                 "y": {
                     "field": "gas_ratio",
@@ -1043,21 +1041,8 @@ fn render_version_axis(rows: &[serde_json::Value]) -> String {
                     "scale": { "zero": false },
                     "axis": { "grid": true, "format": ".2f" }
                 },
-                "color": {
-                    "field": "compiler_line",
-                    "type": "nominal",
-                    "scale": {
-                        "domain": ["solc", "vyper"],
-                        "range": ["#2563eb", "#16a34a"]
-                    },
-                    "legend": { "title": "Compiler", "orient": "bottom" }
-                },
-                "strokeDash": {
-                    "field": "config",
-                    "type": "nominal",
-                    "legend": { "title": "Config", "orient": "bottom" }
-                },
-                "detail": { "field": "profile_id", "type": "nominal" },
+                "color": version_axis_color_encoding(),
+                "detail": { "field": "series", "type": "nominal" },
                 "tooltip": [
                     { "field": "suite", "type": "nominal", "title": "Suite" },
                     { "field": "compiler", "type": "nominal", "title": "Compiler" },
@@ -1075,10 +1060,186 @@ fn render_version_axis(rows: &[serde_json::Value]) -> String {
 
     let mut html = String::new();
     html.push_str("<p class=\"answer\">How do profiles move across compiler versions?</p>");
-    html.push_str("<p class=\"section-lede\">This view compares compiler versions against the latest release on the same compiler line and config where a matching baseline exists. Historical Vyper profiles use explicit source variants and older EVM targets when the old compiler cannot parse or target the latest surface.</p>");
+    html.push_str("<p class=\"section-lede\">The first chart traces a single benchmark/scenario across compiler versions. Pick a scenario and metric, then read left-to-right within each compiler panel. Historical Solidity and Vyper profiles use explicit source variants and older EVM targets when the old compiler cannot parse or target the latest surface.</p>");
+    html.push_str(&render_version_axis_trace_chart(rows));
+    html.push_str("<h3>Suite-level ratio summary</h3>");
+    html.push_str("<p class=\"small muted\">This aggregate chart compares each compiler version against the latest release on the same compiler line and config where a matching baseline exists. It is a navigation aid, not a global score.</p>");
     html.push_str(&vega_chart("compiler-version-axis-chart", &spec));
     html.push_str(&render_version_axis_table(&aggregates));
     html
+}
+
+fn render_version_axis_trace_chart(rows: &[serde_json::Value]) -> String {
+    let mut chart_values = Vec::new();
+    let mut benchmark_options = BTreeSet::new();
+    let mut seen_artifact_metric_rows = BTreeSet::new();
+    for row in rows {
+        if str_at(row, "/status").as_deref() != Some("ok")
+            || str_at(row, "/gas/metadata_mode").as_deref() != Some("off")
+        {
+            continue;
+        }
+        let profile = str_at(row, "/profile_id").unwrap_or_default();
+        let Some(config) = version_axis_config(&profile) else {
+            continue;
+        };
+        let suite = str_at(row, "/suite").unwrap_or_default();
+        let benchmark_scenario = format!("{suite} / {}", scenario_label(row));
+        benchmark_options.insert(benchmark_scenario.clone());
+        let base = json!({
+            "suite": suite,
+            "benchmark": str_at(row, "/benchmark_id").unwrap_or_default(),
+            "scenario": str_at(row, "/gas/scenario").unwrap_or_default(),
+            "state": str_at(row, "/gas/state_access_profile").unwrap_or_default(),
+            "benchmark_scenario": benchmark_scenario,
+            "profile": profile_short(&profile),
+            "profile_id": profile,
+            "compiler": compiler_family(&profile),
+            "compiler_line": compiler_line(&profile),
+            "config": config,
+            "series": version_axis_series(&profile),
+            "version": compiler_version_label(&profile),
+            "version_order": compiler_version_order(&profile),
+            "evm": str_at(row, "/compiler/settings/evmVersion").unwrap_or_default(),
+            "source_variant": str_at(row, "/compiler/settings/sourceVariant").unwrap_or_default(),
+        });
+        push_version_axis_metric(
+            &mut chart_values,
+            &base,
+            "harness call gas",
+            u64_at(row, "/gas/harness_call_gas") as f64,
+        );
+        push_version_axis_metric(
+            &mut chart_values,
+            &base,
+            "internal create gas",
+            u64_at(row, "/gas/internal_create_gas") as f64,
+        );
+        let artifact_metric_key = format!(
+            "{}\0{}\0{}",
+            artifact_key_from_row(row),
+            str_at(row, "/gas/scenario").unwrap_or_default(),
+            str_at(row, "/gas/state_access_profile").unwrap_or_default()
+        );
+        if seen_artifact_metric_rows.insert(artifact_metric_key) {
+            push_version_axis_metric(
+                &mut chart_values,
+                &base,
+                "runtime bytes stripped",
+                u64_at(row, "/bytecode/runtime_bytes_stripped") as f64,
+            );
+            push_version_axis_metric(
+                &mut chart_values,
+                &base,
+                "compile wall ms",
+                mean_f64_array_at(row, "/compile/wall_ms_samples"),
+            );
+        }
+    }
+    if chart_values.is_empty() {
+        return "<p class=\"section-lede\">No successful metadata-off scenario rows are available for per-benchmark version traces.</p>".to_string();
+    }
+    let options = benchmark_options.into_iter().collect::<Vec<_>>();
+    let default_benchmark = options.first().cloned().unwrap_or_default();
+    let spec = json!({
+        "$schema": "https://vega.github.io/schema/vega-lite/v6.json",
+        "data": { "values": chart_values },
+        "params": [
+            {
+                "name": "selectedBenchmarkScenario",
+                "value": default_benchmark,
+                "bind": {
+                    "input": "select",
+                    "name": "benchmark / scenario ",
+                    "options": options
+                }
+            },
+            {
+                "name": "selectedMetric",
+                "value": "harness call gas",
+                "bind": {
+                    "input": "select",
+                    "name": "metric ",
+                    "options": [
+                        "harness call gas",
+                        "internal create gas",
+                        "runtime bytes stripped",
+                        "compile wall ms"
+                    ]
+                }
+            }
+        ],
+        "transform": [
+            { "filter": "datum.benchmark_scenario == selectedBenchmarkScenario && datum.metric == selectedMetric" }
+        ],
+        "facet": {
+            "field": "compiler_line",
+            "type": "nominal",
+            "columns": 2,
+            "title": null,
+            "header": {
+                "labelFontSize": 12,
+                "labelColor": "#374151",
+                "labelFontWeight": "bold"
+            }
+        },
+        "spec": {
+            "width": 430,
+            "height": 270,
+            "mark": {
+                "type": "line",
+                "point": { "filled": true, "size": 56 },
+                "strokeWidth": 2
+            },
+            "encoding": {
+                "x": {
+                    "field": "version_order",
+                    "type": "quantitative",
+                    "title": "compiler version",
+                    "axis": version_axis_axis()
+                },
+                "y": {
+                    "field": "value",
+                    "type": "quantitative",
+                    "title": "selected metric",
+                    "scale": { "zero": false },
+                    "axis": { "grid": true, "format": "~s" }
+                },
+                "color": version_axis_color_encoding(),
+                "detail": { "field": "series", "type": "nominal" },
+                "tooltip": [
+                    { "field": "benchmark_scenario", "type": "nominal", "title": "Benchmark / scenario" },
+                    { "field": "metric", "type": "nominal", "title": "Metric" },
+                    { "field": "value", "type": "quantitative", "title": "Value", "format": ",.2f" },
+                    { "field": "profile_id", "type": "nominal", "title": "Profile" },
+                    { "field": "version", "type": "nominal", "title": "Version" },
+                    { "field": "config", "type": "nominal", "title": "Config" },
+                    { "field": "evm", "type": "nominal", "title": "EVM target" },
+                    { "field": "source_variant", "type": "nominal", "title": "Source variant" }
+                ]
+            }
+        },
+        "resolve": { "scale": { "x": "independent", "y": "shared" } },
+        "config": vega_chart_config()
+    });
+    vega_chart("compiler-version-trace-chart", &spec)
+}
+
+fn push_version_axis_metric(
+    values: &mut Vec<serde_json::Value>,
+    base: &serde_json::Value,
+    metric: &str,
+    value: f64,
+) {
+    if value <= 0.0 {
+        return;
+    }
+    let mut row = base.clone();
+    if let Some(object) = row.as_object_mut() {
+        object.insert("metric".to_string(), json!(metric));
+        object.insert("value".to_string(), json!(value));
+    }
+    values.push(row);
 }
 
 fn version_axis_aggregates(
@@ -1301,12 +1462,70 @@ fn compiler_version_order(profile: &str) -> u64 {
         "latest" if profile.starts_with("solc-") => 835,
         "latest" if profile.starts_with("vyper-") => 430,
         "0.8.30" => 830,
+        "0.8.20" => 820,
+        "0.8.13" => 813,
+        "0.8.0" => 800,
+        "0.7.6" => 706,
+        "0.6.12" => 612,
+        "0.5.17" => 517,
         "0.5.0a1" => 500,
+        "0.4.26" => 426,
         "0.4.0" => 400,
         "0.3.10" => 310,
         "0.2.16" => 216,
         _ => 0,
     }
+}
+
+fn version_axis_axis() -> serde_json::Value {
+    json!({
+        "values": [216, 310, 400, 426, 430, 500, 517, 612, 706, 800, 813, 820, 830, 835],
+        "labelExpr": "datum.value == 216 ? 'vy 0.2.16' : datum.value == 310 ? 'vy 0.3.10' : datum.value == 400 ? 'vy 0.4.0' : datum.value == 426 ? 'sol 0.4.26' : datum.value == 430 ? 'vy latest' : datum.value == 500 ? 'vy 0.5a1' : datum.value == 517 ? 'sol 0.5.17' : datum.value == 612 ? 'sol 0.6.12' : datum.value == 706 ? 'sol 0.7.6' : datum.value == 800 ? 'sol 0.8.0' : datum.value == 813 ? 'sol 0.8.13' : datum.value == 820 ? 'sol 0.8.20' : datum.value == 830 ? 'sol 0.8.30' : datum.value == 835 ? 'sol latest' : datum.value"
+    })
+}
+
+fn version_axis_series(profile: &str) -> String {
+    let line = compiler_line(profile);
+    let config = version_axis_config(profile).unwrap_or_else(|| "other".to_string());
+    format!("{line} {config}")
+}
+
+fn version_axis_color_encoding() -> serde_json::Value {
+    json!({
+        "field": "series",
+        "type": "nominal",
+        "scale": {
+            "domain": [
+                "solc legacy runs=200",
+                "solc viaIR runs=200",
+                "solc no optimizer",
+                "vyper default",
+                "vyper none",
+                "vyper gas",
+                "vyper codesize",
+                "vyper none venom",
+                "vyper gas venom",
+                "vyper codesize venom"
+            ],
+            "range": [
+                "#2563eb",
+                "#1d4ed8",
+                "#93c5fd",
+                "#6b7280",
+                "#86efac",
+                "#16a34a",
+                "#166534",
+                "#4ade80",
+                "#15803d",
+                "#14532d"
+            ]
+        },
+        "legend": {
+            "title": "Compiler config",
+            "orient": "bottom",
+            "columns": 3
+        }
+    })
 }
 
 #[derive(Debug, Default)]
@@ -3760,6 +3979,20 @@ fn compiler_family(profile: &str) -> &'static str {
     if profile.starts_with("solc-") {
         if profile.starts_with("solc-0.8.30-") {
             "solc 0.8.30"
+        } else if profile.starts_with("solc-0.8.20-") {
+            "solc 0.8.20"
+        } else if profile.starts_with("solc-0.8.13-") {
+            "solc 0.8.13"
+        } else if profile.starts_with("solc-0.8.0-") {
+            "solc 0.8.0"
+        } else if profile.starts_with("solc-0.7.6-") {
+            "solc 0.7.6"
+        } else if profile.starts_with("solc-0.6.12-") {
+            "solc 0.6.12"
+        } else if profile.starts_with("solc-0.5.17-") {
+            "solc 0.5.17"
+        } else if profile.starts_with("solc-0.4.26-") {
+            "solc 0.4.26"
         } else {
             "solc latest"
         }
