@@ -1,29 +1,61 @@
 use crate::{
+    cache::{self, CacheLookup},
     models::{
-        CallSpec, CompileSet, CompiledArtifact, GasRecord, PropertySpec, RandomizedSpec, Scenario,
+        CacheInfo, CallSpec, CompileSet, CompiledArtifact, GasRecord, PropertySpec, RandomizedSpec,
+        Scenario,
     },
     scenarios::ScenarioCatalog,
-    util::{ensure_dir, require_success, run_measured},
+    util::{ensure_dir, require_success, run_measured, sha256_bytes},
 };
 use anyhow::{Context, Result, bail};
+use serde_json::json;
 use std::{collections::BTreeMap, fs, path::Path, process::Command};
 
 const GAS_JSONL: &str = "../results/raw/foundry-gas.jsonl";
 const FAILURE_DIR: &str = "../results/raw/failures";
 const SOL_BASELINE: &str = "solc-latest-legacy-runs200";
 const VYPER_BASELINE: &str = "vyper-latest-gas";
+const GAS_CACHE_SCHEMA: &str = "gas-v1";
 
 pub fn run_foundry(
     root: &Path,
     evm_version: &str,
     compiled: &CompileSet,
     scenarios: &ScenarioCatalog,
+    use_cache: bool,
 ) -> Result<Vec<GasRecord>> {
     ensure_dir(&root.join("results/raw"))?;
     clear_failure_dir(root)?;
     if compiled.artifacts.is_empty() {
         fs::write(root.join("results/raw/foundry-gas.jsonl"), "")?;
         return Ok(Vec::new());
+    }
+    let expected_cache = gas_cache_inputs(root, evm_version, compiled, scenarios, use_cache)?;
+    if use_cache {
+        let mut cached = Vec::with_capacity(expected_cache.len());
+        let mut all_hit = true;
+        for input in expected_cache.values() {
+            match cache::lookup::<GasRecord>(
+                root,
+                "gas",
+                &input.logical_id,
+                &input.key,
+                &input.fingerprint,
+            )? {
+                CacheLookup::Hit(mut record) => {
+                    record.cache = CacheInfo::hit(&input.key);
+                    cached.push(record);
+                }
+                CacheLookup::Miss(_) => {
+                    all_hit = false;
+                    break;
+                }
+            }
+        }
+        if all_hit {
+            write_raw_gas_records(root, &cached)?;
+            return Ok(cached);
+        }
     }
     let test_path = root.join("foundry/test/GeneratedBench.t.sol");
     fs::write(&test_path, generate_test(compiled, scenarios)?)?;
@@ -57,7 +89,156 @@ pub fn run_foundry(
                 .with_context(|| format!("parsing gas jsonl line {}", index + 1))?,
         );
     }
+    annotate_and_store_gas_records(root, &mut records, &expected_cache, use_cache)?;
+    write_raw_gas_records(root, &records)?;
     Ok(records)
+}
+
+#[derive(Debug, Clone)]
+struct GasCacheInput {
+    key: String,
+    logical_id: String,
+    fingerprint: serde_json::Value,
+    lookup_info: CacheInfo,
+}
+
+fn gas_cache_inputs(
+    root: &Path,
+    evm_version: &str,
+    compiled: &CompileSet,
+    scenarios: &ScenarioCatalog,
+    use_cache: bool,
+) -> Result<BTreeMap<String, GasCacheInput>> {
+    let mut inputs = BTreeMap::new();
+    for artifact in &compiled.artifacts {
+        for scenario in &scenarios.get(&artifact.benchmark_id)?.scenarios {
+            let fingerprint = gas_fingerprint(evm_version, artifact, scenario)?;
+            let key = cache::key_for(&fingerprint)?;
+            let logical_id = cache::logical_id(&[
+                "gas",
+                &artifact.benchmark_id,
+                &artifact.implementation_id,
+                &artifact.profile_id,
+                &scenario.name,
+                scenario.state_access_profile.as_str(),
+            ]);
+            let lookup_info = if use_cache {
+                match cache::lookup::<GasRecord>(root, "gas", &logical_id, &key, &fingerprint)? {
+                    CacheLookup::Hit(_) => CacheInfo::refreshed(&key),
+                    CacheLookup::Miss(info) => info,
+                }
+            } else {
+                CacheInfo::disabled()
+            };
+            inputs.insert(
+                gas_record_key(
+                    &artifact.benchmark_id,
+                    &artifact.implementation_id,
+                    &artifact.profile_id,
+                    &scenario.name,
+                    scenario.state_access_profile.as_str(),
+                ),
+                GasCacheInput {
+                    key,
+                    logical_id,
+                    fingerprint,
+                    lookup_info,
+                },
+            );
+        }
+    }
+    Ok(inputs)
+}
+
+fn gas_fingerprint(
+    evm_version: &str,
+    artifact: &CompiledArtifact,
+    scenario: &Scenario,
+) -> Result<serde_json::Value> {
+    Ok(json!({
+        "schema": GAS_CACHE_SCHEMA,
+        "evm_version": evm_version,
+        "runner": {
+            "name": "foundry-generated-bench",
+            "version": "1",
+            "gas_json_schema": "1",
+        },
+        "artifact": {
+            "benchmark_id": artifact.benchmark_id,
+            "implementation_id": artifact.implementation_id,
+            "profile_id": artifact.profile_id,
+            "language": artifact.language.as_str(),
+            "metadata_mode": artifact.metadata_mode.as_str(),
+            "source_hash": artifact.source_hash,
+            "creation_bytecode_hash": sha256_bytes(artifact.creation_bytecode.as_bytes()),
+            "runtime_bytecode_hash": sha256_bytes(artifact.runtime_bytecode.as_bytes()),
+            "compiler": {
+                "name": artifact.compiler.name,
+                "version": artifact.compiler.version,
+                "binary_sha256": artifact.compiler.binary_sha256,
+            },
+            "compiler_settings": artifact.compiler_settings,
+        },
+        "scenario": scenario,
+    }))
+}
+
+fn annotate_and_store_gas_records(
+    root: &Path,
+    records: &mut [GasRecord],
+    expected_cache: &BTreeMap<String, GasCacheInput>,
+    use_cache: bool,
+) -> Result<()> {
+    for record in records {
+        let key = gas_record_key(
+            &record.benchmark_id,
+            &record.implementation_id,
+            &record.profile_id,
+            &record.scenario,
+            record.state_access_profile.as_str(),
+        );
+        if let Some(input) = expected_cache.get(&key) {
+            record.cache = if use_cache {
+                input.lookup_info.clone()
+            } else {
+                CacheInfo::disabled()
+            };
+            if use_cache {
+                cache::store(
+                    root,
+                    "gas",
+                    &input.logical_id,
+                    &input.key,
+                    &input.fingerprint,
+                    record,
+                )?;
+            }
+        } else {
+            record.cache = CacheInfo::disabled();
+        }
+    }
+    Ok(())
+}
+
+fn write_raw_gas_records(root: &Path, records: &[GasRecord]) -> Result<()> {
+    let rows_path = root.join("results/raw/foundry-gas.jsonl");
+    let mut out = String::new();
+    for record in records {
+        out.push_str(&serde_json::to_string(record)?);
+        out.push('\n');
+    }
+    fs::write(&rows_path, out).with_context(|| format!("writing {}", rows_path.display()))?;
+    Ok(())
+}
+
+fn gas_record_key(
+    benchmark_id: &str,
+    implementation_id: &str,
+    profile_id: &str,
+    scenario: &str,
+    state_access_profile: &str,
+) -> String {
+    format!("{benchmark_id}\0{implementation_id}\0{profile_id}\0{scenario}\0{state_access_profile}")
 }
 
 fn clear_failure_dir(root: &Path) -> Result<()> {

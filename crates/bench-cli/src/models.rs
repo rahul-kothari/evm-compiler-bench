@@ -62,7 +62,7 @@ pub struct Provenance {
     pub excluded_features: Vec<String>,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Benchmark {
     pub id: String,
     pub contract_name: String,
@@ -229,7 +229,7 @@ pub struct CompilerProfile {
     pub evm_version: String,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Toolchain {
     pub name: String,
     pub version: String,
@@ -240,7 +240,7 @@ pub struct Toolchain {
     pub metadata: BTreeMap<String, String>,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Toolchains {
     pub solc: Toolchain,
     pub vyper: Toolchain,
@@ -249,21 +249,21 @@ pub struct Toolchains {
     pub evm_version: String,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct CommandStats {
     pub wall_ms: f64,
     pub cpu_ms: f64,
     pub peak_rss_kib: u64,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct CompileMetrics {
     pub wall_ms_samples: Vec<f64>,
     pub cpu_ms_samples: Vec<f64>,
     pub peak_rss_kib: u64,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct BytecodeMetrics {
     pub creation_bytes: usize,
     pub creation_bytes_stripped: usize,
@@ -276,7 +276,63 @@ pub struct BytecodeMetrics {
     pub code_deposit_gas: usize,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct CacheInfo {
+    pub status: String,
+    pub key: String,
+    #[serde(default)]
+    pub invalidated_by: Vec<String>,
+}
+
+impl CacheInfo {
+    pub fn disabled() -> Self {
+        Self {
+            status: "disabled".to_string(),
+            key: String::new(),
+            invalidated_by: Vec::new(),
+        }
+    }
+
+    pub fn hit(key: impl Into<String>) -> Self {
+        Self {
+            status: "hit".to_string(),
+            key: key.into(),
+            invalidated_by: Vec::new(),
+        }
+    }
+
+    pub fn refreshed(key: impl Into<String>) -> Self {
+        Self {
+            status: "refreshed".to_string(),
+            key: key.into(),
+            invalidated_by: Vec::new(),
+        }
+    }
+
+    pub fn miss(key: impl Into<String>) -> Self {
+        Self {
+            status: "miss".to_string(),
+            key: key.into(),
+            invalidated_by: Vec::new(),
+        }
+    }
+
+    pub fn stale(key: impl Into<String>, invalidated_by: Vec<String>) -> Self {
+        Self {
+            status: "stale".to_string(),
+            key: key.into(),
+            invalidated_by,
+        }
+    }
+}
+
+impl Default for CacheInfo {
+    fn default() -> Self {
+        Self::disabled()
+    }
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct CompiledArtifact {
     pub benchmark_id: String,
     pub implementation_id: String,
@@ -301,9 +357,11 @@ pub struct CompiledArtifact {
     pub runtime_bytecode: String,
     pub compile: CompileMetrics,
     pub bytecode: BytecodeMetrics,
+    #[serde(default)]
+    pub cache: CacheInfo,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct CompileFailure {
     pub benchmark_id: String,
     pub implementation_id: String,
@@ -324,6 +382,8 @@ pub struct CompileFailure {
     pub source_path: PathBuf,
     pub source_hash: String,
     pub error: String,
+    #[serde(default)]
+    pub cache: CacheInfo,
 }
 
 #[derive(Debug, Clone)]
@@ -349,6 +409,8 @@ pub struct GasRecord {
     pub expected_success: bool,
     pub call_succeeded: bool,
     pub scenario_status_ok: bool,
+    #[serde(default)]
+    pub cache: CacheInfo,
 }
 
 fn default_call_value() -> String {

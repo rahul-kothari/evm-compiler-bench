@@ -255,7 +255,8 @@ pub fn write_outputs(
         "environment": environment_manifest(root),
         "artifacts": compiled.artifacts.len(),
         "compile_failures": compiled.failures.len(),
-        "gas_records": gas_records.len()
+        "gas_records": gas_records.len(),
+        "cache": cache_manifest(compiled, gas_records)
     });
     fs::write(&run_manifest, serde_json::to_string_pretty(&manifest)?)?;
 
@@ -282,6 +283,33 @@ fn write_report_assets(reports_dir: &Path) -> Result<()> {
         fs::write(assets_dir.join(name), bytes)?;
     }
     Ok(())
+}
+
+fn cache_manifest(compiled: &CompileSet, gas_records: &[GasRecord]) -> serde_json::Value {
+    let mut compile = BTreeMap::<String, usize>::new();
+    let mut gas = BTreeMap::<String, usize>::new();
+    for artifact in &compiled.artifacts {
+        *compile.entry(artifact.cache.status.clone()).or_default() += 1;
+    }
+    for failure in &compiled.failures {
+        *compile.entry(failure.cache.status.clone()).or_default() += 1;
+    }
+    for record in gas_records {
+        *gas.entry(record.cache.status.clone()).or_default() += 1;
+    }
+    json!({
+        "enabled": !compile.contains_key("disabled") || compile.len() > 1 || !gas.contains_key("disabled") || gas.len() > 1,
+        "root": ".cache/bench-cli",
+        "compile": compile,
+        "gas": gas,
+        "statuses": {
+            "hit": "entry was reused from cache",
+            "miss": "no prior entry matched this logical benchmark/config",
+            "stale": "a prior entry existed but one or more fingerprint fields changed",
+            "refreshed": "a valid gas cache entry existed but the Foundry batch was rerun because another row missed",
+            "disabled": "cache was bypassed for this run"
+        }
+    })
 }
 
 fn normalized_rows(
@@ -399,6 +427,10 @@ fn row(
             "settings": artifact.compiler_settings
         },
         "source_hash": artifact.source_hash,
+        "cache": {
+            "compile": artifact.cache,
+            "gas": gas.cache
+        },
         "compile": {
             "status": "ok",
             "wall_ms_samples": artifact.compile.wall_ms_samples.clone(),
@@ -487,6 +519,10 @@ fn failure_row(failure: &CompileFailure) -> serde_json::Value {
             "settings": failure.compiler_settings
         },
         "source_hash": failure.source_hash,
+        "cache": {
+            "compile": failure.cache,
+            "gas": null
+        },
         "compile": {
             "status": "error",
             "error": failure.error
@@ -3662,7 +3698,12 @@ fn render_methodology(
     ));
     html.push_str("</p></div>");
     html.push_str("<div class=\"card\"><h3>Limitations</h3><p class=\"small muted\">Gas is Foundry internal-call gas, not measured transaction gas. Compile timing is host-specific with three wall-time samples per successful artifact. Peak RSS is a single coarse sample. Cross-language behavioral equivalence is fuzz+property checked only where the correctness heatmap says so. Compiler bytecode metadata is disabled for the active matrix, so metadata overhead is intentionally outside the measured comparison surface. Vyper 0.5.0a1 is a pre-release compiler. Vyper Venom variants use <span class=\"mono\">--experimental-codegen</span>; treat their failures and wins as experimental codegen evidence, not production-default Vyper behavior.");
-    html.push_str("</p></div></section>");
+    html.push_str("</p></div>");
+    html.push_str("<div class=\"card\"><h3>Cache</h3><p class=\"small muted\">Compile artifacts and gas rows are keyed by source hash, compiler binary hash, profile settings, EVM fork, scenario definition, and runner schema. A matching row is marked <span class=\"mono\">hit</span>; changed inputs are marked <span class=\"mono\">stale</span> with field-level reasons under <span class=\"mono\">cache.*.invalidated_by</span>. Use <span class=\"mono\">--no-cache</span> for fresh publication runs.</p><pre class=\"small\">");
+    html.push_str(&escape(
+        &serde_json::to_string_pretty(&manifest["cache"]).unwrap_or_default(),
+    ));
+    html.push_str("</pre></div></section>");
     html.push_str("<details><summary>Show profile settings JSON</summary><pre class=\"small\">");
     html.push_str(&escape(
         &serde_json::to_string_pretty(&manifest["profiles"]).unwrap_or_default(),

@@ -1,11 +1,14 @@
 use crate::{
+    cache::{self, CacheLookup},
     models::{
-        Benchmark, BytecodeMetrics, CommandStats, CompileFailure, CompileMetrics, CompileSet,
-        CompiledArtifact, CompilerProfile, Language, MetadataMode, Toolchain, Toolchains,
+        Benchmark, BytecodeMetrics, CacheInfo, CommandStats, CompileFailure, CompileMetrics,
+        CompileSet, CompiledArtifact, CompilerProfile, Language, MetadataMode, Toolchain,
+        Toolchains,
     },
     util::{byte_len, require_success, run_measured, sha256_bytes, stripped_cbor_len},
 };
 use anyhow::{Context, Result, bail};
+use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::{
     env, fs,
@@ -19,6 +22,7 @@ pub fn compile_all(
     root: &Path,
     toolchains: &Toolchains,
     benchmarks: &[Benchmark],
+    use_cache: bool,
 ) -> Result<CompileSet> {
     let profiles = load_profiles(root)?;
     let mut artifacts = Vec::new();
@@ -27,22 +31,61 @@ pub fn compile_all(
         for profile in &profiles {
             let toolchain = toolchain_for_profile(toolchains, profile)?;
             let evm_version = effective_evm_version(profile, toolchains);
-            let result = match profile.language {
-                Language::Solidity => {
-                    compile_solidity(root, benchmark, profile, toolchain, &evm_version)
+            let cache_input =
+                compile_cache_input(root, benchmark, profile, toolchain, &evm_version)
+                    .with_context(|| {
+                        format!(
+                            "preparing compile cache key for {} {}",
+                            benchmark.id, profile.id
+                        )
+                    })?;
+            if use_cache {
+                match cache::lookup::<CachedCompileResult>(
+                    root,
+                    "compile",
+                    &cache_input.logical_id,
+                    &cache_input.key,
+                    &cache_input.fingerprint,
+                )? {
+                    CacheLookup::Hit(mut cached) => {
+                        match &mut cached {
+                            CachedCompileResult::Artifact(artifact) => {
+                                artifact.cache = CacheInfo::hit(&cache_input.key);
+                            }
+                            CachedCompileResult::Failure(failure) => {
+                                failure.cache = CacheInfo::hit(&cache_input.key);
+                            }
+                        }
+                        match cached {
+                            CachedCompileResult::Artifact(artifact) => artifacts.push(artifact),
+                            CachedCompileResult::Failure(failure) => failures.push(failure),
+                        }
+                        continue;
+                    }
+                    CacheLookup::Miss(info) => {
+                        compile_and_record(
+                            root,
+                            benchmark,
+                            profile,
+                            toolchain,
+                            &evm_version,
+                            Some((cache_input, info)),
+                            &mut artifacts,
+                            &mut failures,
+                        )?;
+                    }
                 }
-                Language::Vyper => compile_vyper(root, benchmark, profile, toolchain, &evm_version),
-            };
-            match result {
-                Ok(artifact) => artifacts.push(artifact),
-                Err(error) => failures.push(compile_failure(
+            } else {
+                compile_and_record(
                     root,
                     benchmark,
                     profile,
                     toolchain,
                     &evm_version,
-                    error.to_string(),
-                )?),
+                    None,
+                    &mut artifacts,
+                    &mut failures,
+                )?;
             }
         }
     }
@@ -51,6 +94,79 @@ pub fn compile_all(
         artifacts,
         failures,
     })
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(tag = "kind", content = "value", rename_all = "snake_case")]
+enum CachedCompileResult {
+    Artifact(CompiledArtifact),
+    Failure(CompileFailure),
+}
+
+struct CompileCacheInput {
+    key: String,
+    logical_id: String,
+    fingerprint: serde_json::Value,
+}
+
+#[allow(clippy::too_many_arguments)]
+fn compile_and_record(
+    root: &Path,
+    benchmark: &Benchmark,
+    profile: &CompilerProfile,
+    toolchain: &Toolchain,
+    evm_version: &str,
+    cache_state: Option<(CompileCacheInput, CacheInfo)>,
+    artifacts: &mut Vec<CompiledArtifact>,
+    failures: &mut Vec<CompileFailure>,
+) -> Result<()> {
+    let result = match profile.language {
+        Language::Solidity => compile_solidity(root, benchmark, profile, toolchain, evm_version),
+        Language::Vyper => compile_vyper(root, benchmark, profile, toolchain, evm_version),
+    };
+    let (cache_input, cache_info) = cache_state
+        .map(|(input, info)| (Some(input), info))
+        .unwrap_or((None, CacheInfo::disabled()));
+
+    match result {
+        Ok(mut artifact) => {
+            artifact.cache = cache_info;
+            if let Some(input) = cache_input {
+                cache::store(
+                    root,
+                    "compile",
+                    &input.logical_id,
+                    &input.key,
+                    &input.fingerprint,
+                    &CachedCompileResult::Artifact(artifact.clone()),
+                )?;
+            }
+            artifacts.push(artifact);
+        }
+        Err(error) => {
+            let mut failure = compile_failure(
+                root,
+                benchmark,
+                profile,
+                toolchain,
+                evm_version,
+                error.to_string(),
+            )?;
+            failure.cache = cache_info;
+            if let Some(input) = cache_input {
+                cache::store(
+                    root,
+                    "compile",
+                    &input.logical_id,
+                    &input.key,
+                    &input.fingerprint,
+                    &CachedCompileResult::Failure(failure.clone()),
+                )?;
+            }
+            failures.push(failure);
+        }
+    }
+    Ok(())
 }
 
 fn toolchain_for_profile<'a>(
@@ -74,6 +190,59 @@ fn effective_evm_version(profile: &CompilerProfile, toolchains: &Toolchains) -> 
     } else {
         profile.evm_version.clone()
     }
+}
+
+fn compile_cache_input(
+    root: &Path,
+    benchmark: &Benchmark,
+    profile: &CompilerProfile,
+    toolchain: &Toolchain,
+    evm_version: &str,
+) -> Result<CompileCacheInput> {
+    let source_path = source_path_for_profile(root, benchmark, profile)?;
+    let source = fs::read(&source_path)?;
+    let source_hash = sha256_bytes(&source);
+    let compiler_settings = match profile.language {
+        Language::Solidity => solidity_compiler_settings(profile, toolchain, evm_version),
+        Language::Vyper => vyper_compiler_settings(profile, evm_version),
+    };
+    let implementation = implementation_id(profile);
+    let fingerprint = json!({
+        "schema": "compile-v1",
+        "benchmark": {
+            "id": benchmark.id,
+            "contract_name": benchmark.contract_name,
+            "suite": benchmark.suite.as_str(),
+            "family": benchmark.family,
+            "parameter_name": benchmark.parameter_name,
+            "parameter_value": benchmark.parameter_value,
+            "scenario_path": benchmark.scenario_path,
+            "scenario_hash": benchmark.scenario_hash,
+            "generator_version": benchmark.generator_version,
+        },
+        "implementation_id": implementation,
+        "profile": profile,
+        "compiler": {
+            "name": toolchain.name,
+            "version": toolchain.version,
+            "binary_sha256": toolchain.binary_sha256,
+            "download_source": toolchain.download_source,
+            "metadata": toolchain.metadata,
+        },
+        "compiler_settings": compiler_settings,
+        "source": {
+            "path": source_path.display().to_string(),
+            "hash": source_hash,
+        },
+        "compile_sample_count": compile_sample_count(),
+    });
+    let key = cache::key_for(&fingerprint)?;
+    let logical_id = cache::logical_id(&["compile", &benchmark.id, &implementation, &profile.id]);
+    Ok(CompileCacheInput {
+        key,
+        logical_id,
+        fingerprint,
+    })
 }
 
 fn load_profiles(root: &Path) -> Result<Vec<CompilerProfile>> {
@@ -656,6 +825,7 @@ fn artifact(
             peak_rss_kib,
         },
         bytecode,
+        cache: CacheInfo::disabled(),
     })
 }
 
@@ -745,6 +915,7 @@ fn compile_failure(
         source_path,
         source_hash: sha256_bytes(&source),
         error,
+        cache: CacheInfo::disabled(),
     })
 }
 

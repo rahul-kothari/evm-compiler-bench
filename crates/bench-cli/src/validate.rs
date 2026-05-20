@@ -300,6 +300,7 @@ fn validate_outputs_if_present(root: &Path) -> Result<usize> {
             require_json_pointer(row, "/compiler/metadata", &results_path)?;
             require_json_pointer(row, "/compiler/settings", &results_path)?;
             require_json_pointer(row, "/compiler/settings/metadataMode", &results_path)?;
+            require_json_pointer(row, "/cache/compile/status", &results_path)?;
             require_json_pointer(row, "/compile/status", &results_path)?;
             require_json_pointer(row, "/correctness/scenario_status_check", &results_path)?;
             require_json_pointer(row, "/correctness/golden_behavior_check", &results_path)?;
@@ -331,6 +332,12 @@ fn validate_outputs_if_present(root: &Path) -> Result<usize> {
                 row,
                 "/compiler/settings/metadataMode",
                 &["on", "off"],
+                &results_path,
+            )?;
+            require_enum(
+                row,
+                "/cache/compile/status",
+                &["hit", "miss", "stale", "refreshed", "disabled"],
                 &results_path,
             )?;
             validate_row_status(row, &results_path)?;
@@ -556,6 +563,7 @@ fn validate_row_status(row: &Value, path: &Path) -> Result<()> {
             require_json_pointer(row, "/gas/call_succeeded", path)?;
             require_json_pointer(row, "/gas/scenario_status_ok", path)?;
             require_json_pointer(row, "/gas/measurement_scope", path)?;
+            require_json_pointer(row, "/cache/gas/status", path)?;
             require_enum(
                 row,
                 "/gas/state_access_profile",
@@ -567,6 +575,12 @@ fn validate_row_status(row: &Value, path: &Path) -> Result<()> {
                 row,
                 "/gas/measurement_scope",
                 &["foundry_internal_call_harness"],
+                path,
+            )?;
+            require_enum(
+                row,
+                "/cache/gas/status",
+                &["hit", "miss", "stale", "refreshed", "disabled"],
                 path,
             )?;
             require_null(row, "/gas/total_tx_gas", path)?;
@@ -582,6 +596,7 @@ fn validate_row_status(row: &Value, path: &Path) -> Result<()> {
             require_string_pointer(row, "/compile/error", path)?;
             require_null(row, "/bytecode", path)?;
             require_null(row, "/gas", path)?;
+            require_null(row, "/cache/gas", path)?;
         }
         Some(other) => bail!("{} unsupported row status {other}", path.display()),
         None => bail!("{} missing row status", path.display()),

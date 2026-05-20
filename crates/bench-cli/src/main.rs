@@ -1,3 +1,4 @@
+mod cache;
 mod catalog;
 mod compiler;
 mod models;
@@ -40,6 +41,9 @@ enum Command {
         /// Restrict execution to one benchmark id.
         #[arg(long)]
         benchmark: Option<String>,
+        /// Do not read or write benchmark result caches.
+        #[arg(long)]
+        no_cache: bool,
     },
     /// Compile all implementations and print a compact summary.
     Compile {
@@ -49,6 +53,9 @@ enum Command {
         /// Restrict compilation to one benchmark id.
         #[arg(long)]
         benchmark: Option<String>,
+        /// Do not read or write benchmark result caches.
+        #[arg(long)]
+        no_cache: bool,
     },
     /// Resolve compilers and print the selected shared EVM target.
     Toolchains {
@@ -70,14 +77,24 @@ fn main() -> Result<()> {
     let cli = Cli::parse();
     let root = cli.root.canonicalize()?;
     match cli.command {
-        Command::Run { offline, benchmark } => {
+        Command::Run {
+            offline,
+            benchmark,
+            no_cache,
+        } => {
             let toolchains = resolve_toolchains(&root, offline)?;
             let generated = generate_scale_suite(&root, benchmark.as_deref())?;
             let benchmarks = all_benchmarks(generated.benchmarks.clone(), benchmark.as_deref());
-            let compiled = compile_all(&root, &toolchains, &benchmarks)?;
+            let compiled = compile_all(&root, &toolchains, &benchmarks, !no_cache)?;
             let scenarios =
                 load_scenario_catalog(&root, benchmark.as_deref(), &generated.scenarios)?;
-            let gas_records = run_foundry(&root, &toolchains.evm_version, &compiled, &scenarios)?;
+            let gas_records = run_foundry(
+                &root,
+                &toolchains.evm_version,
+                &compiled,
+                &scenarios,
+                !no_cache,
+            )?;
             let report = write_outputs(
                 &root,
                 &toolchains,
@@ -124,11 +141,15 @@ fn main() -> Result<()> {
                 );
             }
         }
-        Command::Compile { offline, benchmark } => {
+        Command::Compile {
+            offline,
+            benchmark,
+            no_cache,
+        } => {
             let toolchains = resolve_toolchains(&root, offline)?;
             let generated = generate_scale_suite(&root, benchmark.as_deref())?;
             let benchmarks = all_benchmarks(generated.benchmarks, benchmark.as_deref());
-            let compiled = compile_all(&root, &toolchains, &benchmarks)?;
+            let compiled = compile_all(&root, &toolchains, &benchmarks, !no_cache)?;
             println!(
                 "compiled {} artifacts with {} failures across {} profiles for EVM {}",
                 compiled.artifacts.len(),
