@@ -715,10 +715,10 @@ fn validate_suite_metadata(row: &Value, path: &Path) -> Result<()> {
 }
 
 fn require_sequence(value: &serde_yaml::Value, key: &str, path: &Path) -> Result<()> {
-    if !value
+    if value
         .get(key)
         .and_then(|value| value.as_sequence())
-        .is_some_and(|items| !items.is_empty())
+        .is_none_or(|items| items.is_empty())
     {
         bail!("{} missing non-empty {key}", path.display());
     }

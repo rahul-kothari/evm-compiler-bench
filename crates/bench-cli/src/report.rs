@@ -1361,23 +1361,22 @@ fn version_axis_aggregates(
                 base_gas,
             );
         }
-        if seen_artifacts_for_metrics.insert(artifact_key) {
-            if let Some(base) = baseline_artifacts
+        if seen_artifacts_for_metrics.insert(artifact_key)
+            && let Some(base) = baseline_artifacts
                 .get(&format!("{suite}\0{line}\0{config}\0{benchmark}"))
                 .copied()
-            {
-                let current = artifact_metrics(row);
-                push_ratio(
-                    &mut aggregate.runtime_bytes,
-                    current.runtime_bytes,
-                    base.runtime_bytes,
-                );
-                push_float_ratio(
-                    &mut aggregate.compile_ms,
-                    current.compile_ms,
-                    base.compile_ms,
-                );
-            }
+        {
+            let current = artifact_metrics(row);
+            push_ratio(
+                &mut aggregate.runtime_bytes,
+                current.runtime_bytes,
+                base.runtime_bytes,
+            );
+            push_float_ratio(
+                &mut aggregate.compile_ms,
+                current.compile_ms,
+                base.compile_ms,
+            );
         }
     }
     aggregates
@@ -2218,8 +2217,9 @@ fn render_measurement_scope() -> String {
 
 fn render_compile_failure_matrix(rows: &[serde_json::Value]) -> String {
     let mut profiles = BTreeSet::new();
-    let mut groups: BTreeMap<String, (String, BTreeMap<String, (&'static str, String)>)> =
-        BTreeMap::new();
+    type CompileMatrixCell = (&'static str, String);
+    type CompileMatrixRows = BTreeMap<String, (String, BTreeMap<String, CompileMatrixCell>)>;
+    let mut groups: CompileMatrixRows = BTreeMap::new();
     for row in rows {
         let profile = str_at(row, "/profile_id").unwrap_or_default();
         if profile.is_empty() {
@@ -2567,10 +2567,10 @@ fn render_profile_tradeoff_table(
     ));
     html.push_str("<table><thead><tr><th>Profile</th><th>Harness Gas</th><th>Runtime Bytes</th><th>Internal Create Gas</th><th>Compile Wall</th><th>Samples</th></tr></thead><tbody>");
     for (profile, aggregate) in aggregates {
-        if let Some(filter) = profile_filter {
-            if !filter.iter().any(|candidate| *candidate == profile) {
-                continue;
-            }
+        if let Some(filter) = profile_filter
+            && !filter.iter().any(|candidate| *candidate == profile)
+        {
+            continue;
         }
         html.push_str("<tr><td class=\"mono\">");
         html.push_str(&escape(&profile_short(&profile)));
@@ -2679,10 +2679,10 @@ fn render_compile_resource_summary_for_profiles(
             continue;
         }
         let profile = str_at(row, "/profile_id").unwrap_or_default();
-        if let Some(filter) = profile_filter {
-            if !filter.iter().any(|candidate| *candidate == profile) {
-                continue;
-            }
+        if let Some(filter) = profile_filter
+            && !filter.iter().any(|candidate| *candidate == profile)
+        {
+            continue;
         }
         let artifact_key = artifact_key_from_row(row);
         if !seen.insert(artifact_key) {
@@ -4318,7 +4318,7 @@ fn render_compile_failure_brief_table(rows: &[serde_json::Value]) -> String {
         html.push_str(&escape(&family));
         html.push_str("</td><td>");
         if n == 0 {
-            html.push_str("-");
+            html.push('-');
         } else {
             html.push_str(&n.to_string());
         }
@@ -4442,7 +4442,6 @@ fn profile_short_dynamic(profile: &str) -> String {
             .unwrap_or(rest)
             .replace("legacy-runs200", "legacy")
             .replace("viair-runs200", "viaIR")
-            .replace("noopt", "noopt")
             .replace('-', " ");
         return format!("solc {version} {label}");
     }
@@ -4538,7 +4537,7 @@ fn median(mut values: Vec<f64>) -> f64 {
     }
     values.sort_by(|left, right| left.partial_cmp(right).unwrap_or(std::cmp::Ordering::Equal));
     let mid = values.len() / 2;
-    if values.len() % 2 == 0 {
+    if values.len().is_multiple_of(2) {
         (values[mid - 1] + values[mid]) / 2.0
     } else {
         values[mid]

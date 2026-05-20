@@ -26,13 +26,13 @@ pub fn resolve_toolchains(root: &Path, offline: bool) -> Result<Toolchains> {
         .filter(|compiler| !matches!(compiler.as_str(), "solc" | "vyper" | "vyper-0.5.0a1"))
         .collect();
     let mut progress = Progress::new("toolchains", 3 + extra_compilers.len());
-    progress.update_active(0, "resolving latest solc");
+    progress.update(0, "resolving latest solc");
     let solc = resolve_solc(root, offline)?;
     progress.update(1, format!("resolved solc {}", solc.version));
-    progress.update_active(1, "resolving latest vyper");
+    progress.update(1, "resolving latest vyper");
     let vyper = resolve_vyper(root, offline)?;
     progress.update(2, format!("resolved vyper {}", vyper.version));
-    progress.update_active(2, format!("resolving vyper {VYPER_ALPHA_VERSION}"));
+    progress.update(2, format!("resolving vyper {VYPER_ALPHA_VERSION}"));
     let vyper_alpha = resolve_vyper_version(
         root,
         offline,
@@ -52,7 +52,7 @@ pub fn resolve_toolchains(root: &Path, offline: bool) -> Result<Toolchains> {
         if compilers.contains_key(&compiler_ref.compiler) {
             continue;
         }
-        progress.update_active(resolved, format!("resolving {}", compiler_ref.compiler));
+        progress.update(resolved, format!("resolving {}", compiler_ref.compiler));
         let toolchain = match compiler_ref.language {
             Language::Solidity => {
                 let Some(version) = compiler_ref.compiler.strip_prefix("solc-") else {
@@ -310,7 +310,7 @@ fn cached_vyper_uses_legacy_python(venv: &Path) -> bool {
 }
 
 fn cached_vyper_toolchain(binary: &Path, version: &str, channel: &str) -> Result<Toolchain> {
-    let version_output = command_stdout(Command::new(&binary).arg("--version"))?;
+    let version_output = command_stdout(Command::new(binary).arg("--version"))?;
     let actual_version = parse_vyper_version(&version_output)?;
     if actual_version != version {
         bail!(

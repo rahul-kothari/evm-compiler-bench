@@ -35,10 +35,10 @@ pub fn load_scenario_catalog(
         let file: ScenarioFile =
             serde_yaml::from_str(&text).with_context(|| format!("parsing {}", path.display()))?;
         validate_scenario_file(&file, &path)?;
-        if only_benchmark.is_none_or(|id| id == file.benchmark_id) {
-            if files.insert(file.benchmark_id.clone(), file).is_some() {
-                bail!("duplicate scenario benchmark id in {}", path.display());
-            }
+        if only_benchmark.is_none_or(|id| id == file.benchmark_id)
+            && files.insert(file.benchmark_id.clone(), file).is_some()
+        {
+            bail!("duplicate scenario benchmark id in {}", path.display());
         }
     }
     for file in generated {

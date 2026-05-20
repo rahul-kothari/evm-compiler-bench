@@ -87,7 +87,7 @@ pub fn compile_all(
                             "stale" => cache_stale += 1,
                             _ => cache_misses += 1,
                         }
-                        progress.update_active(
+                        progress.update(
                             attempted.saturating_sub(1),
                             format!("compiling {} {} ({cache_status})", benchmark.id, profile.id),
                         );
@@ -113,7 +113,7 @@ pub fn compile_all(
                 }
             } else {
                 cache_disabled += 1;
-                progress.update_active(
+                progress.update(
                     attempted.saturating_sub(1),
                     format!("compiling {} {} (cache disabled)", benchmark.id, profile.id),
                 );

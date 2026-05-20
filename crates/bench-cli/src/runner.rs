@@ -318,16 +318,16 @@ fn generate_test(compiled: &CompileSet, scenarios: &ScenarioCatalog) -> Result<S
 
     for (index, artifact) in compiled.artifacts.iter().enumerate() {
         for scenario in &scenarios.get(&artifact.benchmark_id)?.scenarios {
-            write_gas_test(&mut out, index, artifact, &scenario);
+            write_gas_test(&mut out, index, artifact, scenario);
         }
     }
 
     let baselines = baseline_pairs(&compiled.artifacts);
     for (benchmark_id, (solidity_idx, vyper_idx)) in &baselines {
-        for scenario in &scenarios.get(&benchmark_id)?.scenarios {
+        for scenario in &scenarios.get(benchmark_id)?.scenarios {
             write_diff_test(
                 &mut out,
-                &benchmark_id,
+                benchmark_id,
                 *solidity_idx,
                 *vyper_idx,
                 compiled
@@ -338,7 +338,7 @@ fn generate_test(compiled: &CompileSet, scenarios: &ScenarioCatalog) -> Result<S
                     .artifacts
                     .get(*vyper_idx)
                     .context("missing vyper baseline")?,
-                &scenario,
+                scenario,
             );
         }
     }

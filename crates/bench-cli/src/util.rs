@@ -137,7 +137,6 @@ pub struct Progress {
     total: usize,
     last_emit: Instant,
     started: Instant,
-    tty: bool,
     emitted: bool,
     bar: Option<ProgressBar>,
 }
@@ -165,7 +164,6 @@ impl Progress {
             total,
             last_emit: Instant::now(),
             started: Instant::now(),
-            tty,
             emitted: false,
             bar,
         };
@@ -175,12 +173,6 @@ impl Progress {
 
     pub fn update(&mut self, completed: usize, detail: impl AsRef<str>) {
         if self.should_emit(completed) {
-            self.emit(completed, detail.as_ref());
-        }
-    }
-
-    pub fn update_active(&mut self, completed: usize, detail: impl AsRef<str>) {
-        if self.tty || self.should_emit(completed) {
             self.emit(completed, detail.as_ref());
         }
     }
@@ -207,7 +199,7 @@ impl Progress {
     }
 
     fn should_emit(&self, completed: usize) -> bool {
-        self.tty
+        self.bar.is_some()
             || !self.emitted
             || completed == self.total
             || self.last_emit.elapsed() >= Duration::from_secs(2)
@@ -232,12 +224,7 @@ impl Progress {
             "{}: {}/{} ({percent:5.1}%) {} [{}s]",
             self.label, completed, self.total, detail, elapsed
         );
-        if self.tty {
-            eprint!("\r{line}");
-            let _ = std::io::stderr().flush();
-        } else {
-            eprintln!("{line}");
-        }
+        eprintln!("{line}");
         self.last_emit = Instant::now();
         self.emitted = true;
     }
