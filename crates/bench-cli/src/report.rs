@@ -1728,7 +1728,8 @@ fn render_fixed_pareto_svg(rows: &[serde_json::Value]) -> String {
 
     let mut html = String::new();
     html.push_str("<h3>Fixed-Suite Pareto Surface</h3>");
-    html.push_str("<div class=\"legend\"><span>faceted by language</span><span>colour = optimizer profile</span><span>all points use metadata-disabled artifacts</span></div>");
+    html.push_str("<div class=\"legend\"><span>faceted by language</span><span>colour = compiler family</span><span>shade = optimizer/codegen config</span><span>all points use metadata-disabled artifacts</span></div>");
+    html.push_str(&compiler_palette_legend());
     html.push_str("<div class=\"chart\"><svg width=\"1080\" height=\"420\" viewBox=\"0 0 1080 420\" role=\"img\" aria-label=\"Runtime bytecode size versus harness call gas faceted by language\">");
     for (panel_index, language) in ["solidity", "vyper"].iter().enumerate() {
         let x0 = 64 + panel_index as i32 * 510;
@@ -2883,7 +2884,8 @@ fn render_scale_curve_panels(rows: &[serde_json::Value]) -> String {
     }
     let mut html = String::new();
     html.push_str("<h3>Scale Curves</h3>");
-    html.push_str("<p class=\"small muted\">Each family is shown as N on a log2 x-axis. Runtime gas is averaged across that family's generated scenarios for the profile/N point; compile time and bytecode are artifact-level.</p>");
+    html.push_str("<p class=\"small muted\">Each family is shown as N on a log2 x-axis. Runtime gas is averaged across that family's generated scenarios for the profile/N point; compile time and bytecode are artifact-level. Line colour follows compiler family, and shade carries optimizer/codegen config.</p>");
+    html.push_str(&compiler_palette_legend());
     html.push_str("<div class=\"chart-grid\">");
     for (family, by_profile) in groups {
         html.push_str("<div class=\"svg-card\"><h3>");
@@ -2972,37 +2974,7 @@ fn scale_family_svg(by_profile: &BTreeMap<String, BTreeMap<u64, ScaleCurveAggreg
             max_n
         ));
     }
-    svg.push_str("<g transform=\"translate(44 218)\">");
-    for (idx, profile) in [
-        SOL_CODEGEN_BASELINE,
-        SOL_VIAIR_CODEGEN,
-        SOL_NOOPT_CODEGEN,
-        VYPER_GAS_CODEGEN,
-        VYPER_ALPHA_GAS_CODEGEN,
-        VYPER_GAS_VENOM_CODEGEN,
-        VYPER_ALPHA_GAS_VENOM_CODEGEN,
-        VYPER_CODESIZE_CODEGEN,
-        VYPER_ALPHA_CODESIZE_CODEGEN,
-        VYPER_CODESIZE_VENOM_CODEGEN,
-        VYPER_ALPHA_CODESIZE_VENOM_CODEGEN,
-        VYPER_NONE_CODEGEN,
-        VYPER_ALPHA_NONE_CODEGEN,
-        VYPER_NONE_VENOM_CODEGEN,
-        VYPER_ALPHA_NONE_VENOM_CODEGEN,
-    ]
-    .iter()
-    .enumerate()
-    {
-        let x = idx as i32 * 94;
-        svg.push_str(&format!(
-            "<circle cx=\"{}\" cy=\"0\" r=\"4\" fill=\"{}\"/><text x=\"{}\" y=\"4\" font-size=\"9\" fill=\"#374151\">{}</text>",
-            x,
-            profile_color(profile),
-            x + 8,
-            escape(&profile_short(profile))
-        ));
-    }
-    svg.push_str("</g></svg>");
+    svg.push_str("<text x=\"44\" y=\"226\" font-size=\"10\" fill=\"#657083\">hover lines for exact compiler config</text></svg>");
     svg
 }
 
@@ -3293,23 +3265,51 @@ fn baseline_profile_for_language(language: &str) -> Option<&'static str> {
 
 fn profile_color(profile: &str) -> &'static str {
     match profile {
+        "solc-latest-noopt" => "#93c5fd",
         "solc-latest-legacy-runs200" => "#2563eb",
-        "solc-latest-viair-runs200" => "#7c3aed",
-        "solc-latest-noopt" => "#b91c1c",
-        "vyper-latest-gas" => "#0f8a5f",
-        "vyper-0.5.0a1-gas" => "#14b8a6",
-        "vyper-latest-gas-venom" => "#0891b2",
-        "vyper-0.5.0a1-gas-venom" => "#06b6d4",
-        "vyper-latest-codesize" => "#b45309",
-        "vyper-0.5.0a1-codesize" => "#f59e0b",
-        "vyper-latest-codesize-venom" => "#a16207",
-        "vyper-0.5.0a1-codesize-venom" => "#d97706",
-        "vyper-latest-none" => "#64748b",
-        "vyper-0.5.0a1-none" => "#94a3b8",
-        "vyper-latest-none-venom" => "#475569",
-        "vyper-0.5.0a1-none-venom" => "#64748b",
+        "solc-latest-viair-runs200" => "#1e3a8a",
+        "vyper-latest-none" => "#86efac",
+        "vyper-latest-gas" => "#16a34a",
+        "vyper-latest-codesize" => "#166534",
+        "vyper-latest-none-venom" => "#4ade80",
+        "vyper-latest-gas-venom" => "#15803d",
+        "vyper-latest-codesize-venom" => "#14532d",
+        "vyper-0.5.0a1-none" => "#67e8f9",
+        "vyper-0.5.0a1-gas" => "#0891b2",
+        "vyper-0.5.0a1-codesize" => "#155e75",
+        "vyper-0.5.0a1-none-venom" => "#22d3ee",
+        "vyper-0.5.0a1-gas-venom" => "#0e7490",
+        "vyper-0.5.0a1-codesize-venom" => "#164e63",
         _ => "#111827",
     }
+}
+
+fn compiler_palette_legend() -> String {
+    let groups = [
+        ("solc", "#2563eb", "blue shades: noopt / legacy / viaIR"),
+        (
+            "Vyper 0.4.3",
+            "#16a34a",
+            "green shades: none / gas / codesize / Venom",
+        ),
+        (
+            "Vyper 0.5.0a1",
+            "#0891b2",
+            "cyan shades: none / gas / codesize / Venom",
+        ),
+    ];
+    let mut html = String::new();
+    html.push_str("<div class=\"legend\">");
+    for (label, color, note) in groups {
+        html.push_str(&format!(
+            "<span><span class=\"dot\" style=\"background:{}\"></span><strong>{}</strong> <span class=\"small muted\">{}</span></span>",
+            color,
+            escape(label),
+            escape(note)
+        ));
+    }
+    html.push_str("</div>");
+    html
 }
 
 fn is_ok_fixed_metadata_off(row: &serde_json::Value) -> bool {
