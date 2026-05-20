@@ -686,7 +686,11 @@ fn render_html(
     html.push_str("<h1>EVM Compiler Bench</h1>");
     html.push_str(&render_run_identity(toolchains, manifest, &summary));
     html.push_str(&render_overview(rows, &summary));
-    html.push_str("<nav><a href=\"#reliability\">Reliability</a><a href=\"#fixed\">Fixed Suite</a><a href=\"#scale\">Scale Suite</a><a href=\"#real\">Real-Derived</a><a href=\"#profiles\">Profiles</a><a href=\"#benchmarks\">Benchmarks</a><a href=\"#compile\">Compile Resources</a><a href=\"methodology.html\">Methodology</a><a href=\"#raw\">Data Export</a></nav>");
+    html.push_str("<nav><a href=\"#scorecards\">Scorecards</a><a href=\"#reliability\">Reliability</a><a href=\"#fixed\">Fixed Suite</a><a href=\"#scale\">Scale Suite</a><a href=\"#real\">Real-Derived</a><a href=\"#profiles\">Profiles</a><a href=\"#benchmarks\">Benchmarks</a><a href=\"#compile\">Compile Resources</a><a href=\"methodology.html\">Methodology</a><a href=\"#raw\">Data Export</a></nav>");
+
+    html.push_str("<section id=\"scorecards\"><h2>Compiler Config Scorecards</h2>");
+    html.push_str(&render_config_scorecards(rows));
+    html.push_str("</section>");
 
     html.push_str("<section id=\"reliability\"><h2>Compile Reliability</h2>");
     html.push_str(&render_reliability_brief(rows));
@@ -872,6 +876,279 @@ fn render_overview(rows: &[serde_json::Value], summary: &ReportSummary) -> Strin
     ));
     html.push_str("</section>");
     html
+}
+
+fn render_config_scorecards(rows: &[serde_json::Value]) -> String {
+    let facets = [
+        (
+            BenchmarkSuite::Fixed.as_str(),
+            "Fixed matched suite",
+            "Matched handwritten workloads. This is the strongest aggregate comparison surface.",
+        ),
+        (
+            BenchmarkSuite::Scale.as_str(),
+            "Generated scale suite",
+            "Generated N-family stress tests. Read the ratios together with the compile OK column.",
+        ),
+        (
+            BenchmarkSuite::RealDerived.as_str(),
+            "Real-derived models",
+            "Recognizable benchmark models with production_equivalence=false.",
+        ),
+    ];
+
+    let mut html = String::new();
+    html.push_str(&format!(
+        "<p class=\"section-lede\">Facet-local aggregates give one row per compiler config without creating a global score. Ratios use the same facet, benchmark, scenario, state profile, and artifact basis against <span class=\"mono\">{}</span>; lower is cheaper/smaller/faster. If the baseline does not compile, that point is excluded from ratio cells and still visible in Compile OK.</p>",
+        escape(SOL_CODEGEN_BASELINE)
+    ));
+    for (suite, title, note) in facets {
+        html.push_str(&render_facet_scorecard(rows, suite, title, note));
+    }
+    html
+}
+
+#[derive(Debug, Default)]
+struct FacetConfigScorecard {
+    attempted_artifacts: BTreeSet<String>,
+    ok_artifacts: BTreeSet<String>,
+    scenario_rows: usize,
+    strengths: BTreeMap<&'static str, usize>,
+    failure_reasons: BTreeMap<String, usize>,
+    gas_by_benchmark: BTreeMap<String, Vec<f64>>,
+    runtime_bytes: Vec<f64>,
+    internal_create_gas: Vec<f64>,
+    compile_ms: Vec<f64>,
+    peak_rss: Vec<f64>,
+}
+
+fn render_facet_scorecard(
+    rows: &[serde_json::Value],
+    suite: &str,
+    title: &str,
+    note: &str,
+) -> String {
+    let aggregates = facet_scorecard_aggregates(rows, suite);
+    if aggregates.is_empty() {
+        return String::new();
+    }
+
+    let mut html = String::new();
+    html.push_str("<h3>");
+    html.push_str(&escape(title));
+    html.push_str("</h3><p class=\"small muted\">");
+    html.push_str(&escape(note));
+    html.push_str("</p>");
+    html.push_str("<table><thead><tr><th>Compiler Config</th><th>Compile OK</th><th>Scenario Rows</th><th>Harness Gas</th><th>Runtime Bytes</th><th>Internal Create</th><th>Compile Wall</th><th>Peak RSS</th><th>Correctness Mix</th><th>Notes</th></tr></thead><tbody>");
+    for profile in ordered_scorecard_profiles(&aggregates) {
+        let Some(aggregate) = aggregates.get(&profile) else {
+            continue;
+        };
+        let gas_ratio = geomean_by_group(&aggregate.gas_by_benchmark);
+        html.push_str("<tr><td class=\"mono\">");
+        html.push_str(&escape(&profile_short(&profile)));
+        html.push_str("<br><span class=\"small muted\">");
+        html.push_str(&escape(&profile));
+        html.push_str("</span></td><td>");
+        html.push_str(&count_fraction_cell(
+            aggregate.ok_artifacts.len(),
+            aggregate.attempted_artifacts.len(),
+        ));
+        html.push_str("</td><td>");
+        html.push_str(&aggregate.scenario_rows.to_string());
+        html.push_str("</td><td>");
+        html.push_str(&ratio_cell(gas_ratio));
+        html.push_str("</td><td>");
+        html.push_str(&ratio_cell(geomean(&aggregate.runtime_bytes)));
+        html.push_str("</td><td>");
+        html.push_str(&ratio_cell(geomean(&aggregate.internal_create_gas)));
+        html.push_str("</td><td>");
+        html.push_str(&ratio_cell(geomean(&aggregate.compile_ms)));
+        html.push_str("</td><td>");
+        html.push_str(&ratio_cell(geomean(&aggregate.peak_rss)));
+        html.push_str("</td><td>");
+        html.push_str(&strength_mix_cell(&aggregate.strengths));
+        html.push_str("</td><td class=\"small\">");
+        html.push_str(&failure_reason_summary(&aggregate.failure_reasons));
+        html.push_str("</td></tr>");
+    }
+    html.push_str("</tbody></table>");
+    html
+}
+
+fn facet_scorecard_aggregates(
+    rows: &[serde_json::Value],
+    suite: &str,
+) -> BTreeMap<String, FacetConfigScorecard> {
+    let mut baseline_gas = BTreeMap::new();
+    let mut baseline_artifacts = BTreeMap::new();
+    let mut seen_baseline_artifacts = BTreeSet::new();
+    for row in rows {
+        if str_at(row, "/status").as_deref() != Some("ok")
+            || str_at(row, "/suite").as_deref() != Some(suite)
+            || str_at(row, "/profile_id").as_deref() != Some(SOL_CODEGEN_BASELINE)
+            || str_at(row, "/gas/metadata_mode").as_deref() != Some("off")
+        {
+            continue;
+        }
+        baseline_gas.insert(scenario_key(row), u64_at(row, "/gas/harness_call_gas"));
+        let artifact_key = artifact_key_from_row(row);
+        if seen_baseline_artifacts.insert(artifact_key) {
+            baseline_artifacts.insert(
+                str_at(row, "/benchmark_id").unwrap_or_default(),
+                artifact_metrics(row),
+            );
+        }
+    }
+
+    let mut aggregates: BTreeMap<String, FacetConfigScorecard> = BTreeMap::new();
+    let mut seen_artifacts_for_metrics = BTreeSet::new();
+    for row in rows {
+        if str_at(row, "/suite").as_deref() != Some(suite) {
+            continue;
+        }
+        let profile = str_at(row, "/profile_id").unwrap_or_default();
+        if profile.is_empty() {
+            continue;
+        }
+        let artifact_key = artifact_key_from_row(row);
+        let aggregate = aggregates.entry(profile.clone()).or_default();
+        aggregate.attempted_artifacts.insert(artifact_key.clone());
+
+        if str_at(row, "/status").as_deref() == Some("compile_error") {
+            *aggregate
+                .failure_reasons
+                .entry(short_error(row))
+                .or_default() += 1;
+            *aggregate.strengths.entry(row_strength(row)).or_default() += 1;
+            continue;
+        }
+
+        if str_at(row, "/status").as_deref() != Some("ok")
+            || str_at(row, "/gas/metadata_mode").as_deref() != Some("off")
+        {
+            continue;
+        }
+
+        aggregate.ok_artifacts.insert(artifact_key.clone());
+        aggregate.scenario_rows += 1;
+        *aggregate.strengths.entry(row_strength(row)).or_default() += 1;
+
+        let benchmark = str_at(row, "/benchmark_id").unwrap_or_default();
+        if let Some(base_gas) = baseline_gas.get(&scenario_key(row)).copied() {
+            push_ratio(
+                aggregate
+                    .gas_by_benchmark
+                    .entry(benchmark.clone())
+                    .or_default(),
+                u64_at(row, "/gas/harness_call_gas"),
+                base_gas,
+            );
+        }
+
+        if seen_artifacts_for_metrics.insert(artifact_key) {
+            let Some(base) = baseline_artifacts.get(&benchmark).copied() else {
+                continue;
+            };
+            let current = artifact_metrics(row);
+            push_ratio(
+                &mut aggregate.runtime_bytes,
+                current.runtime_bytes,
+                base.runtime_bytes,
+            );
+            push_ratio(
+                &mut aggregate.internal_create_gas,
+                current.internal_create_gas,
+                base.internal_create_gas,
+            );
+            push_float_ratio(
+                &mut aggregate.compile_ms,
+                current.compile_ms,
+                base.compile_ms,
+            );
+            push_float_ratio(
+                &mut aggregate.peak_rss,
+                current.peak_rss_kib as f64,
+                base.peak_rss_kib as f64,
+            );
+        }
+    }
+    aggregates
+}
+
+fn ordered_scorecard_profiles(aggregates: &BTreeMap<String, FacetConfigScorecard>) -> Vec<String> {
+    let mut profiles = Vec::new();
+    for profile in SOL_CODEGEN_PROFILES
+        .iter()
+        .chain(VYPER_CODEGEN_PROFILES.iter())
+    {
+        if aggregates.contains_key(*profile) {
+            profiles.push((*profile).to_string());
+        }
+    }
+    for profile in aggregates.keys() {
+        if !profiles.iter().any(|known| known == profile) {
+            profiles.push(profile.clone());
+        }
+    }
+    profiles
+}
+
+fn geomean_by_group(groups: &BTreeMap<String, Vec<f64>>) -> Option<f64> {
+    let values = groups
+        .values()
+        .filter_map(|group| geomean(group))
+        .collect::<Vec<_>>();
+    geomean(&values)
+}
+
+fn count_fraction_cell(ok: usize, attempted: usize) -> String {
+    if attempted == 0 {
+        return "<span class=\"pill na\">n/a</span>".to_string();
+    }
+    let ratio = ok as f64 / attempted as f64;
+    let width = (ratio * 100.0).clamp(2.0, 100.0);
+    let class = if ok == attempted {
+        "good"
+    } else if ratio >= 0.95 {
+        "warn"
+    } else {
+        "fail"
+    };
+    format!(
+        "<div class=\"ratio\"><span>{ok}/{attempted}</span><div class=\"bar {class}\"><span style=\"width:{width:.1}%\"></span></div></div>"
+    )
+}
+
+fn strength_mix_cell(counts: &BTreeMap<&'static str, usize>) -> String {
+    if counts.is_empty() {
+        return "<span class=\"pill na\">n/a</span>".to_string();
+    }
+    let mut parts = Vec::new();
+    for (strength, label) in [
+        ("behavior-fuzz", "fuzz"),
+        ("baseline-smoke", "baseline"),
+        ("status-only", "status"),
+        ("compile-fail", "fail"),
+        ("not-applicable", "n/a"),
+    ] {
+        let count = counts.get(strength).copied().unwrap_or(0);
+        if count > 0 {
+            parts.push(format!("{} {}", count, label));
+        }
+    }
+    escape(&parts.join(" / "))
+}
+
+fn failure_reason_summary(reasons: &BTreeMap<String, usize>) -> String {
+    if reasons.is_empty() {
+        return "<span class=\"pill pass\">no compile failures</span>".to_string();
+    }
+    reasons
+        .iter()
+        .map(|(reason, count)| format!("{} x{}", escape(reason), count))
+        .collect::<Vec<_>>()
+        .join("<br>")
 }
 
 fn render_scope_cards(rows: &[serde_json::Value], summary: &ReportSummary) -> String {
