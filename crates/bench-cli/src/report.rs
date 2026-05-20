@@ -17,8 +17,6 @@ use std::{
     process::Command,
 };
 
-const SOL_BASELINE: &str = "solc-latest-legacy-runs200-metadata-on";
-const VYPER_BASELINE: &str = "vyper-latest-gas-metadata-on";
 const SOL_CODEGEN_BASELINE: &str = "solc-latest-legacy-runs200-metadata-off";
 const SOL_NOOPT_CODEGEN: &str = "solc-latest-noopt-metadata-off";
 const SOL_VIAIR_CODEGEN: &str = "solc-latest-viair-runs200-metadata-off";
@@ -374,10 +372,10 @@ fn differential_benchmarks(compiled: &CompileSet) -> BTreeSet<String> {
     let mut vyper = BTreeSet::new();
     for artifact in &compiled.artifacts {
         match artifact.profile_id.as_str() {
-            SOL_BASELINE => {
+            SOL_CODEGEN_BASELINE => {
                 solidity.insert(artifact.benchmark_id.clone());
             }
-            VYPER_BASELINE => {
+            VYPER_GAS_CODEGEN => {
                 vyper.insert(artifact.benchmark_id.clone());
             }
             _ => {}
@@ -640,7 +638,7 @@ fn render_html(
     html.push_str("<h1>EVM Compiler Bench</h1>");
     html.push_str(&render_run_identity(toolchains, manifest, &summary));
     html.push_str(&render_overview(rows, &summary));
-    html.push_str("<nav><a href=\"#validity\">Validity</a><a href=\"#reliability\">Reliability</a><a href=\"#fixed\">Fixed Suite</a><a href=\"#scale\">Scale Suite</a><a href=\"#real\">Real-Derived</a><a href=\"#profiles\">Profiles</a><a href=\"#benchmarks\">Benchmarks</a><a href=\"#metadata\">Metadata</a><a href=\"#compile\">Compile Resources</a><a href=\"#methodology\">Methodology</a><a href=\"#raw\">Data Export</a></nav>");
+    html.push_str("<nav><a href=\"#validity\">Validity</a><a href=\"#reliability\">Reliability</a><a href=\"#fixed\">Fixed Suite</a><a href=\"#scale\">Scale Suite</a><a href=\"#real\">Real-Derived</a><a href=\"#profiles\">Profiles</a><a href=\"#benchmarks\">Benchmarks</a><a href=\"#compile\">Compile Resources</a><a href=\"#methodology\">Methodology</a><a href=\"#raw\">Data Export</a></nav>");
 
     html.push_str("<section id=\"validity\"><h2>Correctness And Measurement Scope</h2>");
     html.push_str(&render_validity_brief(rows));
@@ -668,10 +666,6 @@ fn render_html(
 
     html.push_str("<section id=\"benchmarks\"><h2>Per-Benchmark Summary</h2>");
     html.push_str(&render_benchmark_summary(rows));
-    html.push_str("</section>");
-
-    html.push_str("<section id=\"metadata\"><h2>Metadata Overhead</h2>");
-    html.push_str(&render_metadata_brief(rows));
     html.push_str("</section>");
 
     html.push_str("<section id=\"compile\"><h2>Compile Time And RSS</h2>");
@@ -720,7 +714,7 @@ fn render_overview(rows: &[serde_json::Value], summary: &ReportSummary) -> Strin
     let mut html = String::new();
     html.push_str("<section class=\"hero brief\"><div>");
     html.push_str("<div class=\"pill info\">Eval brief</div>");
-    html.push_str("<p class=\"lede\">This report is a validity-bounded compiler-profile evaluation. It varies optimizer/profile, metadata mode, and generated scale size across pinned solc, Vyper, and Prague EVM settings. It is not a global language ranking and it is not production transaction gas.</p>");
+    html.push_str("<p class=\"lede\">This report is a validity-bounded compiler-profile evaluation. It varies optimizer/profile and generated scale size across pinned solc, Vyper, and Prague EVM settings. Compiler metadata is disabled for the active comparison matrix. It is not a global language ranking and it is not production transaction gas.</p>");
     html.push_str(&render_scope_cards(rows, summary));
     html.push_str(&render_coverage_strip(rows));
     html.push_str(&render_signature_findings(rows, summary));
@@ -729,7 +723,7 @@ fn render_overview(rows: &[serde_json::Value], summary: &ReportSummary) -> Strin
         "<div class=\"k\">Gas scope</div><div class=\"v\">Harness call, not transaction gas</div>",
     );
     html.push_str("<div class=\"subv\">The headline gas number is the Foundry internal target call. End-user cost also includes intrinsic gas and calldata pricing; the schema keeps <span class=\"mono\">total_tx_gas</span> null until a top-level transaction runner exists.</div>");
-    html.push_str("<div class=\"notice small critical\"><strong>Read before comparing:</strong> baseline ratios are within a language. Solidity rows use solc legacy metadata-off as their baseline; Vyper rows use Vyper gas metadata-off. Cross-language rows are shown side by side, not collapsed into a score.</div>");
+    html.push_str("<div class=\"notice small critical\"><strong>Read before comparing:</strong> baseline ratios are within a language. Solidity rows use solc legacy no-metadata as their baseline; Vyper rows use Vyper gas no-metadata. Cross-language rows are shown side by side, not collapsed into a score.</div>");
     html.push_str("</div></section>");
 
     html.push_str("<section class=\"grid\">");
@@ -763,7 +757,7 @@ fn render_overview(rows: &[serde_json::Value], summary: &ReportSummary) -> Strin
     html.push_str(&metric_card(
         "Profiles",
         &summary.profiles.len().to_string(),
-        "compiler, optimizer, metadata matrix",
+        "compiler and optimizer matrix",
     ));
     html.push_str("</section>");
 
@@ -799,7 +793,7 @@ fn render_overview(rows: &[serde_json::Value], summary: &ReportSummary) -> Strin
 
     html.push_str("<section class=\"two\">");
     html.push_str("<div class=\"card\"><h3>What can be safely inferred?</h3><p class=\"small muted\">Fixed rows support matched-workload compiler/profile comparisons. Scale rows support compiler stress and growth-shape claims. Real-derived rows support scoped model hot-path claims only after reading their exclusions and mock assumptions.</p></div>");
-    html.push_str("<div class=\"card\"><h3>Where are the tradeoffs?</h3><p class=\"small muted\">Read reliability before gas, compare ratios only within the same benchmark/scenario/metadata/state profile, and treat bytecode, deployment, runtime gas, compile time, and RSS as separate dimensions.</p></div>");
+    html.push_str("<div class=\"card\"><h3>Where are the tradeoffs?</h3><p class=\"small muted\">Read reliability before gas, compare ratios only within the same benchmark, scenario, state profile, and language baseline, and treat bytecode, deployment, runtime gas, compile time, and RSS as separate dimensions.</p></div>");
     html.push_str("</section>");
     html
 }
@@ -807,7 +801,6 @@ fn render_overview(rows: &[serde_json::Value], summary: &ReportSummary) -> Strin
 fn render_scope_cards(rows: &[serde_json::Value], summary: &ReportSummary) -> String {
     let strong_fixed = behavior_fuzz_benchmark_count(rows, "fixed");
     let fixed_count = summary.fixed_benchmarks.len();
-    let metadata = metadata_overhead_by_language(rows);
 
     let mut html = String::new();
     html.push_str("<div class=\"scope-cards\">");
@@ -816,13 +809,7 @@ fn render_scope_cards(rows: &[serde_json::Value], summary: &ReportSummary) -> St
     html.push_str(&format!(
         "{strong_fixed}/{fixed_count} fixed benchmarks have fuzz+property checks. The rest of the successful rows are status/baseline-smoke coverage; golden and log checks are not run."
     ));
-    html.push_str("</span></div><div class=\"scope-card\"><strong>Metadata mode</strong><span class=\"small\">");
-    html.push_str(&format!(
-        "Solidity metadata-on changes runtime bytecode by {} bytes on average. Vyper metadata-on/off runtime bytecode delta is {} bytes across paired artifacts, so Vyper metadata modes are flagged as parity-pending.",
-        signed(metadata.solidity_avg_runtime_delta),
-        signed(metadata.vyper_avg_runtime_delta)
-    ));
-    html.push_str("</span></div>");
+    html.push_str("</span></div><div class=\"scope-card\"><strong>Bytecode basis</strong><span class=\"small\">Compiler metadata is disabled in the active profile matrix. Size comparisons use no-metadata artifacts and stripped bytecode metrics where available, so metadata is not a benchmark dimension.</span></div>");
     html.push_str("</div>");
     html
 }
@@ -842,7 +829,6 @@ fn render_coverage_strip(rows: &[serde_json::Value]) -> String {
 }
 
 fn render_signature_findings(rows: &[serde_json::Value], summary: &ReportSummary) -> String {
-    let metadata = metadata_overhead_by_language(rows);
     let dispatch = dispatch_signature(rows);
     let mut html = String::new();
     html.push_str("<div class=\"findings\">");
@@ -852,14 +838,7 @@ fn render_signature_findings(rows: &[serde_json::Value], summary: &ReportSummary
     html.push_str("<div class=\"finding\"><strong>Scale behavior</strong><span class=\"small\">");
     html.push_str(&escape(&dispatch));
     html.push_str("</span></div>");
-    html.push_str("<div class=\"finding\"><strong>Metadata caveat</strong><span class=\"small\">");
-    html.push_str(&format!(
-        "{} paired Vyper artifacts have {} runtime-byte delta between metadata modes; Solidity averages {} runtime bytes. Treat Vyper metadata columns as parity-pending until diagnosed.",
-        metadata.vyper_pairs,
-        signed(metadata.vyper_avg_runtime_delta),
-        signed(metadata.solidity_avg_runtime_delta)
-    ));
-    html.push_str("</span></div>");
+    html.push_str("<div class=\"finding\"><strong>Codegen basis</strong><span class=\"small\">All active profiles compile with bytecode metadata disabled. Metadata deltas are no longer measured or aggregated in the report.</span></div>");
     html.push_str("</div>");
     html.push_str(&format!(
         "<p class=\"small muted\">Inventory: {} successful scenario rows, {} compile failures, {} profiles. No composite score is computed.</p>",
@@ -1049,7 +1028,7 @@ fn render_fixed_suite_brief(rows: &[serde_json::Value]) -> String {
     html.push_str(
         "<details><summary>Show cross-language ratios against Solidity baseline</summary>",
     );
-    html.push_str("<p class=\"small muted\">This drilldown is intentionally labelled cross-language. It compares matched fixed-suite scenario rows against the Solidity legacy metadata-off baseline and should not be aggregated into a language score.</p>");
+    html.push_str("<p class=\"small muted\">This drilldown is intentionally labelled cross-language. It compares matched fixed-suite scenario rows against the Solidity legacy no-metadata baseline and should not be aggregated into a language score.</p>");
     html.push_str(&render_delta_table(
         "Largest cross-language fixed-suite deltas",
         &cross_language,
@@ -1065,53 +1044,13 @@ fn render_fixed_suite_brief(rows: &[serde_json::Value]) -> String {
 fn render_profile_brief(rows: &[serde_json::Value]) -> String {
     let mut html = String::new();
     html.push_str("<p class=\"answer\">What do the main compiler profiles buy or cost?</p>");
-    html.push_str("<p class=\"section-lede\">The default profile view hides metadata duplicates and noopt diagnostics. It compares the production-relevant codegen profiles first; the full profile table remains available below.</p>");
+    html.push_str("<p class=\"section-lede\">The default profile view compares the production-relevant codegen profiles first. Noopt diagnostics remain available in the full profile table below.</p>");
     html.push_str(&render_profile_tradeoff_table(
         rows,
         Some(&PRIMARY_CODEGEN_PROFILES),
     ));
-    html.push_str("<details><summary>Show all metadata-off profile tradeoffs, including noopt diagnostics</summary>");
+    html.push_str("<details><summary>Show all no-metadata profile tradeoffs, including noopt diagnostics</summary>");
     html.push_str(&render_fixed_profile_tradeoffs(rows));
-    html.push_str("</details>");
-    html
-}
-
-fn render_metadata_brief(rows: &[serde_json::Value]) -> String {
-    let summary = metadata_overhead_summary(rows);
-    let by_language = metadata_overhead_by_language(rows);
-    let mut html = String::new();
-    html.push_str("<p class=\"answer\">How much of bytecode/deploy cost is metadata?</p>");
-    html.push_str("<p class=\"section-lede\">Metadata is a deployment/verifiability dimension, not a codegen winner signal. The paired deltas below compare the same artifact/profile with metadata on versus off. Vyper metadata-on/off currently produces identical runtime bytecode in this run, so those duplicated rows are flagged as a pending harness/toolchain parity question.</p>");
-    html.push_str("<section class=\"grid\">");
-    html.push_str(&metric_card(
-        "Paired artifacts",
-        &summary.pairs.to_string(),
-        "same benchmark/profile, metadata on vs off",
-    ));
-    html.push_str(&metric_card(
-        "Runtime bytes delta",
-        &signed(summary.avg_runtime_delta),
-        "average metadata-on minus metadata-off",
-    ));
-    html.push_str(&metric_card(
-        "Creation bytes delta",
-        &signed(summary.avg_creation_delta),
-        "average metadata-on minus metadata-off",
-    ));
-    html.push_str(&metric_card(
-        "Internal create gas delta",
-        &signed(summary.avg_create_gas_delta),
-        "average metadata-on minus metadata-off",
-    ));
-    html.push_str(&metric_card(
-        "Vyper runtime delta",
-        &signed(by_language.vyper_avg_runtime_delta),
-        &format!("{} paired artifacts", by_language.vyper_pairs),
-    ));
-    html.push_str("</section>");
-    html.push_str(&render_metadata_language_summary(&by_language));
-    html.push_str("<details><summary>Show metadata deltas by profile family</summary>");
-    html.push_str(&render_metadata_delta_summary(rows));
     html.push_str("</details>");
     html
 }
@@ -1349,7 +1288,7 @@ fn render_fixed_scenario_ratios(rows: &[serde_json::Value]) -> String {
     let mut html = String::new();
     html.push_str("<h3>Scenario Gas Ratios</h3>");
     html.push_str(&format!(
-        "<p class=\"small muted\">Ratios compare the same benchmark, scenario, state profile, language, and metadata-off mode against that language's baseline: Solidity <span class=\"mono\">{}</span>, Vyper <span class=\"mono\">{}</span>. Lower is less harness call gas.</p>",
+        "<p class=\"small muted\">Ratios compare the same benchmark, scenario, state profile, language, and no-metadata mode against that language's baseline: Solidity <span class=\"mono\">{}</span>, Vyper <span class=\"mono\">{}</span>. Lower is less harness call gas.</p>",
         escape(SOL_CODEGEN_BASELINE),
         escape(VYPER_GAS_CODEGEN)
     ));
@@ -1388,6 +1327,7 @@ fn render_fixed_pareto_svg(rows: &[serde_json::Value]) -> String {
         .filter(|row| {
             str_at(row, "/status").as_deref() == Some("ok")
                 && str_at(row, "/suite").as_deref() == Some("fixed")
+                && str_at(row, "/gas/metadata_mode").as_deref() == Some("off")
         })
         .collect::<Vec<_>>();
     if selected.is_empty() {
@@ -1408,7 +1348,7 @@ fn render_fixed_pareto_svg(rows: &[serde_json::Value]) -> String {
 
     let mut html = String::new();
     html.push_str("<h3>Fixed-Suite Pareto Surface</h3>");
-    html.push_str("<div class=\"legend\"><span>faceted by language</span><span>colour = optimizer profile</span><span>circle = metadata-off</span><span>square = metadata-on</span></div>");
+    html.push_str("<div class=\"legend\"><span>faceted by language</span><span>colour = optimizer profile</span><span>all points use metadata-disabled artifacts</span></div>");
     html.push_str("<div class=\"chart\"><svg width=\"1080\" height=\"420\" viewBox=\"0 0 1080 420\" role=\"img\" aria-label=\"Runtime bytecode size versus harness call gas faceted by language\">");
     for (panel_index, language) in ["solidity", "vyper"].iter().enumerate() {
         let x0 = 64 + panel_index as i32 * 510;
@@ -1436,20 +1376,10 @@ fn render_fixed_pareto_svg(rows: &[serde_json::Value]) -> String {
             let x = x0 + (size * width as u64 / max_size) as i32;
             let y = y0 + height - (gas * height as u64 / max_gas) as i32;
             let color = profile_color(&str_at(row, "/profile_id").unwrap_or_default());
-            if str_at(row, "/gas/metadata_mode").as_deref() == Some("on") {
-                html.push_str(&format!(
-                    "<rect x=\"{}\" y=\"{}\" width=\"5\" height=\"5\" fill=\"{}\" opacity=\".55\"><title>{}</title></rect>",
-                    x - 2,
-                    y - 2,
-                    color,
-                    escape(&tooltip(row))
-                ));
-            } else {
-                html.push_str(&format!(
-                    "<circle cx=\"{x}\" cy=\"{y}\" r=\"3\" fill=\"{color}\" opacity=\".72\"><title>{}</title></circle>",
-                    escape(&tooltip(row))
-                ));
-            }
+            html.push_str(&format!(
+                "<circle cx=\"{x}\" cy=\"{y}\" r=\"3\" fill=\"{color}\" opacity=\".72\"><title>{}</title></circle>",
+                escape(&tooltip(row))
+            ));
         }
     }
     html.push_str("<text x=\"540\" y=\"400\" text-anchor=\"middle\" font-size=\"12\" fill=\"#657083\">runtime bytes (shared scale)</text>");
@@ -1469,7 +1399,6 @@ struct RatioAggregate {
 #[derive(Debug, Clone, Copy)]
 struct ArtifactMetrics {
     runtime_bytes: u64,
-    creation_bytes: u64,
     internal_create_gas: u64,
     compile_ms: f64,
     peak_rss_kib: u64,
@@ -1483,14 +1412,6 @@ struct ScenarioDelta {
     delta: i64,
     value: u64,
     baseline: u64,
-}
-
-#[derive(Debug, Default)]
-struct MetadataOverheadSummary {
-    pairs: usize,
-    avg_runtime_delta: i64,
-    avg_creation_delta: i64,
-    avg_create_gas_delta: i64,
 }
 
 fn collect_scenario_deltas(
@@ -1584,7 +1505,7 @@ fn render_profile_tradeoff_table(
     let aggregates = fixed_profile_tradeoff_aggregates(rows);
     let mut html = String::new();
     html.push_str(&format!(
-        "<p class=\"small muted\">Geometric mean ratios over fixed-suite metadata-off rows. Solidity profiles are relative to <span class=\"mono\">{}</span>; Vyper profiles are relative to <span class=\"mono\">{}</span>. Runtime gas is scenario-level; bytecode, deploy, and compile metrics are artifact-level.</p>",
+        "<p class=\"small muted\">Geometric mean ratios over fixed-suite no-metadata rows. Solidity profiles are relative to <span class=\"mono\">{}</span>; Vyper profiles are relative to <span class=\"mono\">{}</span>. Runtime gas is scenario-level; bytecode, deploy, and compile metrics are artifact-level.</p>",
         escape(SOL_CODEGEN_BASELINE),
         escape(VYPER_GAS_CODEGEN)
     ));
@@ -1691,56 +1612,6 @@ fn fixed_profile_tradeoff_aggregates(
     aggregates
 }
 
-fn metadata_overhead_summary(rows: &[serde_json::Value]) -> MetadataOverheadSummary {
-    let mut pairs: BTreeMap<String, MetadataPair> = BTreeMap::new();
-    let mut seen = BTreeSet::new();
-    for row in rows {
-        if str_at(row, "/status").as_deref() != Some("ok") {
-            continue;
-        }
-        let artifact_key = artifact_key_from_row(row);
-        if !seen.insert(artifact_key) {
-            continue;
-        }
-        let profile = str_at(row, "/profile_id").unwrap_or_default();
-        let base_profile = profile_without_metadata(&profile);
-        let key = format!(
-            "{}\0{}\0{}",
-            str_at(row, "/benchmark_id").unwrap_or_default(),
-            str_at(row, "/implementation_id").unwrap_or_default(),
-            base_profile
-        );
-        let entry = pairs.entry(key).or_default();
-        match str_at(row, "/gas/metadata_mode").as_deref() {
-            Some("off") => entry.off = Some(artifact_metrics(row)),
-            Some("on") => entry.on = Some(artifact_metrics(row)),
-            _ => {}
-        }
-    }
-
-    let mut summary = MetadataOverheadSummary::default();
-    let mut runtime_delta = 0;
-    let mut creation_delta = 0;
-    let mut create_gas_delta = 0;
-    for pair in pairs.values() {
-        let Some(off) = pair.off else {
-            continue;
-        };
-        let Some(on) = pair.on else {
-            continue;
-        };
-        summary.pairs += 1;
-        runtime_delta += on.runtime_bytes as i64 - off.runtime_bytes as i64;
-        creation_delta += on.creation_bytes as i64 - off.creation_bytes as i64;
-        create_gas_delta += on.internal_create_gas as i64 - off.internal_create_gas as i64;
-    }
-    let pairs = summary.pairs.max(1) as i64;
-    summary.avg_runtime_delta = runtime_delta / pairs;
-    summary.avg_creation_delta = creation_delta / pairs;
-    summary.avg_create_gas_delta = create_gas_delta / pairs;
-    summary
-}
-
 fn render_compile_resource_summary_for_profiles(
     rows: &[serde_json::Value],
     profile_filter: Option<&[&str]>,
@@ -1822,85 +1693,6 @@ fn render_compile_resource_summary_for_profiles(
 
 fn render_fixed_profile_tradeoffs(rows: &[serde_json::Value]) -> String {
     render_profile_tradeoff_table(rows, None)
-}
-
-#[derive(Debug, Default)]
-struct MetadataPair {
-    off: Option<ArtifactMetrics>,
-    on: Option<ArtifactMetrics>,
-}
-
-#[derive(Debug, Default)]
-struct MetadataAggregate {
-    pairs: usize,
-    runtime_delta: i64,
-    creation_delta: i64,
-    create_gas_delta: i64,
-}
-
-fn render_metadata_delta_summary(rows: &[serde_json::Value]) -> String {
-    let mut pairs: BTreeMap<String, MetadataPair> = BTreeMap::new();
-    let mut seen = BTreeSet::new();
-    for row in rows {
-        if str_at(row, "/status").as_deref() != Some("ok") {
-            continue;
-        }
-        let artifact_key = artifact_key_from_row(row);
-        if !seen.insert(artifact_key) {
-            continue;
-        }
-        let profile = str_at(row, "/profile_id").unwrap_or_default();
-        let base_profile = profile_without_metadata(&profile);
-        let key = format!(
-            "{}\0{}\0{}",
-            str_at(row, "/benchmark_id").unwrap_or_default(),
-            str_at(row, "/implementation_id").unwrap_or_default(),
-            base_profile
-        );
-        let entry = pairs.entry(key).or_default();
-        match str_at(row, "/gas/metadata_mode").as_deref() {
-            Some("off") => entry.off = Some(artifact_metrics(row)),
-            Some("on") => entry.on = Some(artifact_metrics(row)),
-            _ => {}
-        }
-    }
-
-    let mut aggregates: BTreeMap<String, MetadataAggregate> = BTreeMap::new();
-    for (key, pair) in pairs {
-        let Some(off) = pair.off else {
-            continue;
-        };
-        let Some(on) = pair.on else {
-            continue;
-        };
-        let base_profile = key.rsplit('\0').next().unwrap_or_default().to_string();
-        let aggregate = aggregates.entry(base_profile).or_default();
-        aggregate.pairs += 1;
-        aggregate.runtime_delta += on.runtime_bytes as i64 - off.runtime_bytes as i64;
-        aggregate.creation_delta += on.creation_bytes as i64 - off.creation_bytes as i64;
-        aggregate.create_gas_delta +=
-            on.internal_create_gas as i64 - off.internal_create_gas as i64;
-    }
-
-    let mut html = String::new();
-    html.push_str("<p class=\"small muted\">Paired metadata-on minus metadata-off deltas for the same benchmark, implementation, and optimizer profile. These are additive deltas, not ratios, because metadata dominates tiny contracts.</p>");
-    html.push_str("<table><thead><tr><th>Profile Family</th><th>Paired Artifacts</th><th>Avg Runtime Bytes Delta</th><th>Avg Creation Bytes Delta</th><th>Avg Internal Create Gas Delta</th></tr></thead><tbody>");
-    for (profile, aggregate) in aggregates {
-        let pairs = aggregate.pairs.max(1) as i64;
-        html.push_str("<tr><td class=\"mono\">");
-        html.push_str(&escape(&profile));
-        html.push_str("</td><td>");
-        html.push_str(&aggregate.pairs.to_string());
-        html.push_str("</td><td>");
-        html.push_str(&(aggregate.runtime_delta / pairs).to_string());
-        html.push_str("</td><td>");
-        html.push_str(&(aggregate.creation_delta / pairs).to_string());
-        html.push_str("</td><td>");
-        html.push_str(&(aggregate.create_gas_delta / pairs).to_string());
-        html.push_str("</td></tr>");
-    }
-    html.push_str("</tbody></table>");
-    html
 }
 
 #[derive(Debug, Default)]
@@ -2194,7 +1986,7 @@ fn render_real_model_profile_summary(rows: &[&serde_json::Value]) -> String {
 
     let mut html = String::new();
     html.push_str("<h3>Model/Profile Summary</h3>");
-    html.push_str("<p class=\"small muted\">Metadata-off artifact-level size/deploy values plus average harness call gas across model scenarios. This replaces row-level provenance repetition with one reader-facing profile surface per model.</p>");
+    html.push_str("<p class=\"small muted\">No-metadata artifact-level size/deploy values plus average harness call gas across model scenarios. This replaces row-level provenance repetition with one reader-facing profile surface per model.</p>");
     html.push_str("<table><thead><tr><th>Model</th><th>Language</th><th>Profile</th><th>Scenarios</th><th>Runtime Bytes</th><th>Internal Create Gas</th><th>Avg Harness Call Gas</th></tr></thead><tbody>");
     for (key, summary) in groups {
         let mut parts = key.split('\0');
@@ -2253,7 +2045,7 @@ fn render_real_derived_scenario_ratios(rows: &[&serde_json::Value]) -> String {
     let mut html = String::new();
     html.push_str("<h3>Real-Derived Scenario Gas Ratios</h3>");
     html.push_str(&format!(
-        "<p class=\"small muted\">Metadata-off hot-path model rows compared against <span class=\"mono\">{}</span> within the same model, scenario, and state profile. These bars are scoped to the benchmark model, not production protocol gas.</p>",
+        "<p class=\"small muted\">No-metadata hot-path model rows compared against <span class=\"mono\">{}</span> within the same model, scenario, and state profile. These bars are scoped to the benchmark model, not production protocol gas.</p>",
         escape(SOL_CODEGEN_BASELINE)
     ));
     html.push_str("<table><thead><tr><th>Model Scenario</th>");
@@ -2306,6 +2098,9 @@ fn render_scale_family_summary(rows: &[serde_json::Value]) -> String {
         let family = str_at(row, "/family").unwrap_or_default();
         let n = u64_at(row, "/parameter_value");
         let profile_id = str_at(row, "/profile_id").unwrap_or_default();
+        if !profile_id.ends_with("metadata-off") {
+            continue;
+        }
         let entry = groups.entry(family).or_default();
         entry.n_values.insert(n);
         let is_metadata_off = str_at(row, "/gas/metadata_mode").as_deref() == Some("off");
@@ -2336,7 +2131,7 @@ fn render_scale_family_summary(rows: &[serde_json::Value]) -> String {
     let mut html = String::new();
     html.push_str("<h3>Scale Family Summary</h3>");
     html.push_str("<p class=\"small muted\">One row per generated family. Detailed N/profile rows are intentionally left to the JSON export; curves and failure surface above are the primary scale reading path.</p>");
-    html.push_str("<table><thead><tr><th>Family</th><th>N Range</th><th>Metadata-off Profiles</th><th>Successful N/Profile Points</th><th>Compile Failures</th><th>Failure Profiles</th><th>Max Runtime Bytes</th><th>Max Harness Call Gas</th><th>Max Compile ms</th></tr></thead><tbody>");
+    html.push_str("<table><thead><tr><th>Family</th><th>N Range</th><th>No-Metadata Profiles</th><th>Successful N/Profile Points</th><th>Compile Failures</th><th>Failure Profiles</th><th>Max Runtime Bytes</th><th>Max Harness Call Gas</th><th>Max Compile ms</th></tr></thead><tbody>");
     for (family, aggregate) in groups {
         let min_n = aggregate
             .n_values
@@ -2467,7 +2262,10 @@ fn render_benchmark_summary(rows: &[serde_json::Value]) -> String {
         }
     }
     let mut html = String::new();
-    html.push_str("<p class=\"section-lede\">One row per benchmark keeps the report navigable without turning the HTML into a 1,968-row export. Use the JSON output for full row-level analysis.</p>");
+    html.push_str(&format!(
+        "<p class=\"section-lede\">One row per benchmark keeps the report navigable without turning the HTML into a {}-row export. Use the JSON output for full row-level analysis.</p>",
+        rows.len()
+    ));
     html.push_str("<table><thead><tr><th>Benchmark</th><th>Suite</th><th>Scenarios</th><th>Artifacts</th><th>Compile Failures</th><th>Correctness Strength</th><th>Worst EIP Margins</th></tr></thead><tbody>");
     for (benchmark, group) in groups {
         let suite = group
@@ -2603,7 +2401,7 @@ fn render_scale_failure_surface(rows: &[serde_json::Value]) -> String {
     }
     let mut html = String::new();
     html.push_str("<h3>Compile Failure Surface</h3>");
-    html.push_str("<p class=\"small muted\">Metadata-off scale family/N/profile tiles. The visible failure boundary matters more than any average failure count.</p>");
+    html.push_str("<p class=\"small muted\">No-metadata scale family/N/profile tiles. The visible failure boundary matters more than any average failure count.</p>");
     html.push_str("<div class=\"chart\"><table><thead><tr><th>Family / N</th>");
     for profile in &profiles {
         html.push_str("<th>");
@@ -2801,50 +2599,11 @@ enum ScaleMetric {
     CompileMs,
 }
 
-fn render_metadata_language_summary(summary: &MetadataLanguageSummary) -> String {
-    let mut html = String::new();
-    html.push_str("<table><thead><tr><th>Language</th><th>Pairs</th><th>Avg Runtime Bytes Delta</th><th>Avg Creation Bytes Delta</th><th>Interpretation</th></tr></thead><tbody>");
-    html.push_str(&metadata_language_row(
-        "Solidity",
-        summary.solidity_pairs,
-        summary.solidity_avg_runtime_delta,
-        summary.solidity_avg_creation_delta,
-        "Solidity metadata-on changes emitted runtime bytecode in this run.",
-    ));
-    html.push_str(&metadata_language_row(
-        "Vyper",
-        summary.vyper_pairs,
-        summary.vyper_avg_runtime_delta,
-        summary.vyper_avg_creation_delta,
-        "Vyper runtime bytecode is identical across metadata modes here; treat duplicated Vyper metadata rows as a pending parity diagnosis.",
-    ));
-    html.push_str("</tbody></table>");
-    html
-}
-
-fn metadata_language_row(
-    language: &str,
-    pairs: usize,
-    runtime_delta: i64,
-    creation_delta: i64,
-    note: &str,
-) -> String {
-    format!(
-        "<tr><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td class=\"small muted\">{}</td></tr>",
-        escape(language),
-        pairs,
-        signed(runtime_delta),
-        signed(creation_delta),
-        escape(note)
-    )
-}
-
 fn render_methodology(
-    rows: &[serde_json::Value],
+    _rows: &[serde_json::Value],
     toolchains: &Toolchains,
     manifest: &serde_json::Value,
 ) -> String {
-    let metadata = metadata_overhead_by_language(rows);
     let mut html = String::new();
     html.push_str("<section class=\"two\">");
     html.push_str("<div class=\"card\"><h3>Pinned Environment</h3><p class=\"small muted\">");
@@ -2861,12 +2620,7 @@ fn render_methodology(
         escape(&str_at(manifest, "/environment/tools/forge").unwrap_or_default())
     ));
     html.push_str("</p></div>");
-    html.push_str("<div class=\"card\"><h3>Limitations</h3><p class=\"small muted\">Gas is Foundry internal-call gas, not measured transaction gas. Compile timing is host-specific with three wall-time samples per successful artifact. Peak RSS is a single coarse sample. Cross-language behavioral equivalence is fuzz+property checked only where the correctness heatmap says so. Vyper metadata-mode parity is pending: ");
-    html.push_str(&format!(
-        "{} paired Vyper artifacts currently show {} runtime-byte delta.",
-        metadata.vyper_pairs,
-        signed(metadata.vyper_avg_runtime_delta)
-    ));
+    html.push_str("<div class=\"card\"><h3>Limitations</h3><p class=\"small muted\">Gas is Foundry internal-call gas, not measured transaction gas. Compile timing is host-specific with three wall-time samples per successful artifact. Peak RSS is a single coarse sample. Cross-language behavioral equivalence is fuzz+property checked only where the correctness heatmap says so. Compiler bytecode metadata is disabled for the active matrix, so metadata overhead is intentionally outside the measured comparison surface.");
     html.push_str("</p></div></section>");
     html.push_str("<details><summary>Show profile settings JSON</summary><pre class=\"small\">");
     html.push_str(&escape(
@@ -2883,80 +2637,6 @@ fn metric_card(label: &str, value: &str, subvalue: &str) -> String {
         escape(value),
         escape(subvalue)
     )
-}
-
-#[derive(Debug, Default)]
-struct MetadataLanguageSummary {
-    solidity_pairs: usize,
-    solidity_avg_runtime_delta: i64,
-    solidity_avg_creation_delta: i64,
-    vyper_pairs: usize,
-    vyper_avg_runtime_delta: i64,
-    vyper_avg_creation_delta: i64,
-}
-
-fn metadata_overhead_by_language(rows: &[serde_json::Value]) -> MetadataLanguageSummary {
-    let mut pairs: BTreeMap<String, (String, MetadataPair)> = BTreeMap::new();
-    let mut seen = BTreeSet::new();
-    for row in rows {
-        if str_at(row, "/status").as_deref() != Some("ok") {
-            continue;
-        }
-        let artifact_key = artifact_key_from_row(row);
-        if !seen.insert(artifact_key) {
-            continue;
-        }
-        let language = str_at(row, "/language").unwrap_or_default();
-        let profile = str_at(row, "/profile_id").unwrap_or_default();
-        let base_profile = profile_without_metadata(&profile);
-        let key = format!(
-            "{}\0{}\0{}",
-            str_at(row, "/benchmark_id").unwrap_or_default(),
-            str_at(row, "/implementation_id").unwrap_or_default(),
-            base_profile
-        );
-        let pair = &mut pairs
-            .entry(key)
-            .or_insert_with(|| (language.clone(), MetadataPair::default()))
-            .1;
-        match str_at(row, "/gas/metadata_mode").as_deref() {
-            Some("off") => pair.off = Some(artifact_metrics(row)),
-            Some("on") => pair.on = Some(artifact_metrics(row)),
-            _ => {}
-        }
-    }
-
-    let mut solidity_runtime = 0;
-    let mut solidity_creation = 0;
-    let mut vyper_runtime = 0;
-    let mut vyper_creation = 0;
-    let mut summary = MetadataLanguageSummary::default();
-    for (language, pair) in pairs.into_values() {
-        let Some(off) = pair.off else {
-            continue;
-        };
-        let Some(on) = pair.on else {
-            continue;
-        };
-        match language.as_str() {
-            "solidity" => {
-                summary.solidity_pairs += 1;
-                solidity_runtime += on.runtime_bytes as i64 - off.runtime_bytes as i64;
-                solidity_creation += on.creation_bytes as i64 - off.creation_bytes as i64;
-            }
-            "vyper" => {
-                summary.vyper_pairs += 1;
-                vyper_runtime += on.runtime_bytes as i64 - off.runtime_bytes as i64;
-                vyper_creation += on.creation_bytes as i64 - off.creation_bytes as i64;
-            }
-            _ => {}
-        }
-    }
-    summary.solidity_avg_runtime_delta = solidity_runtime / summary.solidity_pairs.max(1) as i64;
-    summary.solidity_avg_creation_delta = solidity_creation / summary.solidity_pairs.max(1) as i64;
-    summary.vyper_avg_runtime_delta = vyper_runtime / summary.vyper_pairs.max(1) as i64;
-    summary.vyper_avg_creation_delta = vyper_creation / summary.vyper_pairs.max(1) as i64;
-    summary
 }
 
 fn behavior_fuzz_benchmark_count(rows: &[serde_json::Value], suite: &str) -> usize {
@@ -3244,7 +2924,6 @@ fn artifact_key_from_row(row: &serde_json::Value) -> String {
 fn artifact_metrics(row: &serde_json::Value) -> ArtifactMetrics {
     ArtifactMetrics {
         runtime_bytes: u64_at(row, "/bytecode/runtime_bytes"),
-        creation_bytes: u64_at(row, "/bytecode/creation_bytes"),
         internal_create_gas: u64_at(row, "/gas/internal_create_gas"),
         compile_ms: mean_f64_array_at(row, "/compile/wall_ms_samples"),
         peak_rss_kib: u64_at(row, "/compile/peak_rss_kib"),
@@ -3502,11 +3181,7 @@ fn profile_short(profile: &str) -> String {
         "vyper-latest-none" => "vyper none",
         _ => profile,
     };
-    if profile.ends_with("-metadata-on") {
-        format!("{label} metadata-on")
-    } else {
-        label.to_string()
-    }
+    label.to_string()
 }
 
 fn signed(value: i64) -> String {

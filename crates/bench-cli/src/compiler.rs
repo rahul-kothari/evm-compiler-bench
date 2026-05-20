@@ -77,15 +77,10 @@ fn load_profiles(root: &Path) -> Result<Vec<CompilerProfile>> {
 }
 
 fn expand_metadata_profiles(base: &CompilerProfile) -> Vec<CompilerProfile> {
-    [MetadataMode::On, MetadataMode::Off]
-        .into_iter()
-        .map(|metadata_mode| {
-            let mut profile = base.clone();
-            profile.metadata_mode = metadata_mode;
-            profile.id = format!("{}-metadata-{}", base.id, metadata_mode.as_str());
-            profile
-        })
-        .collect()
+    let mut profile = base.clone();
+    profile.metadata_mode = MetadataMode::Off;
+    profile.id = format!("{}-metadata-off", base.id);
+    vec![profile]
 }
 
 fn compile_solidity(
