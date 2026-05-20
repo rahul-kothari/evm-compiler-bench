@@ -863,7 +863,7 @@ fn render_overview(rows: &[serde_json::Value], summary: &ReportSummary) -> Strin
     html.push_str(&render_signature_findings(rows, summary));
     html.push_str("</div><div class=\"card\">");
     html.push_str("<h3>Run basis</h3>");
-    html.push_str("<p class=\"small muted\">No-metadata artifacts, per-profile compiler EVM targets, latest pinned solc/Vyper, Vyper 0.5.0a1 alpha, selected historical solc/Vyper releases, Foundry internal-call gas, and per-language baseline ratios.</p>");
+    html.push_str("<p class=\"small muted\">Metadata-disabled artifacts where supported, stripped-bytecode comparisons everywhere, per-profile compiler EVM targets, latest pinned solc/Vyper, Vyper 0.5.0a1 alpha, selected historical solc/Vyper releases, Foundry internal-call gas, and per-language baseline ratios.</p>");
     html.push_str("<p class=\"small muted\">The full method, correctness heatmap, profile settings JSON, and limitations are split out so this page can stay focused on comparisons.</p>");
     html.push_str("<p><a class=\"pill info\" href=\"methodology.html\">Open methodology</a></p>");
     html.push_str("</div></section>");
@@ -1592,7 +1592,7 @@ fn render_signature_findings(rows: &[serde_json::Value], summary: &ReportSummary
     html.push_str("<div class=\"finding\"><strong>Scale behavior</strong><span class=\"small\">");
     html.push_str(&escape(&dispatch));
     html.push_str("</span></div>");
-    html.push_str("<div class=\"finding\"><strong>Codegen basis</strong><span class=\"small\">All active profiles compile with bytecode metadata disabled. Metadata deltas are no longer measured or aggregated in the report.</span></div>");
+    html.push_str("<div class=\"finding\"><strong>Codegen basis</strong><span class=\"small\">Profiles disable bytecode metadata when the compiler supports it, and compare stripped bytecode across all versions. Metadata deltas are no longer measured or aggregated.</span></div>");
     html.push_str("</div>");
     html.push_str(&format!(
         "<p class=\"small muted\">Inventory: {} successful scenario rows, {} compile failures, {} profiles. No composite score is computed.</p>",

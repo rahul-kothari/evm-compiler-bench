@@ -1,0 +1,8 @@
+id = "solc-0.8.20-noopt"
+language = "solidity"
+compiler = "solc-0.8.20"
+optimizer = false
+optimizer_runs = 0
+via_ir = false
+source_variant = "solidity-0.8"
+evm_version = "shanghai"

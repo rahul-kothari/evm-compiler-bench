@@ -105,14 +105,14 @@ fn compile_solidity(
     solc: &Toolchain,
     evm_version: &str,
 ) -> Result<CompiledArtifact> {
-    let source_path = root.join(&benchmark.solidity_path);
+    let source_path = source_path_for_profile(root, benchmark, profile)?;
     let source = fs::read_to_string(&source_path)?;
     let file_name = source_path
         .file_name()
         .and_then(|name| name.to_str())
         .context("solidity file name")?;
-    let metadata_settings = solidity_metadata_settings(profile.metadata_mode);
-    let input = json!({
+    let metadata_settings = solidity_metadata_settings(profile.metadata_mode, solc);
+    let mut input = json!({
         "language": "Solidity",
         "sources": {
             file_name: { "content": source }
@@ -132,6 +132,19 @@ fn compile_solidity(
             }
         }
     });
+    let settings = input
+        .pointer_mut("/settings")
+        .and_then(|value| value.as_object_mut())
+        .context("solidity settings object")?;
+    if metadata_settings
+        .as_object()
+        .is_some_and(|object| object.is_empty())
+    {
+        settings.remove("metadata");
+    }
+    if !profile.via_ir {
+        settings.remove("viaIR");
+    }
     let input = serde_json::to_vec(&input)?;
     let measured = repeat_compile_samples(
         || {
@@ -175,7 +188,7 @@ fn compile_solidity(
         measured.wall_ms_samples,
         measured.cpu_ms_samples,
         measured.peak_rss_kib,
-        solidity_compiler_settings(profile, evm_version),
+        solidity_compiler_settings(profile, solc, evm_version),
     )
 }
 
@@ -193,28 +206,53 @@ fn reject_solc_errors(output: &serde_json::Value) -> Result<()> {
     bail!("{}", serde_json::to_string_pretty(&fatal)?);
 }
 
-fn solidity_metadata_settings(metadata_mode: MetadataMode) -> serde_json::Value {
-    match metadata_mode {
-        MetadataMode::On => json!({
-            "bytecodeHash": "ipfs",
-            "appendCBOR": true
-        }),
-        MetadataMode::Off => json!({
-            "bytecodeHash": "none",
-            "appendCBOR": false
-        }),
+fn solidity_metadata_settings(metadata_mode: MetadataMode, solc: &Toolchain) -> serde_json::Value {
+    match solidity_version_tuple(solc) {
+        Some(version) if version >= (0, 8, 18) => match metadata_mode {
+            MetadataMode::On => json!({
+                "bytecodeHash": "ipfs",
+                "appendCBOR": true
+            }),
+            MetadataMode::Off => json!({
+                "bytecodeHash": "none",
+                "appendCBOR": false
+            }),
+        },
+        Some(version) if version >= (0, 6, 0) => match metadata_mode {
+            MetadataMode::On => json!({
+                "bytecodeHash": "ipfs"
+            }),
+            MetadataMode::Off => json!({
+                "bytecodeHash": "none"
+            }),
+        },
+        _ => json!({}),
     }
 }
 
-fn solidity_compiler_settings(profile: &CompilerProfile, evm_version: &str) -> serde_json::Value {
+fn solidity_compiler_settings(
+    profile: &CompilerProfile,
+    solc: &Toolchain,
+    evm_version: &str,
+) -> serde_json::Value {
     json!({
         "evmVersion": evm_version,
+        "compiler": profile.compiler,
         "metadataMode": profile.metadata_mode.as_str(),
-        "metadata": solidity_metadata_settings(profile.metadata_mode),
+        "metadata": solidity_metadata_settings(profile.metadata_mode, solc),
         "optimizer": profile.optimizer,
         "optimizerRuns": profile.optimizer_runs,
-        "viaIR": profile.via_ir
+        "viaIR": profile.via_ir,
+        "sourceVariant": profile.source_variant.as_deref().unwrap_or("default")
     })
+}
+
+fn solidity_version_tuple(solc: &Toolchain) -> Option<(u64, u64, u64)> {
+    let mut parts = solc.version.split('.');
+    let major = parts.next()?.parse().ok()?;
+    let minor = parts.next()?.parse().ok()?;
+    let patch = parts.next()?.parse().ok()?;
+    Some((major, minor, patch))
 }
 
 fn vyper_compiler_settings(profile: &CompilerProfile, evm_version: &str) -> serde_json::Value {
@@ -324,7 +362,16 @@ fn source_path_for_profile(
     profile: &CompilerProfile,
 ) -> Result<PathBuf> {
     match profile.language {
-        Language::Solidity => Ok(root.join(&benchmark.solidity_path)),
+        Language::Solidity => {
+            let source_path = root.join(&benchmark.solidity_path);
+            let Some(variant) = profile.source_variant.as_deref() else {
+                return Ok(source_path);
+            };
+            let source = fs::read_to_string(&source_path)?;
+            let transformed = transform_solidity_source(&source, variant)
+                .with_context(|| format!("applying source variant {variant}"))?;
+            materialize_source_variant(root, variant, &benchmark.solidity_path, transformed)
+        }
         Language::Vyper => {
             let source_path = root.join(&benchmark.vyper_path);
             let Some(variant) = profile.source_variant.as_deref() else {
@@ -333,17 +380,85 @@ fn source_path_for_profile(
             let source = fs::read_to_string(&source_path)?;
             let transformed = transform_vyper_source(&source, variant)
                 .with_context(|| format!("applying source variant {variant}"))?;
-            let variant_path = root
-                .join("target/bench-source-variants")
-                .join(variant)
-                .join(&benchmark.vyper_path);
-            if let Some(parent) = variant_path.parent() {
-                fs::create_dir_all(parent)?;
-            }
-            fs::write(&variant_path, transformed)?;
-            Ok(variant_path)
+            materialize_source_variant(root, variant, &benchmark.vyper_path, transformed)
         }
     }
+}
+
+fn materialize_source_variant(
+    root: &Path,
+    variant: &str,
+    source_path: &str,
+    transformed: String,
+) -> Result<PathBuf> {
+    let variant_path = root
+        .join("target/bench-source-variants")
+        .join(variant)
+        .join(source_path);
+    if let Some(parent) = variant_path.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    fs::write(&variant_path, transformed)?;
+    Ok(variant_path)
+}
+
+fn transform_solidity_source(source: &str, variant: &str) -> Result<String> {
+    let source = match variant {
+        "solidity-0.8" => rewrite_solidity_pragma(source, "pragma solidity >=0.8.0 <0.9.0;"),
+        "solidity-0.7" => {
+            let source = rewrite_solidity_pragma(source, "pragma solidity >=0.7.0 <0.8.0;");
+            rewrite_solidity_pre_08(&source)
+        }
+        "solidity-0.6" => {
+            let source = rewrite_solidity_pragma(source, "pragma solidity >=0.6.0 <0.7.0;");
+            let source = rewrite_solidity_pre_08(&source);
+            add_constructor_visibility(&source)
+        }
+        "solidity-0.5" => {
+            let source = rewrite_solidity_pragma(source, "pragma solidity >=0.5.0 <0.6.0;");
+            let source = rewrite_solidity_pre_08(&source);
+            add_constructor_visibility(&source)
+        }
+        "solidity-0.4" => {
+            let source = rewrite_solidity_pragma(source, "pragma solidity >=0.4.26 <0.5.0;");
+            let source = rewrite_solidity_pre_08(&source);
+            let source = add_constructor_visibility(&source);
+            source.replace(" calldata", "")
+        }
+        other => bail!("unknown Solidity source variant {other}"),
+    };
+    Ok(source)
+}
+
+fn rewrite_solidity_pragma(source: &str, pragma: &str) -> String {
+    source.replace("pragma solidity ^0.8.30;", pragma)
+}
+
+fn rewrite_solidity_pre_08(source: &str) -> String {
+    source
+        .replace("10_000_000_000", "10000000000")
+        .replace("10_000", "10000")
+        .replace("type(uint256).max", "uint256(-1)")
+        .replace("type(uint112).max", "uint112(-1)")
+}
+
+fn add_constructor_visibility(source: &str) -> String {
+    source
+        .lines()
+        .map(|line| {
+            let trimmed = line.trim_start();
+            if trimmed.starts_with("constructor(")
+                && trimmed.ends_with('{')
+                && !trimmed.contains(" public ")
+                && !trimmed.contains(" internal ")
+            {
+                line.replacen(") {", ") public {", 1)
+            } else {
+                line.to_string()
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 fn transform_vyper_source(source: &str, variant: &str) -> Result<String> {
@@ -607,7 +722,7 @@ fn compile_failure(
     let source_path = source_path_for_profile(root, benchmark, profile)?;
     let source = fs::read(&source_path)?;
     let compiler_settings = match language {
-        Language::Solidity => solidity_compiler_settings(profile, evm_version),
+        Language::Solidity => solidity_compiler_settings(profile, toolchain, evm_version),
         Language::Vyper => vyper_compiler_settings(profile, evm_version),
     };
     Ok(CompileFailure {
@@ -660,7 +775,7 @@ fn bytecode_metrics(creation: &str, runtime: &str) -> Result<BytecodeMetrics> {
 
 #[cfg(test)]
 mod tests {
-    use super::{bytecode_metrics, transform_vyper_source};
+    use super::{bytecode_metrics, transform_solidity_source, transform_vyper_source};
 
     #[test]
     fn computes_bytecode_metrics() {
@@ -679,5 +794,16 @@ mod tests {
         assert!(rewritten.contains("log Transfer(empty(address), msg.sender, 1)"));
         assert!(rewritten.contains("for item in xs:"));
         assert!(rewritten.contains("_abi_encode(4 / 2)"));
+    }
+
+    #[test]
+    fn rewrites_solidity_historical_compatibility_syntax() {
+        let source = "// SPDX-License-Identifier: MIT\npragma solidity ^0.8.30;\n\ncontract C {\n    uint256 public constant FEE_DENOMINATOR = 10_000_000_000;\n    constructor(uint256 initial) {\n    }\n    function f(bytes32[] calldata proof) external pure returns (uint256) {\n        return type(uint256).max + type(uint112).max + proof.length;\n    }\n}\n";
+        let rewritten = transform_solidity_source(source, "solidity-0.4").unwrap();
+        assert!(rewritten.contains("pragma solidity >=0.4.26 <0.5.0;"));
+        assert!(rewritten.contains("10000000000"));
+        assert!(rewritten.contains("constructor(uint256 initial) public {"));
+        assert!(rewritten.contains("bytes32[] proof"));
+        assert!(rewritten.contains("uint256(-1) + uint112(-1)"));
     }
 }
