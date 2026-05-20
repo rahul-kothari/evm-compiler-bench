@@ -242,6 +242,7 @@ pub struct Toolchain {
 pub struct Toolchains {
     pub solc: Toolchain,
     pub vyper: Toolchain,
+    pub vyper_alpha: Toolchain,
     pub evm_version: String,
 }
 

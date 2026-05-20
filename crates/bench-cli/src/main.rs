@@ -171,6 +171,12 @@ fn main() -> Result<()> {
                 toolchains.vyper.binary_path.display(),
                 toolchains.vyper.binary_sha256
             );
+            println!(
+                "vyper_alpha version={} path={} sha256={}",
+                toolchains.vyper_alpha.version,
+                toolchains.vyper_alpha.binary_path.display(),
+                toolchains.vyper_alpha.binary_sha256
+            );
         }
         Command::Generate { benchmark } => {
             let generated = generate_scale_suite(&root, benchmark.as_deref())?;

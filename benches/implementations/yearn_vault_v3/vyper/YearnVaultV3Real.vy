@@ -1,4 +1,4 @@
-# pragma version 0.4.3
+# pragma version >=0.4.3,<0.6.0
 
 MAX_BPS: constant(uint256) = 10000
 WAD: constant(uint256) = 10**18

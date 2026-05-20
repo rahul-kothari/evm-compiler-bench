@@ -1,4 +1,4 @@
-# pragma version 0.4.3
+# pragma version >=0.4.3,<0.6.0
 
 N_COINS: constant(uint256) = 2
 A_PRECISION: constant(uint256) = 100

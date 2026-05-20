@@ -1,4 +1,4 @@
-# pragma version 0.4.3
+# pragma version >=0.4.3,<0.6.0
 
 nonces: public(HashMap[address, uint256])
 

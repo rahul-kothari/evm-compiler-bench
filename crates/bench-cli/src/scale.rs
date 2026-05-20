@@ -700,7 +700,7 @@ fn solidity_header(contract_name: &str) -> String {
 }
 
 fn vyper_header() -> String {
-    "# pragma version 0.4.3\n\n".to_string()
+    "# pragma version >=0.4.3,<0.6.0\n\n".to_string()
 }
 
 fn contract_name(stem: &str, n: u64) -> String {

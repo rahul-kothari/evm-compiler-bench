@@ -1,4 +1,4 @@
-# pragma version 0.4.3
+# pragma version >=0.4.3,<0.6.0
 
 MINIMUM_LIQUIDITY: constant(uint256) = 1000
 FEE_TO: constant(address) = 0x0000000000000000000000000000000000000FEE

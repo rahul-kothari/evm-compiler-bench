@@ -24,20 +24,28 @@ const VYPER_GAS_CODEGEN: &str = "vyper-latest-gas-metadata-off";
 const VYPER_VENOM_CODEGEN: &str = "vyper-latest-venom-metadata-off";
 const VYPER_CODESIZE_CODEGEN: &str = "vyper-latest-codesize-metadata-off";
 const VYPER_NONE_CODEGEN: &str = "vyper-latest-none-metadata-off";
-const PRIMARY_CODEGEN_PROFILES: [&str; 5] = [
+const VYPER_ALPHA_GAS_CODEGEN: &str = "vyper-0.5.0a1-gas-metadata-off";
+const VYPER_ALPHA_CODESIZE_CODEGEN: &str = "vyper-0.5.0a1-codesize-metadata-off";
+const VYPER_ALPHA_NONE_CODEGEN: &str = "vyper-0.5.0a1-none-metadata-off";
+const PRIMARY_CODEGEN_PROFILES: [&str; 7] = [
     SOL_CODEGEN_BASELINE,
     SOL_VIAIR_CODEGEN,
     VYPER_GAS_CODEGEN,
+    VYPER_ALPHA_GAS_CODEGEN,
     VYPER_VENOM_CODEGEN,
     VYPER_CODESIZE_CODEGEN,
+    VYPER_ALPHA_CODESIZE_CODEGEN,
 ];
 const SOL_CODEGEN_PROFILES: [&str; 3] =
     [SOL_CODEGEN_BASELINE, SOL_VIAIR_CODEGEN, SOL_NOOPT_CODEGEN];
-const VYPER_CODEGEN_PROFILES: [&str; 4] = [
+const VYPER_CODEGEN_PROFILES: [&str; 7] = [
     VYPER_GAS_CODEGEN,
+    VYPER_ALPHA_GAS_CODEGEN,
     VYPER_VENOM_CODEGEN,
     VYPER_CODESIZE_CODEGEN,
+    VYPER_ALPHA_CODESIZE_CODEGEN,
     VYPER_NONE_CODEGEN,
+    VYPER_ALPHA_NONE_CODEGEN,
 ];
 
 pub struct ReportPaths {
@@ -187,7 +195,7 @@ pub fn write_outputs(
         "run_id": Utc::now().format("%Y%m%dT%H%M%SZ").to_string(),
         "started_at": Utc::now(),
         "evm_version": toolchains.evm_version,
-        "toolchains": [toolchains.solc, toolchains.vyper],
+        "toolchains": [toolchains.solc, toolchains.vyper, toolchains.vyper_alpha],
         "profiles": compiled.profiles,
         "scale_generator": {
             "version": scale_manifest.generator_version.clone(),
@@ -736,8 +744,9 @@ fn render_run_identity(
     let started = str_at(manifest, "/started_at").unwrap_or_else(|| "unknown start".into());
     let solc_hash = short_hash(&toolchains.solc.binary_sha256);
     let vyper_hash = short_hash(&toolchains.vyper.binary_sha256);
+    let vyper_alpha_hash = short_hash(&toolchains.vyper_alpha.binary_sha256);
     format!(
-        "<div class=\"meta\">commit <span class=\"mono\">{}</span> &middot; {} &middot; started {} &middot; EVM {} &middot; solc {} (<span class=\"mono\">{}</span>) &middot; Vyper {} (<span class=\"mono\">{}</span>) &middot; {} profiles &middot; {} benchmarks &middot; {} rows</div>",
+        "<div class=\"meta\">commit <span class=\"mono\">{}</span> &middot; {} &middot; started {} &middot; EVM {} &middot; solc {} (<span class=\"mono\">{}</span>) &middot; Vyper {} (<span class=\"mono\">{}</span>) &middot; Vyper alpha {} (<span class=\"mono\">{}</span>) &middot; {} profiles &middot; {} benchmarks &middot; {} rows</div>",
         escape(&commit),
         escape(&host),
         escape(&started),
@@ -746,6 +755,8 @@ fn render_run_identity(
         escape(&solc_hash),
         escape(&toolchains.vyper.version),
         escape(&vyper_hash),
+        escape(&toolchains.vyper_alpha.version),
+        escape(&vyper_alpha_hash),
         summary.profiles.len(),
         summary.benchmarks.len(),
         summary.ok_rows + summary.compile_failures,
@@ -760,7 +771,7 @@ fn render_overview(rows: &[serde_json::Value], summary: &ReportSummary) -> Strin
     html.push_str(&render_signature_findings(rows, summary));
     html.push_str("</div><div class=\"card\">");
     html.push_str("<h3>Run basis</h3>");
-    html.push_str("<p class=\"small muted\">No-metadata artifacts, Prague EVM, latest pinned solc/Vyper, Foundry internal-call gas, and per-language baseline ratios.</p>");
+    html.push_str("<p class=\"small muted\">No-metadata artifacts, Prague EVM, latest pinned solc/Vyper plus Vyper 0.5.0a1 alpha, Foundry internal-call gas, and per-language baseline ratios.</p>");
     html.push_str("<p class=\"small muted\">The full method, correctness heatmap, profile settings JSON, and limitations are split out so this page can stay focused on comparisons.</p>");
     html.push_str("<p><a class=\"pill info\" href=\"methodology.html\">Open methodology</a></p>");
     html.push_str("</div></section>");
@@ -975,9 +986,12 @@ fn render_fixed_suite_brief(rows: &[serde_json::Value]) -> String {
         "vyper",
         VYPER_GAS_CODEGEN,
         &[
+            VYPER_ALPHA_GAS_CODEGEN,
             VYPER_VENOM_CODEGEN,
             VYPER_CODESIZE_CODEGEN,
+            VYPER_ALPHA_CODESIZE_CODEGEN,
             VYPER_NONE_CODEGEN,
+            VYPER_ALPHA_NONE_CODEGEN,
         ],
     );
     let mut sol_changed = sol_deltas.clone();
@@ -1003,8 +1017,10 @@ fn render_fixed_suite_brief(rows: &[serde_json::Value]) -> String {
         "fixed",
         &[
             VYPER_GAS_CODEGEN,
+            VYPER_ALPHA_GAS_CODEGEN,
             VYPER_VENOM_CODEGEN,
             VYPER_CODESIZE_CODEGEN,
+            VYPER_ALPHA_CODESIZE_CODEGEN,
         ],
     )
     .into_iter()
@@ -1090,7 +1106,7 @@ fn render_fixed_suite_brief(rows: &[serde_json::Value]) -> String {
 fn render_profile_brief(rows: &[serde_json::Value]) -> String {
     let mut html = String::new();
     html.push_str("<p class=\"answer\">What do the main compiler profiles buy or cost?</p>");
-    html.push_str("<p class=\"section-lede\">The default profile view compares the main codegen profiles first, including Vyper's experimental Venom path. Noopt diagnostics remain available in the full profile table below.</p>");
+    html.push_str("<p class=\"section-lede\">The default profile view compares the main codegen profiles first, including Vyper 0.5.0a1 alpha and Vyper's experimental Venom path. Noopt diagnostics remain available in the full profile table below.</p>");
     html.push_str(&render_profile_tradeoff_table(
         rows,
         Some(&PRIMARY_CODEGEN_PROFILES),
@@ -1308,9 +1324,12 @@ fn render_fixed_scenario_ratios(rows: &[serde_json::Value]) -> String {
     let selected_profiles = [
         SOL_VIAIR_CODEGEN,
         SOL_NOOPT_CODEGEN,
+        VYPER_ALPHA_GAS_CODEGEN,
         VYPER_VENOM_CODEGEN,
         VYPER_CODESIZE_CODEGEN,
+        VYPER_ALPHA_CODESIZE_CODEGEN,
         VYPER_NONE_CODEGEN,
+        VYPER_ALPHA_NONE_CODEGEN,
     ];
     let mut baseline = BTreeMap::new();
     let mut values: BTreeMap<String, BTreeMap<String, u64>> = BTreeMap::new();
@@ -1858,8 +1877,10 @@ fn render_real_derived_summary(rows: &[serde_json::Value]) -> String {
         &[
             SOL_VIAIR_CODEGEN,
             VYPER_GAS_CODEGEN,
+            VYPER_ALPHA_GAS_CODEGEN,
             VYPER_VENOM_CODEGEN,
             VYPER_CODESIZE_CODEGEN,
+            VYPER_ALPHA_CODESIZE_CODEGEN,
         ],
     );
     let mut cheaper = deltas
@@ -2070,8 +2091,10 @@ fn render_real_derived_scenario_ratios(rows: &[&serde_json::Value]) -> String {
     let selected_profiles = [
         SOL_VIAIR_CODEGEN,
         VYPER_GAS_CODEGEN,
+        VYPER_ALPHA_GAS_CODEGEN,
         VYPER_VENOM_CODEGEN,
         VYPER_CODESIZE_CODEGEN,
+        VYPER_ALPHA_CODESIZE_CODEGEN,
     ];
     let mut baseline = BTreeMap::new();
     let mut values: BTreeMap<String, BTreeMap<String, u64>> = BTreeMap::new();
@@ -2274,9 +2297,12 @@ fn render_fixed_benchmark_summary(rows: &[serde_json::Value]) -> String {
         SOL_VIAIR_CODEGEN,
         SOL_NOOPT_CODEGEN,
         VYPER_GAS_CODEGEN,
+        VYPER_ALPHA_GAS_CODEGEN,
         VYPER_VENOM_CODEGEN,
         VYPER_CODESIZE_CODEGEN,
+        VYPER_ALPHA_CODESIZE_CODEGEN,
         VYPER_NONE_CODEGEN,
+        VYPER_ALPHA_NONE_CODEGEN,
     ];
     let mut html = String::new();
     html.push_str("<h3>Per-Benchmark Snapshot</h3>");
@@ -2510,6 +2536,7 @@ fn render_scale_curve_panels(rows: &[serde_json::Value]) -> String {
         if !PRIMARY_CODEGEN_PROFILES.contains(&profile.as_str())
             && profile != SOL_NOOPT_CODEGEN
             && profile != VYPER_NONE_CODEGEN
+            && profile != VYPER_ALPHA_NONE_CODEGEN
         {
             continue;
         }
@@ -2631,9 +2658,12 @@ fn scale_family_svg(by_profile: &BTreeMap<String, BTreeMap<u64, ScaleCurveAggreg
         SOL_VIAIR_CODEGEN,
         SOL_NOOPT_CODEGEN,
         VYPER_GAS_CODEGEN,
+        VYPER_ALPHA_GAS_CODEGEN,
         VYPER_VENOM_CODEGEN,
         VYPER_CODESIZE_CODEGEN,
+        VYPER_ALPHA_CODESIZE_CODEGEN,
         VYPER_NONE_CODEGEN,
+        VYPER_ALPHA_NONE_CODEGEN,
     ]
     .iter()
     .enumerate()
@@ -2667,7 +2697,7 @@ fn render_methodology(
     html.push_str("<section class=\"two\">");
     html.push_str("<div class=\"card\"><h3>Pinned Environment</h3><p class=\"small muted\">");
     html.push_str(&format!(
-        "EVM fork {}. solc {} at <span class=\"mono\">{}</span> with sha256 <span class=\"mono\">{}</span>. Vyper {} at <span class=\"mono\">{}</span> with sha256 <span class=\"mono\">{}</span>. Host: {}. Foundry: {}.",
+        "EVM fork {}. solc {} at <span class=\"mono\">{}</span> with sha256 <span class=\"mono\">{}</span>. Vyper {} at <span class=\"mono\">{}</span> with sha256 <span class=\"mono\">{}</span>. Vyper alpha {} at <span class=\"mono\">{}</span> with sha256 <span class=\"mono\">{}</span>. Host: {}. Foundry: {}.",
         escape(&toolchains.evm_version),
         escape(&toolchains.solc.version),
         escape(&toolchains.solc.binary_path.display().to_string()),
@@ -2675,11 +2705,14 @@ fn render_methodology(
         escape(&toolchains.vyper.version),
         escape(&toolchains.vyper.binary_path.display().to_string()),
         escape(&toolchains.vyper.binary_sha256),
+        escape(&toolchains.vyper_alpha.version),
+        escape(&toolchains.vyper_alpha.binary_path.display().to_string()),
+        escape(&toolchains.vyper_alpha.binary_sha256),
         escape(&str_at(manifest, "/environment/host/cpu").unwrap_or_default()),
         escape(&str_at(manifest, "/environment/tools/forge").unwrap_or_default())
     ));
     html.push_str("</p></div>");
-    html.push_str("<div class=\"card\"><h3>Limitations</h3><p class=\"small muted\">Gas is Foundry internal-call gas, not measured transaction gas. Compile timing is host-specific with three wall-time samples per successful artifact. Peak RSS is a single coarse sample. Cross-language behavioral equivalence is fuzz+property checked only where the correctness heatmap says so. Compiler bytecode metadata is disabled for the active matrix, so metadata overhead is intentionally outside the measured comparison surface. The <span class=\"mono\">vyper venom</span> profile uses <span class=\"mono\">--experimental-codegen</span>; treat its failures and wins as experimental codegen evidence, not production-default Vyper behavior.");
+    html.push_str("<div class=\"card\"><h3>Limitations</h3><p class=\"small muted\">Gas is Foundry internal-call gas, not measured transaction gas. Compile timing is host-specific with three wall-time samples per successful artifact. Peak RSS is a single coarse sample. Cross-language behavioral equivalence is fuzz+property checked only where the correctness heatmap says so. Compiler bytecode metadata is disabled for the active matrix, so metadata overhead is intentionally outside the measured comparison surface. Vyper 0.5.0a1 is a pre-release compiler. The <span class=\"mono\">vyper venom</span> profile uses <span class=\"mono\">--experimental-codegen</span>; treat its failures and wins as experimental codegen evidence, not production-default Vyper behavior.");
     html.push_str("</p></div></section>");
     html.push_str("<details><summary>Show profile settings JSON</summary><pre class=\"small\">");
     html.push_str(&escape(
@@ -2940,9 +2973,12 @@ fn profile_color(profile: &str) -> &'static str {
         "solc-latest-viair-runs200" => "#7c3aed",
         "solc-latest-noopt" => "#b91c1c",
         "vyper-latest-gas" => "#0f8a5f",
+        "vyper-0.5.0a1-gas" => "#14b8a6",
         "vyper-latest-venom" => "#0891b2",
         "vyper-latest-codesize" => "#b45309",
+        "vyper-0.5.0a1-codesize" => "#f59e0b",
         "vyper-latest-none" => "#64748b",
+        "vyper-0.5.0a1-none" => "#94a3b8",
         _ => "#111827",
     }
 }
@@ -3237,9 +3273,12 @@ fn profile_short(profile: &str) -> String {
         "solc-latest-viair-runs200" => "solc viaIR",
         "solc-latest-noopt" => "solc noopt",
         "vyper-latest-gas" => "vyper gas",
+        "vyper-0.5.0a1-gas" => "vyper 0.5 gas",
         "vyper-latest-venom" => "vyper venom",
         "vyper-latest-codesize" => "vyper codesize",
+        "vyper-0.5.0a1-codesize" => "vyper 0.5 codesize",
         "vyper-latest-none" => "vyper none",
+        "vyper-0.5.0a1-none" => "vyper 0.5 none",
         _ => profile,
     };
     label.to_string()

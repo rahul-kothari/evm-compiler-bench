@@ -21,21 +21,14 @@ pub fn compile_all(
     let mut failures = Vec::new();
     for benchmark in benchmarks {
         for profile in &profiles {
+            let toolchain = toolchain_for_profile(toolchains, profile)?;
             let result = match profile.language {
-                Language::Solidity => compile_solidity(
-                    root,
-                    benchmark,
-                    profile,
-                    &toolchains.solc,
-                    &toolchains.evm_version,
-                ),
-                Language::Vyper => compile_vyper(
-                    root,
-                    benchmark,
-                    profile,
-                    &toolchains.vyper,
-                    &toolchains.evm_version,
-                ),
+                Language::Solidity => {
+                    compile_solidity(root, benchmark, profile, toolchain, &toolchains.evm_version)
+                }
+                Language::Vyper => {
+                    compile_vyper(root, benchmark, profile, toolchain, &toolchains.evm_version)
+                }
             };
             match result {
                 Ok(artifact) => artifacts.push(artifact),
@@ -43,10 +36,7 @@ pub fn compile_all(
                     root,
                     benchmark,
                     profile,
-                    match profile.language {
-                        Language::Solidity => &toolchains.solc,
-                        Language::Vyper => &toolchains.vyper,
-                    },
+                    toolchain,
                     &toolchains.evm_version,
                     error.to_string(),
                 )?),
@@ -58,6 +48,28 @@ pub fn compile_all(
         artifacts,
         failures,
     })
+}
+
+fn toolchain_for_profile<'a>(
+    toolchains: &'a Toolchains,
+    profile: &CompilerProfile,
+) -> Result<&'a Toolchain> {
+    match profile.language {
+        Language::Solidity if profile.compiler == "solc" => Ok(&toolchains.solc),
+        Language::Solidity => bail!(
+            "profile {} has unsupported solidity compiler {}",
+            profile.id,
+            profile.compiler
+        ),
+        Language::Vyper => match profile.compiler.as_str() {
+            "vyper" => Ok(&toolchains.vyper),
+            "vyper-0.5.0a1" => Ok(&toolchains.vyper_alpha),
+            other => bail!(
+                "profile {} has unsupported vyper compiler {other}",
+                profile.id
+            ),
+        },
+    }
 }
 
 fn load_profiles(root: &Path) -> Result<Vec<CompilerProfile>> {
@@ -206,6 +218,7 @@ fn vyper_compiler_settings(profile: &CompilerProfile, evm_version: &str) -> serd
     let optimizer_mode = profile.optimizer_mode.as_deref().unwrap_or("gas");
     json!({
         "evmVersion": evm_version,
+        "compiler": profile.compiler,
         "metadataMode": profile.metadata_mode.as_str(),
         "bytecodeMetadata": profile.metadata_mode == MetadataMode::On,
         "optimize": optimizer_mode,
@@ -233,7 +246,7 @@ fn compile_vyper(
                 .arg("-O")
                 .arg(optimizer_mode);
             if profile.metadata_mode == MetadataMode::Off {
-                command.arg("--no-bytecode-metadata");
+                command.arg(vyper_disable_metadata_arg(vyper));
             }
             if profile.experimental_codegen {
                 command.arg("--experimental-codegen");
@@ -269,6 +282,14 @@ fn compile_vyper(
         measured.peak_rss_kib,
         vyper_compiler_settings(profile, evm_version),
     )
+}
+
+fn vyper_disable_metadata_arg(vyper: &Toolchain) -> &'static str {
+    if vyper.version.starts_with("0.5.") {
+        "--disable-bytecode-metadata"
+    } else {
+        "--no-bytecode-metadata"
+    }
 }
 
 #[allow(clippy::too_many_arguments)]
