@@ -2085,7 +2085,7 @@ fn render_profile_brief(rows: &[serde_json::Value]) -> String {
 fn render_compile_brief(rows: &[serde_json::Value]) -> String {
     let mut html = String::new();
     html.push_str("<p class=\"answer\">What are the compile-time and memory tradeoffs?</p>");
-    html.push_str("<p class=\"section-lede\">Compile resources are artifact-level measurements. Wall time has three samples per successful artifact and is shown with CV; RSS is one coarse peak sample, so small memory differences should not be over-read.</p>");
+    html.push_str("<p class=\"section-lede\">Compile resources are artifact-level measurements. Normal runs use one compile sample by default; timing-study runs can set <span class=\"mono\">EVM_BENCH_COMPILE_SAMPLES</span> for repeated samples. CV is meaningful only when repeated samples are present. RSS is one coarse peak sample, so small memory differences should not be over-read.</p>");
     html.push_str(&render_compile_resource_summary_for_profiles(
         rows,
         Some(&PRIMARY_CODEGEN_PROFILES),
@@ -3697,7 +3697,7 @@ fn render_methodology(
         escape(&str_at(manifest, "/environment/tools/forge").unwrap_or_default())
     ));
     html.push_str("</p></div>");
-    html.push_str("<div class=\"card\"><h3>Limitations</h3><p class=\"small muted\">Gas is Foundry internal-call gas, not measured transaction gas. Compile timing is host-specific with three wall-time samples per successful artifact. Peak RSS is a single coarse sample. Cross-language behavioral equivalence is fuzz+property checked only where the correctness heatmap says so. Compiler bytecode metadata is disabled for the active matrix, so metadata overhead is intentionally outside the measured comparison surface. Vyper 0.5.0a1 is a pre-release compiler. Vyper Venom variants use <span class=\"mono\">--experimental-codegen</span>; treat their failures and wins as experimental codegen evidence, not production-default Vyper behavior.");
+    html.push_str("<div class=\"card\"><h3>Limitations</h3><p class=\"small muted\">Gas is Foundry internal-call gas, not measured transaction gas. Compile timing is host-specific; normal runs use one wall-time sample per successful artifact, and repeated samples are opt-in through <span class=\"mono\">EVM_BENCH_COMPILE_SAMPLES</span>. Peak RSS is a single coarse sample. Cross-language behavioral equivalence is fuzz+property checked only where the correctness heatmap says so. Compiler bytecode metadata is disabled for the active matrix, so metadata overhead is intentionally outside the measured comparison surface. Vyper 0.5.0a1 is a pre-release compiler. Vyper Venom variants use <span class=\"mono\">--experimental-codegen</span>; treat their failures and wins as experimental codegen evidence, not production-default Vyper behavior.");
     html.push_str("</p></div>");
     html.push_str("<div class=\"card\"><h3>Cache</h3><p class=\"small muted\">Compile artifacts and gas rows are keyed by source hash, compiler binary hash, profile settings, EVM fork, scenario definition, and runner schema. A matching row is marked <span class=\"mono\">hit</span>; changed inputs are marked <span class=\"mono\">stale</span> with field-level reasons under <span class=\"mono\">cache.*.invalidated_by</span>. Use <span class=\"mono\">--no-cache</span> for fresh publication runs.</p><pre class=\"small\">");
     html.push_str(&escape(

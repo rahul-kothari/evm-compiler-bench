@@ -16,7 +16,7 @@ use std::{
     process::Command,
 };
 
-const DEFAULT_COMPILE_SAMPLES: usize = 3;
+const DEFAULT_COMPILE_SAMPLES: usize = 1;
 
 pub fn compile_all(
     root: &Path,
