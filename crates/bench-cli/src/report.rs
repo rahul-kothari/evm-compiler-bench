@@ -77,6 +77,20 @@ const VYPER_DELTA_PROFILES: [&str; 11] = [
     VYPER_ALPHA_GAS_VENOM_CODEGEN,
     VYPER_ALPHA_CODESIZE_VENOM_CODEGEN,
 ];
+const REPORT_ASSETS: [(&str, &[u8]); 3] = [
+    (
+        "vega-6.2.0.min.js",
+        include_bytes!("../assets/vega-6.2.0.min.js"),
+    ),
+    (
+        "vega-lite-6.4.3.min.js",
+        include_bytes!("../assets/vega-lite-6.4.3.min.js"),
+    ),
+    (
+        "vega-embed-7.1.0.min.js",
+        include_bytes!("../assets/vega-embed-7.1.0.min.js"),
+    ),
+];
 
 pub struct ReportPaths {
     pub normalized_results: PathBuf,
@@ -215,6 +229,7 @@ pub fn write_outputs(
     let reports_dir = root.join("results/reports");
     ensure_dir(&normalized_dir)?;
     ensure_dir(&reports_dir)?;
+    write_report_assets(&reports_dir)?;
 
     let rows = normalized_rows(root, compiled, gas_records, scenarios)?;
     let normalized_results = normalized_dir.join("results.json");
@@ -258,6 +273,15 @@ pub fn write_outputs(
         html_report,
         methodology_report,
     })
+}
+
+fn write_report_assets(reports_dir: &Path) -> Result<()> {
+    let assets_dir = reports_dir.join("assets");
+    ensure_dir(&assets_dir)?;
+    for (name, bytes) in REPORT_ASSETS {
+        fs::write(assets_dir.join(name), bytes)?;
+    }
+    Ok(())
 }
 
 fn normalized_rows(
@@ -676,13 +700,15 @@ fn render_html(
     html.push_str(".two{display:grid;grid-template-columns:1fr 1fr;gap:14px}.three{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}.card{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:14px}.k{font-size:12px;color:var(--muted);line-height:1.3}.v{font-size:23px;font-weight:700;margin-top:3px}.subv{font-size:12px;color:var(--muted);margin-top:3px}");
     html.push_str("nav{display:flex;flex-wrap:wrap;gap:8px;margin:18px 0 4px}nav a{font-size:12px;text-decoration:none;color:#1d4ed8;background:#e8eefc;border:1px solid #c7d2fe;border-radius:999px;padding:6px 10px}");
     html.push_str("table{width:100%;border-collapse:collapse;background:var(--panel);border:1px solid var(--line);border-radius:8px;overflow:hidden}th,td{font-size:12px;text-align:left;padding:8px 10px;border-bottom:1px solid #edf0f4;vertical-align:top}th{background:#eef1f5;color:#2c3444}tbody tr:hover{background:#fbfcff}");
-    html.push_str(".chart{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:12px;overflow:auto}.notice{background:#fff7ed;border:1px solid #fdba74;border-radius:8px;padding:12px;margin:12px 0;color:#7c2d12}.info{background:#eff6ff;border-color:#bfdbfe;color:#1e3a8a}.critical{background:#fff7ed;border-color:#fb923c;color:#7c2d12}.muted{color:var(--muted)}.small{font-size:11px;line-height:1.35}.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace}");
+    html.push_str(".chart{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:12px;overflow:auto}.vega-chart{min-height:300px}.vega-chart .error{color:#991b1b;font-size:12px}.notice{background:#fff7ed;border:1px solid #fdba74;border-radius:8px;padding:12px;margin:12px 0;color:#7c2d12}.info{background:#eff6ff;border-color:#bfdbfe;color:#1e3a8a}.critical{background:#fff7ed;border-color:#fb923c;color:#7c2d12}.muted{color:var(--muted)}.small{font-size:11px;line-height:1.35}.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace}");
     html.push_str(".pill{display:inline-flex;align-items:center;border-radius:999px;padding:3px 8px;font-size:11px;border:1px solid var(--line);background:#f9fafb;white-space:nowrap}.pass{background:#ecfdf5;color:#065f46;border-color:#a7f3d0}.warn{background:#fffbeb;color:#92400e;border-color:#fde68a}.fail{background:#fef2f2;color:#991b1b;border-color:#fecaca}.na{background:#f4f4f5;color:#52525b;border-color:#e4e4e7}");
     html.push_str(".bar{height:9px;background:#e5e7eb;border-radius:999px;min-width:92px;position:relative;overflow:hidden}.bar span{display:block;height:100%;border-radius:999px;background:var(--blue)}.bar.good span{background:var(--green)}.bar.warn span{background:var(--amber)}.bar.fail span{background:var(--red)}.ratio{display:grid;grid-template-columns:58px 1fr;gap:8px;align-items:center;min-width:160px}");
     html.push_str(".heat-ok{background:#dcfce7;color:#166534;text-align:center}.heat-fail{background:#fee2e2;color:#991b1b;text-align:center}.heat-na{background:#f4f4f5;color:#71717a;text-align:center}.heat-warn{background:#fef3c7;color:#92400e;text-align:center}.heat-info{background:#dbeafe;color:#1e40af;text-align:center}.legend{display:flex;flex-wrap:wrap;gap:12px;align-items:center;font-size:12px;color:var(--muted);margin:8px 0}.dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:4px}.sol{background:var(--blue)}.vy{background:var(--green)}details{margin-top:12px}details>summary{cursor:pointer;font-weight:700;margin:12px 0}");
     html.push_str(".brief{display:grid;grid-template-columns:1.25fr .75fr;gap:14px;align-items:start}.scope-cards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-top:12px}.scope-card{border:1px solid var(--line);border-radius:8px;padding:12px;background:#f8fafc}.scope-card strong{display:block;margin-bottom:4px}.findings{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-top:12px}.finding{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:12px}.finding strong{display:block;margin-bottom:5px}.takeaways{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:12px}.takeaway{background:#f8fafc;border:1px solid var(--line);border-radius:8px;padding:12px}.takeaway strong{display:block;margin-bottom:5px}.answer{font-size:18px;font-weight:700;margin:0 0 6px}.section-lede{font-size:13px;color:var(--muted);max-width:900px}.mini-table td,.mini-table th{font-size:12px}.callout{background:#f8fafc;border:1px solid var(--line);border-radius:8px;padding:12px;margin:10px 0}.strip{display:flex;height:22px;border-radius:999px;overflow:hidden;border:1px solid var(--line);background:#eef2f7;margin:8px 0}.seg{display:flex;align-items:center;justify-content:center;min-width:2px;color:#fff;font-size:10px;white-space:nowrap}.seg-fuzz{background:#0f8a5f}.seg-baseline{background:#2563eb}.seg-status{background:#b45309}.seg-fail{background:#b91c1c}.seg-na{background:#6b7280}.chart-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}.svg-card{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:12px;overflow:auto}.tag{display:inline-flex;border-radius:999px;border:1px solid var(--line);padding:2px 7px;font-size:10px;background:#f9fafb;color:#374151}");
     html.push_str("@media(max-width:900px){.grid,.three,.two,.scope,.brief,.takeaways,.scope-cards,.findings,.chart-grid{grid-template-columns:1fr}main{padding:20px 14px}.v{font-size:20px}}");
-    html.push_str("</style></head><body><main>");
+    html.push_str("</style>");
+    html.push_str(vega_runtime_scripts());
+    html.push_str("</head><body><main>");
     html.push_str("<h1>EVM Compiler Bench</h1>");
     html.push_str(&render_run_identity(toolchains, manifest, &summary));
     html.push_str(&render_overview(rows, &summary));
@@ -724,6 +750,32 @@ fn render_html(
     html.push_str(&render_data_export(rows));
     html.push_str("</section></main></body></html>");
     Ok(html)
+}
+
+fn vega_runtime_scripts() -> &'static str {
+    r##"<script src="assets/vega-6.2.0.min.js"></script><script src="assets/vega-lite-6.4.3.min.js"></script><script src="assets/vega-embed-7.1.0.min.js"></script><script>
+window.__evmBenchCharts = [];
+function evmBenchChart(id, spec) {
+  window.__evmBenchCharts.push({ id: id, spec: spec });
+}
+document.addEventListener("DOMContentLoaded", function () {
+  if (!window.vegaEmbed) {
+    document.querySelectorAll(".vega-chart").forEach(function (node) {
+      node.innerHTML = "<div class=\"error\">Vega-Lite assets failed to load.</div>";
+    });
+    return;
+  }
+  window.__evmBenchCharts.forEach(function (chart) {
+    window.vegaEmbed("#" + chart.id, chart.spec, { actions: false, renderer: "svg" })
+      .catch(function (error) {
+        var node = document.getElementById(chart.id);
+        if (node) {
+          node.innerHTML = "<div class=\"error\">Chart render failed: " + String(error) + "</div>";
+        }
+      });
+  });
+});
+</script>"##
 }
 
 fn render_methodology_html(
@@ -1393,7 +1445,7 @@ fn render_fixed_suite_brief(rows: &[serde_json::Value]) -> String {
     ));
     html.push_str("</section>");
     html.push_str(&render_fixed_benchmark_summary(rows));
-    html.push_str(&render_fixed_pareto_svg(rows));
+    html.push_str(&render_fixed_pareto_chart(rows));
     html.push_str(
         "<details><summary>Show cross-language ratios against Solidity baseline</summary>",
     );
@@ -1701,71 +1753,90 @@ fn render_fixed_scenario_ratios(rows: &[serde_json::Value]) -> String {
     html
 }
 
-fn render_fixed_pareto_svg(rows: &[serde_json::Value]) -> String {
-    let selected = rows
+fn render_fixed_pareto_chart(rows: &[serde_json::Value]) -> String {
+    let values = rows
         .iter()
         .filter(|row| {
             str_at(row, "/status").as_deref() == Some("ok")
                 && str_at(row, "/suite").as_deref() == Some("fixed")
                 && str_at(row, "/gas/metadata_mode").as_deref() == Some("off")
         })
+        .map(|row| {
+            let profile = str_at(row, "/profile_id").unwrap_or_default();
+            json!({
+                "language": str_at(row, "/language").unwrap_or_default(),
+                "compiler": compiler_family(&profile),
+                "profile": profile_short(&profile),
+                "profile_id": profile,
+                "benchmark": str_at(row, "/benchmark_id").unwrap_or_default(),
+                "scenario": str_at(row, "/gas/scenario").unwrap_or_default(),
+                "state": str_at(row, "/gas/state_access_profile").unwrap_or_default(),
+                "runtime_bytes": u64_at(row, "/bytecode/runtime_bytes"),
+                "harness_call_gas": u64_at(row, "/gas/harness_call_gas")
+            })
+        })
         .collect::<Vec<_>>();
-    if selected.is_empty() {
+    if values.is_empty() {
         return String::new();
     }
-    let max_size = selected
-        .iter()
-        .map(|row| u64_at(row, "/bytecode/runtime_bytes"))
-        .max()
-        .unwrap_or(1)
-        .max(1);
-    let max_gas = selected
-        .iter()
-        .map(|row| u64_at(row, "/gas/harness_call_gas"))
-        .max()
-        .unwrap_or(1)
-        .max(1);
-
+    let spec = json!({
+        "$schema": "https://vega.github.io/schema/vega-lite/v6.json",
+        "data": { "values": values },
+        "facet": {
+            "field": "language",
+            "type": "nominal",
+            "columns": 2,
+            "title": null,
+            "header": {
+                "labelFontSize": 14,
+                "labelFontWeight": "bold",
+                "labelColor": "#172033"
+            }
+        },
+        "spec": {
+            "width": 480,
+            "height": 310,
+            "mark": {
+                "type": "point",
+                "filled": true,
+                "opacity": 0.72,
+                "size": 42
+            },
+            "encoding": {
+                "x": {
+                    "field": "runtime_bytes",
+                    "type": "quantitative",
+                    "title": "runtime bytes",
+                    "scale": { "zero": true },
+                    "axis": { "grid": true }
+                },
+                "y": {
+                    "field": "harness_call_gas",
+                    "type": "quantitative",
+                    "title": "harness call gas",
+                    "scale": { "zero": true },
+                    "axis": { "grid": true }
+                },
+                "color": profile_color_encoding(false),
+                "tooltip": [
+                    { "field": "benchmark", "type": "nominal", "title": "Benchmark" },
+                    { "field": "scenario", "type": "nominal", "title": "Scenario" },
+                    { "field": "state", "type": "nominal", "title": "State" },
+                    { "field": "compiler", "type": "nominal", "title": "Compiler" },
+                    { "field": "profile_id", "type": "nominal", "title": "Profile" },
+                    { "field": "runtime_bytes", "type": "quantitative", "title": "Runtime bytes", "format": "," },
+                    { "field": "harness_call_gas", "type": "quantitative", "title": "Harness call gas", "format": "," }
+                ]
+            }
+        },
+        "resolve": { "scale": { "x": "shared", "y": "shared" } },
+        "config": vega_chart_config()
+    });
     let mut html = String::new();
     html.push_str("<h3>Fixed-Suite Pareto Surface</h3>");
     html.push_str("<div class=\"legend\"><span>faceted by language</span><span>colour = compiler family</span><span>shade = optimizer/codegen config</span><span>all points use metadata-disabled artifacts</span></div>");
     html.push_str(&compiler_palette_legend());
-    html.push_str("<div class=\"chart\"><svg width=\"1080\" height=\"420\" viewBox=\"0 0 1080 420\" role=\"img\" aria-label=\"Runtime bytecode size versus harness call gas faceted by language\">");
-    for (panel_index, language) in ["solidity", "vyper"].iter().enumerate() {
-        let x0 = 64 + panel_index as i32 * 510;
-        let y0 = 42;
-        let width = 440;
-        let height = 300;
-        html.push_str(&format!(
-            "<text x=\"{}\" y=\"22\" font-size=\"14\" font-weight=\"700\" fill=\"#172033\">{}</text>",
-            x0,
-            escape(language)
-        ));
-        html.push_str(&format!(
-            "<line x1=\"{x0}\" y1=\"{}\" x2=\"{}\" y2=\"{}\" stroke=\"#9ca3af\"/><line x1=\"{x0}\" y1=\"{y0}\" x2=\"{x0}\" y2=\"{}\" stroke=\"#9ca3af\"/>",
-            y0 + height,
-            x0 + width,
-            y0 + height,
-            y0 + height
-        ));
-        for row in selected
-            .iter()
-            .filter(|row| str_at(row, "/language").as_deref() == Some(*language))
-        {
-            let size = u64_at(row, "/bytecode/runtime_bytes");
-            let gas = u64_at(row, "/gas/harness_call_gas");
-            let x = x0 + (size * width as u64 / max_size) as i32;
-            let y = y0 + height - (gas * height as u64 / max_gas) as i32;
-            let color = profile_color(&str_at(row, "/profile_id").unwrap_or_default());
-            html.push_str(&format!(
-                "<circle cx=\"{x}\" cy=\"{y}\" r=\"3\" fill=\"{color}\" opacity=\".72\"><title>{}</title></circle>",
-                escape(&tooltip(row))
-            ));
-        }
-    }
-    html.push_str("<text x=\"540\" y=\"400\" text-anchor=\"middle\" font-size=\"12\" fill=\"#657083\">runtime bytes (shared scale)</text>");
-    html.push_str("<text x=\"18\" y=\"215\" text-anchor=\"middle\" font-size=\"12\" fill=\"#657083\" transform=\"rotate(-90 18 215)\">harness call gas (shared scale)</text>");
-    html.push_str("</svg></div>");
+    html.push_str(&vega_chart("fixed-pareto-chart", &spec));
     html
 }
 
@@ -2891,98 +2962,105 @@ fn render_scale_curve_panels(rows: &[serde_json::Value]) -> String {
         html.push_str("<div class=\"svg-card\"><h3>");
         html.push_str(&escape(&family));
         html.push_str("</h3>");
-        html.push_str(&scale_family_svg(&by_profile));
+        html.push_str(&scale_family_vega_chart(&family, &by_profile));
         html.push_str("</div>");
     }
     html.push_str("</div>");
     html
 }
 
-fn scale_family_svg(by_profile: &BTreeMap<String, BTreeMap<u64, ScaleCurveAggregate>>) -> String {
-    let metrics = [
-        ("runtime bytes", ScaleMetric::RuntimeBytes),
-        ("avg call gas", ScaleMetric::Gas),
-        ("compile ms", ScaleMetric::CompileMs),
-    ];
-    let max_n = by_profile
-        .values()
-        .flat_map(|points| points.keys().copied())
-        .max()
-        .unwrap_or(1)
-        .max(1);
-    let mut max_values = [1.0_f64; 3];
-    for points in by_profile.values() {
-        for point in points.values() {
-            max_values[0] = max_values[0].max(point.runtime_bytes as f64);
-            max_values[1] =
-                max_values[1].max(point.gas_total as f64 / point.gas_samples.max(1) as f64);
-            max_values[2] = max_values[2].max(point.compile_ms);
+fn scale_family_vega_chart(
+    family: &str,
+    by_profile: &BTreeMap<String, BTreeMap<u64, ScaleCurveAggregate>>,
+) -> String {
+    let mut values = Vec::new();
+    for (profile, points) in by_profile {
+        for (n, point) in points {
+            let profile_label = profile_short(profile);
+            let compiler = compiler_family(profile);
+            values.push(json!({
+                "metric": "runtime bytes",
+                "n": n,
+                "value": point.runtime_bytes,
+                "compiler": compiler,
+                "profile": profile_label,
+                "profile_id": profile
+            }));
+            values.push(json!({
+                "metric": "avg call gas",
+                "n": n,
+                "value": point.gas_total as f64 / point.gas_samples.max(1) as f64,
+                "compiler": compiler,
+                "profile": profile_label,
+                "profile_id": profile
+            }));
+            values.push(json!({
+                "metric": "compile ms",
+                "n": n,
+                "value": point.compile_ms,
+                "compiler": compiler,
+                "profile": profile_label,
+                "profile_id": profile
+            }));
         }
     }
-    let mut svg = String::new();
-    svg.push_str("<svg width=\"620\" height=\"245\" viewBox=\"0 0 620 245\" role=\"img\" aria-label=\"scale curves\">");
-    for (index, (label, metric)) in metrics.iter().enumerate() {
-        let x0 = 44 + index as i32 * 198;
-        let y0 = 26;
-        let width = 150;
-        let height = 150;
-        svg.push_str(&format!(
-            "<text x=\"{}\" y=\"16\" font-size=\"11\" fill=\"#374151\">{}</text>",
-            x0,
-            escape(label)
-        ));
-        svg.push_str(&format!(
-            "<line x1=\"{x0}\" y1=\"{}\" x2=\"{}\" y2=\"{}\" stroke=\"#9ca3af\"/><line x1=\"{x0}\" y1=\"{y0}\" x2=\"{x0}\" y2=\"{}\" stroke=\"#9ca3af\"/>",
-            y0 + height,
-            x0 + width,
-            y0 + height,
-            y0 + height
-        ));
-        for (profile, points) in by_profile {
-            let mut coords = Vec::new();
-            for (n, point) in points {
-                let x_ratio = if max_n <= 1 {
-                    0.0
-                } else {
-                    (*n as f64).log2() / (max_n as f64).log2()
-                };
-                let value = match metric {
-                    ScaleMetric::RuntimeBytes => point.runtime_bytes as f64,
-                    ScaleMetric::Gas => point.gas_total as f64 / point.gas_samples.max(1) as f64,
-                    ScaleMetric::CompileMs => point.compile_ms,
-                };
-                let max_value = max_values[index].max(1.0);
-                let x = x0 as f64 + x_ratio * width as f64;
-                let y = y0 as f64 + height as f64 - (value / max_value) * height as f64;
-                coords.push(format!("{x:.1},{y:.1}"));
-            }
-            if coords.len() >= 2 {
-                svg.push_str(&format!(
-                    "<polyline fill=\"none\" stroke=\"{}\" stroke-width=\"1.8\" points=\"{}\"><title>{}</title></polyline>",
-                    profile_color(profile),
-                    coords.join(" "),
-                    escape(&profile_short(profile))
-                ));
-            }
-        }
-        svg.push_str(&format!(
-            "<text x=\"{}\" y=\"{}\" font-size=\"10\" fill=\"#657083\">N=1</text><text x=\"{}\" y=\"{}\" font-size=\"10\" fill=\"#657083\" text-anchor=\"end\">N={}</text>",
-            x0,
-            y0 + height + 15,
-            x0 + width,
-            y0 + height + 15,
-            max_n
-        ));
+    if values.is_empty() {
+        return String::new();
     }
-    svg.push_str("<text x=\"44\" y=\"226\" font-size=\"10\" fill=\"#657083\">hover lines for exact compiler config</text></svg>");
-    svg
-}
-
-#[derive(Debug, Clone, Copy)]
-enum ScaleMetric {
-    RuntimeBytes,
-    Gas,
-    CompileMs,
+    let spec = json!({
+        "$schema": "https://vega.github.io/schema/vega-lite/v6.json",
+        "data": { "values": values },
+        "facet": {
+            "field": "metric",
+            "type": "nominal",
+            "columns": 3,
+            "sort": ["runtime bytes", "avg call gas", "compile ms"],
+            "title": null,
+            "header": {
+                "labelFontSize": 11,
+                "labelColor": "#374151",
+                "labelFontWeight": "normal"
+            }
+        },
+        "spec": {
+            "width": 170,
+            "height": 150,
+            "mark": {
+                "type": "line",
+                "point": { "filled": true, "size": 18 },
+                "strokeWidth": 2
+            },
+            "encoding": {
+                "x": {
+                    "field": "n",
+                    "type": "quantitative",
+                    "title": "N",
+                    "scale": { "type": "log", "base": 2 },
+                    "axis": { "values": [1, 2, 4, 8, 16, 32, 64], "format": "d" }
+                },
+                "y": {
+                    "field": "value",
+                    "type": "quantitative",
+                    "title": null,
+                    "scale": { "zero": true },
+                    "axis": { "grid": true }
+                },
+                "color": profile_color_encoding(true),
+                "detail": { "field": "profile_id", "type": "nominal" },
+                "tooltip": [
+                    { "field": "metric", "type": "nominal", "title": "Metric" },
+                    { "field": "n", "type": "quantitative", "title": "N" },
+                    { "field": "compiler", "type": "nominal", "title": "Compiler" },
+                    { "field": "profile_id", "type": "nominal", "title": "Profile" },
+                    { "field": "value", "type": "quantitative", "title": "Value", "format": ",.2f" }
+                ]
+            }
+        },
+        "resolve": { "scale": { "y": "independent" } },
+        "config": vega_chart_config()
+    });
+    let id = format!("scale-{}-chart", html_id(family));
+    vega_chart(&id, &spec)
 }
 
 fn render_methodology(
@@ -3263,25 +3341,115 @@ fn baseline_profile_for_language(language: &str) -> Option<&'static str> {
     }
 }
 
-fn profile_color(profile: &str) -> &'static str {
-    match profile {
-        "solc-latest-noopt" => "#93c5fd",
-        "solc-latest-legacy-runs200" => "#2563eb",
-        "solc-latest-viair-runs200" => "#1e3a8a",
-        "vyper-latest-none" => "#86efac",
-        "vyper-latest-gas" => "#16a34a",
-        "vyper-latest-codesize" => "#166534",
-        "vyper-latest-none-venom" => "#4ade80",
-        "vyper-latest-gas-venom" => "#15803d",
-        "vyper-latest-codesize-venom" => "#14532d",
-        "vyper-0.5.0a1-none" => "#67e8f9",
-        "vyper-0.5.0a1-gas" => "#0891b2",
-        "vyper-0.5.0a1-codesize" => "#155e75",
-        "vyper-0.5.0a1-none-venom" => "#22d3ee",
-        "vyper-0.5.0a1-gas-venom" => "#0e7490",
-        "vyper-0.5.0a1-codesize-venom" => "#164e63",
-        _ => "#111827",
+fn profile_palette() -> Vec<(String, &'static str)> {
+    [
+        (SOL_NOOPT_CODEGEN, "#93c5fd"),
+        (SOL_CODEGEN_BASELINE, "#2563eb"),
+        (SOL_VIAIR_CODEGEN, "#1e3a8a"),
+        (VYPER_NONE_CODEGEN, "#86efac"),
+        (VYPER_GAS_CODEGEN, "#16a34a"),
+        (VYPER_CODESIZE_CODEGEN, "#166534"),
+        (VYPER_NONE_VENOM_CODEGEN, "#4ade80"),
+        (VYPER_GAS_VENOM_CODEGEN, "#15803d"),
+        (VYPER_CODESIZE_VENOM_CODEGEN, "#14532d"),
+        (VYPER_ALPHA_NONE_CODEGEN, "#67e8f9"),
+        (VYPER_ALPHA_GAS_CODEGEN, "#0891b2"),
+        (VYPER_ALPHA_CODESIZE_CODEGEN, "#155e75"),
+        (VYPER_ALPHA_NONE_VENOM_CODEGEN, "#22d3ee"),
+        (VYPER_ALPHA_GAS_VENOM_CODEGEN, "#0e7490"),
+        (VYPER_ALPHA_CODESIZE_VENOM_CODEGEN, "#164e63"),
+    ]
+    .into_iter()
+    .map(|(profile, color)| (profile_short(profile), color))
+    .collect()
+}
+
+fn profile_color_encoding(hide_legend: bool) -> serde_json::Value {
+    let palette = profile_palette();
+    let domain = palette
+        .iter()
+        .map(|(profile, _)| profile.clone())
+        .collect::<Vec<_>>();
+    let range = palette.iter().map(|(_, color)| *color).collect::<Vec<_>>();
+    let legend = if hide_legend {
+        serde_json::Value::Null
+    } else {
+        json!({
+            "title": "Compiler config",
+            "orient": "bottom",
+            "columns": 3
+        })
+    };
+    json!({
+        "field": "profile",
+        "type": "nominal",
+        "scale": { "domain": domain, "range": range },
+        "legend": legend
+    })
+}
+
+fn compiler_family(profile: &str) -> &'static str {
+    if profile.starts_with("solc-") {
+        "solc"
+    } else if profile.starts_with("vyper-0.5.0a1-") {
+        "Vyper 0.5.0a1"
+    } else if profile.starts_with("vyper-") {
+        "Vyper 0.4.3"
+    } else {
+        "unknown"
     }
+}
+
+fn vega_chart_config() -> serde_json::Value {
+    json!({
+        "background": "transparent",
+        "font": "Inter, system-ui, -apple-system, sans-serif",
+        "axis": {
+            "labelFontSize": 11,
+            "titleFontSize": 12,
+            "labelColor": "#657083",
+            "titleColor": "#657083",
+            "gridColor": "#edf0f4",
+            "domainColor": "#9ca3af",
+            "tickColor": "#9ca3af"
+        },
+        "view": { "stroke": null },
+        "legend": {
+            "labelFontSize": 11,
+            "titleFontSize": 12,
+            "labelColor": "#374151",
+            "titleColor": "#374151",
+            "symbolType": "circle"
+        }
+    })
+}
+
+fn vega_chart(id: &str, spec: &serde_json::Value) -> String {
+    format!(
+        "<div class=\"chart\"><div id=\"{}\" class=\"vega-chart\"></div></div><script>evmBenchChart({}, {});</script>",
+        escape(id),
+        json_for_script(&json!(id)),
+        json_for_script(spec)
+    )
+}
+
+fn json_for_script(value: &serde_json::Value) -> String {
+    serde_json::to_string(value)
+        .unwrap_or_else(|_| "null".to_string())
+        .replace("</", "<\\/")
+}
+
+fn html_id(value: &str) -> String {
+    value
+        .chars()
+        .map(|ch| {
+            if ch.is_ascii_alphanumeric() {
+                ch.to_ascii_lowercase()
+            } else {
+                '-'
+            }
+        })
+        .collect()
 }
 
 fn compiler_palette_legend() -> String {
@@ -3628,25 +3796,6 @@ fn sort_key(row: &serde_json::Value) -> String {
         str_at(row, "/implementation_id").unwrap_or_default(),
         str_at(row, "/profile_id").unwrap_or_default(),
         str_at(row, "/gas/scenario").unwrap_or_default()
-    )
-}
-
-fn tooltip(row: &serde_json::Value) -> String {
-    if str_at(row, "/status").as_deref() == Some("compile_error") {
-        return format!(
-            "{} / {} / {} / compile error",
-            str_at(row, "/benchmark_id").unwrap_or_default(),
-            str_at(row, "/implementation_id").unwrap_or_default(),
-            str_at(row, "/profile_id").unwrap_or_default()
-        );
-    }
-    format!(
-        "{} / {} / {} / {} / harness call gas {}",
-        str_at(row, "/benchmark_id").unwrap_or_default(),
-        str_at(row, "/implementation_id").unwrap_or_default(),
-        str_at(row, "/profile_id").unwrap_or_default(),
-        str_at(row, "/gas/scenario").unwrap_or_default(),
-        u64_at(row, "/gas/harness_call_gas")
     )
 }
 
