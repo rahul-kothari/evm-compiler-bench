@@ -1,4 +1,5 @@
 use anyhow::{Context, Result, bail};
+use indicatif::{ProgressBar, ProgressDrawTarget, ProgressStyle};
 use sha2::{Digest, Sha256};
 use std::{
     fs,
@@ -138,17 +139,35 @@ pub struct Progress {
     started: Instant,
     tty: bool,
     emitted: bool,
+    bar: Option<ProgressBar>,
 }
 
 impl Progress {
     pub fn new(label: impl Into<String>, total: usize) -> Self {
+        let label = label.into();
+        let tty = std::io::stderr().is_terminal();
+        let bar = if tty {
+            let bar = ProgressBar::new(total as u64);
+            bar.set_draw_target(ProgressDrawTarget::stderr_with_hz(10));
+            bar.set_style(
+                ProgressStyle::with_template(
+                    "{prefix:.bold}: {pos}/{len} ({percent:>3}%) {wide_msg} [{elapsed_precise}]",
+                )
+                .expect("progress style template is valid"),
+            );
+            bar.set_prefix(label.clone());
+            Some(bar)
+        } else {
+            None
+        };
         let mut progress = Self {
-            label: label.into(),
+            label,
             total,
             last_emit: Instant::now(),
             started: Instant::now(),
-            tty: std::io::stderr().is_terminal(),
+            tty,
             emitted: false,
+            bar,
         };
         progress.emit(0, "starting");
         progress
@@ -167,10 +186,24 @@ impl Progress {
     }
 
     pub fn finish(&mut self, detail: impl AsRef<str>) {
-        self.emit(self.total, detail.as_ref());
-        if self.tty {
-            eprintln!();
+        if let Some(bar) = &self.bar {
+            bar.set_position(self.total as u64);
+            bar.set_message(detail.as_ref().to_string());
+            bar.finish_and_clear();
+            let elapsed = self.started.elapsed().as_secs();
+            eprintln!(
+                "{}: {}/{} (100.0%) {} [{}s]",
+                self.label,
+                self.total,
+                self.total,
+                detail.as_ref(),
+                elapsed
+            );
+            self.last_emit = Instant::now();
+            self.emitted = true;
+            return;
         }
+        self.emit(self.total, detail.as_ref());
     }
 
     fn should_emit(&self, completed: usize) -> bool {
@@ -181,6 +214,14 @@ impl Progress {
     }
 
     fn emit(&mut self, completed: usize, detail: &str) {
+        if let Some(bar) = &self.bar {
+            bar.set_position(completed as u64);
+            bar.set_message(detail.to_string());
+            self.last_emit = Instant::now();
+            self.emitted = true;
+            return;
+        }
+
         let percent = if self.total == 0 {
             100.0
         } else {
