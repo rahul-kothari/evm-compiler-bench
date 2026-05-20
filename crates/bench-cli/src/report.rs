@@ -240,7 +240,7 @@ pub fn write_outputs(
         "run_id": Utc::now().format("%Y%m%dT%H%M%SZ").to_string(),
         "started_at": Utc::now(),
         "evm_version": toolchains.evm_version,
-        "toolchains": [toolchains.solc, toolchains.vyper, toolchains.vyper_alpha],
+        "toolchains": toolchains.compilers.values().collect::<Vec<_>>(),
         "profiles": compiled.profiles,
         "scale_generator": {
             "version": scale_manifest.generator_version.clone(),
@@ -712,10 +712,14 @@ fn render_html(
     html.push_str("<h1>EVM Compiler Bench</h1>");
     html.push_str(&render_run_identity(toolchains, manifest, &summary));
     html.push_str(&render_overview(rows, &summary));
-    html.push_str("<nav><a href=\"#scorecards\">Scorecards</a><a href=\"#reliability\">Reliability</a><a href=\"#fixed\">Fixed Suite</a><a href=\"#scale\">Scale Suite</a><a href=\"#real\">Real-Derived</a><a href=\"#profiles\">Profiles</a><a href=\"#benchmarks\">Benchmarks</a><a href=\"#compile\">Compile Resources</a><a href=\"methodology.html\">Methodology</a><a href=\"#raw\">Data Export</a></nav>");
+    html.push_str("<nav><a href=\"#scorecards\">Scorecards</a><a href=\"#versions\">Version Axis</a><a href=\"#reliability\">Reliability</a><a href=\"#fixed\">Fixed Suite</a><a href=\"#scale\">Scale Suite</a><a href=\"#real\">Real-Derived</a><a href=\"#profiles\">Profiles</a><a href=\"#benchmarks\">Benchmarks</a><a href=\"#compile\">Compile Resources</a><a href=\"methodology.html\">Methodology</a><a href=\"#raw\">Data Export</a></nav>");
 
     html.push_str("<section id=\"scorecards\"><h2>Compiler Config Scorecards</h2>");
     html.push_str(&render_config_scorecards(rows));
+    html.push_str("</section>");
+
+    html.push_str("<section id=\"versions\"><h2>Compiler Version Axis</h2>");
+    html.push_str(&render_version_axis(rows));
     html.push_str("</section>");
 
     html.push_str("<section id=\"reliability\"><h2>Compile Reliability</h2>");
@@ -831,8 +835,9 @@ fn render_run_identity(
     let solc_hash = short_hash(&toolchains.solc.binary_sha256);
     let vyper_hash = short_hash(&toolchains.vyper.binary_sha256);
     let vyper_alpha_hash = short_hash(&toolchains.vyper_alpha.binary_sha256);
+    let historical_count = toolchains.compilers.len().saturating_sub(3);
     format!(
-        "<div class=\"meta\">commit <span class=\"mono\">{}</span> &middot; {} &middot; started {} &middot; EVM {} &middot; solc {} (<span class=\"mono\">{}</span>) &middot; Vyper {} (<span class=\"mono\">{}</span>) &middot; Vyper alpha {} (<span class=\"mono\">{}</span>) &middot; {} profiles &middot; {} benchmarks &middot; {} rows</div>",
+        "<div class=\"meta\">commit <span class=\"mono\">{}</span> &middot; {} &middot; started {} &middot; default EVM {} &middot; solc {} (<span class=\"mono\">{}</span>) &middot; Vyper {} (<span class=\"mono\">{}</span>) &middot; Vyper alpha {} (<span class=\"mono\">{}</span>) &middot; {} historical toolchains &middot; {} profiles &middot; {} benchmarks &middot; {} rows</div>",
         escape(&commit),
         escape(&host),
         escape(&started),
@@ -843,6 +848,7 @@ fn render_run_identity(
         escape(&vyper_hash),
         escape(&toolchains.vyper_alpha.version),
         escape(&vyper_alpha_hash),
+        historical_count,
         summary.profiles.len(),
         summary.benchmarks.len(),
         summary.ok_rows + summary.compile_failures,
@@ -853,11 +859,11 @@ fn render_overview(rows: &[serde_json::Value], summary: &ReportSummary) -> Strin
     let mut html = String::new();
     html.push_str("<section class=\"hero brief\"><div>");
     html.push_str("<div class=\"pill info\">Findings brief</div>");
-    html.push_str("<p class=\"lede\">This run compares pinned compiler profiles across fixed matched workloads, generated scale studies, and real-derived benchmark models. The main report leads with the largest tradeoffs; methodology, correctness coverage, profile settings, and scope details live in <a href=\"methodology.html\">methodology.html</a>.</p>");
+    html.push_str("<p class=\"lede\">This run compares pinned compiler profiles across fixed matched workloads, generated scale studies, real-derived benchmark models, and historical compiler versions. The main report leads with tradeoffs and version-axis movement; methodology, correctness coverage, profile settings, and scope details live in <a href=\"methodology.html\">methodology.html</a>.</p>");
     html.push_str(&render_signature_findings(rows, summary));
     html.push_str("</div><div class=\"card\">");
     html.push_str("<h3>Run basis</h3>");
-    html.push_str("<p class=\"small muted\">No-metadata artifacts, Prague EVM, latest pinned solc/Vyper plus Vyper 0.5.0a1 alpha, Foundry internal-call gas, and per-language baseline ratios.</p>");
+    html.push_str("<p class=\"small muted\">No-metadata artifacts, per-profile compiler EVM targets, latest pinned solc/Vyper, Vyper 0.5.0a1 alpha, selected historical solc/Vyper releases, Foundry internal-call gas, and per-language baseline ratios.</p>");
     html.push_str("<p class=\"small muted\">The full method, correctness heatmap, profile settings JSON, and limitations are split out so this page can stay focused on comparisons.</p>");
     html.push_str("<p><a class=\"pill info\" href=\"methodology.html\">Open methodology</a></p>");
     html.push_str("</div></section>");
@@ -958,6 +964,349 @@ fn render_config_scorecards(rows: &[serde_json::Value]) -> String {
         html.push_str(&render_facet_scorecard(rows, suite, title, note));
     }
     html
+}
+
+#[derive(Debug, Default)]
+struct VersionAxisAggregate {
+    attempted_artifacts: BTreeSet<String>,
+    ok_artifacts: BTreeSet<String>,
+    gas_by_benchmark: BTreeMap<String, Vec<f64>>,
+    runtime_bytes: Vec<f64>,
+    compile_ms: Vec<f64>,
+    evm_versions: BTreeSet<String>,
+    source_variants: BTreeSet<String>,
+    failure_reasons: BTreeMap<String, usize>,
+}
+
+fn render_version_axis(rows: &[serde_json::Value]) -> String {
+    let aggregates = version_axis_aggregates(rows);
+    if aggregates.is_empty() {
+        return "<p class=\"section-lede\">No compiler-version axis rows are present in this result set.</p>".to_string();
+    }
+
+    let mut chart_values = Vec::new();
+    for ((suite, profile), aggregate) in &aggregates {
+        let Some(gas_ratio) = geomean_by_group(&aggregate.gas_by_benchmark) else {
+            continue;
+        };
+        chart_values.push(json!({
+            "suite": suite,
+            "profile": profile_short(profile),
+            "profile_id": profile,
+            "compiler": compiler_family(profile),
+            "compiler_line": compiler_line(profile),
+            "config": version_axis_config(profile).unwrap_or_else(|| "other".to_string()),
+            "version": compiler_version_label(profile),
+            "version_order": compiler_version_order(profile),
+            "gas_ratio": gas_ratio,
+            "compile_ok": aggregate.ok_artifacts.len(),
+            "compile_attempted": aggregate.attempted_artifacts.len(),
+        }));
+    }
+
+    let spec = json!({
+        "$schema": "https://vega.github.io/schema/vega-lite/v6.json",
+        "data": { "values": chart_values },
+        "facet": {
+            "field": "suite",
+            "type": "nominal",
+            "columns": 3,
+            "title": null,
+            "header": {
+                "labelFontSize": 12,
+                "labelColor": "#374151",
+                "labelFontWeight": "bold"
+            }
+        },
+        "spec": {
+            "width": 310,
+            "height": 230,
+            "mark": {
+                "type": "line",
+                "point": { "filled": true, "size": 48 },
+                "strokeWidth": 2
+            },
+            "encoding": {
+                "x": {
+                    "field": "version_order",
+                    "type": "quantitative",
+                    "title": "compiler version",
+                    "axis": {
+                        "values": [216, 310, 400, 430, 500, 830, 835],
+                        "labelExpr": "datum.value == 216 ? '0.2.16' : datum.value == 310 ? '0.3.10' : datum.value == 400 ? '0.4.0' : datum.value == 430 ? '0.4.x' : datum.value == 500 ? '0.5 alpha' : datum.value == 830 ? '0.8.30' : datum.value == 835 ? 'latest' : datum.value"
+                    }
+                },
+                "y": {
+                    "field": "gas_ratio",
+                    "type": "quantitative",
+                    "title": "harness gas ratio vs latest same config",
+                    "scale": { "zero": false },
+                    "axis": { "grid": true, "format": ".2f" }
+                },
+                "color": {
+                    "field": "compiler_line",
+                    "type": "nominal",
+                    "scale": {
+                        "domain": ["solc", "vyper"],
+                        "range": ["#2563eb", "#16a34a"]
+                    },
+                    "legend": { "title": "Compiler", "orient": "bottom" }
+                },
+                "strokeDash": {
+                    "field": "config",
+                    "type": "nominal",
+                    "legend": { "title": "Config", "orient": "bottom" }
+                },
+                "detail": { "field": "profile_id", "type": "nominal" },
+                "tooltip": [
+                    { "field": "suite", "type": "nominal", "title": "Suite" },
+                    { "field": "compiler", "type": "nominal", "title": "Compiler" },
+                    { "field": "profile_id", "type": "nominal", "title": "Profile" },
+                    { "field": "config", "type": "nominal", "title": "Config" },
+                    { "field": "version", "type": "nominal", "title": "Version" },
+                    { "field": "gas_ratio", "type": "quantitative", "title": "Gas ratio", "format": ".3f" },
+                    { "field": "compile_ok", "type": "quantitative", "title": "Compiled artifacts" },
+                    { "field": "compile_attempted", "type": "quantitative", "title": "Attempted artifacts" }
+                ]
+            }
+        },
+        "config": vega_chart_config()
+    });
+
+    let mut html = String::new();
+    html.push_str("<p class=\"answer\">How do profiles move across compiler versions?</p>");
+    html.push_str("<p class=\"section-lede\">This view compares compiler versions against the latest release on the same compiler line and config where a matching baseline exists. Historical Vyper profiles use explicit source variants and older EVM targets when the old compiler cannot parse or target the latest surface.</p>");
+    html.push_str(&vega_chart("compiler-version-axis-chart", &spec));
+    html.push_str(&render_version_axis_table(&aggregates));
+    html
+}
+
+fn version_axis_aggregates(
+    rows: &[serde_json::Value],
+) -> BTreeMap<(String, String), VersionAxisAggregate> {
+    let mut baseline_gas = BTreeMap::new();
+    let mut baseline_artifacts = BTreeMap::new();
+    let mut seen_baseline_artifacts = BTreeSet::new();
+    for row in rows {
+        if str_at(row, "/status").as_deref() != Some("ok")
+            || str_at(row, "/gas/metadata_mode").as_deref() != Some("off")
+        {
+            continue;
+        }
+        let profile = str_at(row, "/profile_id").unwrap_or_default();
+        let Some(config) = version_axis_config(&profile) else {
+            continue;
+        };
+        if !is_latest_version_axis_profile(&profile) {
+            continue;
+        }
+        let suite = str_at(row, "/suite").unwrap_or_default();
+        let line = compiler_line(&profile);
+        baseline_gas.insert(
+            format!("{suite}\0{line}\0{config}\0{}", scenario_key(row)),
+            u64_at(row, "/gas/harness_call_gas"),
+        );
+        let artifact_key = artifact_key_from_row(row);
+        if seen_baseline_artifacts.insert(artifact_key) {
+            baseline_artifacts.insert(
+                format!(
+                    "{suite}\0{line}\0{config}\0{}",
+                    str_at(row, "/benchmark_id").unwrap_or_default()
+                ),
+                artifact_metrics(row),
+            );
+        }
+    }
+
+    let mut aggregates: BTreeMap<(String, String), VersionAxisAggregate> = BTreeMap::new();
+    let mut seen_artifacts_for_metrics = BTreeSet::new();
+    for row in rows {
+        let profile = str_at(row, "/profile_id").unwrap_or_default();
+        let Some(config) = version_axis_config(&profile) else {
+            continue;
+        };
+        let suite = str_at(row, "/suite").unwrap_or_default();
+        let key = (suite.clone(), profile.clone());
+        let artifact_key = artifact_key_from_row(row);
+        let aggregate = aggregates.entry(key).or_default();
+        aggregate.attempted_artifacts.insert(artifact_key.clone());
+        if let Some(evm) = str_at(row, "/compiler/settings/evmVersion") {
+            aggregate.evm_versions.insert(evm);
+        }
+        if let Some(source_variant) = str_at(row, "/compiler/settings/sourceVariant") {
+            aggregate.source_variants.insert(source_variant);
+        }
+        if str_at(row, "/status").as_deref() == Some("compile_error") {
+            *aggregate
+                .failure_reasons
+                .entry(short_error(row))
+                .or_default() += 1;
+            continue;
+        }
+        if str_at(row, "/status").as_deref() != Some("ok")
+            || str_at(row, "/gas/metadata_mode").as_deref() != Some("off")
+        {
+            continue;
+        }
+        aggregate.ok_artifacts.insert(artifact_key.clone());
+        let line = compiler_line(&profile);
+        let benchmark = str_at(row, "/benchmark_id").unwrap_or_default();
+        if let Some(base_gas) = baseline_gas
+            .get(&format!("{suite}\0{line}\0{config}\0{}", scenario_key(row)))
+            .copied()
+        {
+            push_ratio(
+                aggregate
+                    .gas_by_benchmark
+                    .entry(benchmark.clone())
+                    .or_default(),
+                u64_at(row, "/gas/harness_call_gas"),
+                base_gas,
+            );
+        }
+        if seen_artifacts_for_metrics.insert(artifact_key) {
+            if let Some(base) = baseline_artifacts
+                .get(&format!("{suite}\0{line}\0{config}\0{benchmark}"))
+                .copied()
+            {
+                let current = artifact_metrics(row);
+                push_ratio(
+                    &mut aggregate.runtime_bytes,
+                    current.runtime_bytes,
+                    base.runtime_bytes,
+                );
+                push_float_ratio(
+                    &mut aggregate.compile_ms,
+                    current.compile_ms,
+                    base.compile_ms,
+                );
+            }
+        }
+    }
+    aggregates
+}
+
+fn render_version_axis_table(
+    aggregates: &BTreeMap<(String, String), VersionAxisAggregate>,
+) -> String {
+    let mut html = String::new();
+    html.push_str("<table><thead><tr><th>Suite</th><th>Compiler Config</th><th>Compile OK</th><th>Harness Gas</th><th>Runtime Bytes</th><th>Compile Wall</th><th>EVM Target</th><th>Source Variant</th><th>Notes</th></tr></thead><tbody>");
+    for ((suite, profile), aggregate) in aggregates {
+        html.push_str("<tr><td>");
+        html.push_str(&escape(suite));
+        html.push_str("</td><td class=\"mono\">");
+        html.push_str(&escape(&profile_short(profile)));
+        html.push_str("<br><span class=\"small muted\">");
+        html.push_str(&escape(profile));
+        html.push_str("</span></td><td>");
+        html.push_str(&count_fraction_cell(
+            aggregate.ok_artifacts.len(),
+            aggregate.attempted_artifacts.len(),
+        ));
+        html.push_str("</td><td>");
+        html.push_str(&ratio_cell(geomean_by_group(&aggregate.gas_by_benchmark)));
+        html.push_str("</td><td>");
+        html.push_str(&ratio_cell(geomean(&aggregate.runtime_bytes)));
+        html.push_str("</td><td>");
+        html.push_str(&ratio_cell(geomean(&aggregate.compile_ms)));
+        html.push_str("</td><td class=\"mono\">");
+        html.push_str(&escape(
+            &aggregate
+                .evm_versions
+                .iter()
+                .cloned()
+                .collect::<Vec<_>>()
+                .join(", "),
+        ));
+        html.push_str("</td><td class=\"mono\">");
+        html.push_str(&escape(
+            &aggregate
+                .source_variants
+                .iter()
+                .cloned()
+                .collect::<Vec<_>>()
+                .join(", "),
+        ));
+        html.push_str("</td><td class=\"small\">");
+        html.push_str(&failure_reason_summary(&aggregate.failure_reasons));
+        html.push_str("</td></tr>");
+    }
+    html.push_str("</tbody></table>");
+    html
+}
+
+fn version_axis_config(profile: &str) -> Option<String> {
+    if profile.starts_with("solc-") {
+        if profile.contains("legacy-runs200") {
+            return Some("legacy runs=200".to_string());
+        }
+        if profile.contains("viair-runs200") {
+            return Some("viaIR runs=200".to_string());
+        }
+        if profile.contains("noopt") {
+            return Some("no optimizer".to_string());
+        }
+    }
+    if profile.starts_with("vyper-") {
+        if profile.ends_with("-default") {
+            return Some("default".to_string());
+        }
+        let venom = profile.ends_with("-venom");
+        for mode in ["none", "gas", "codesize"] {
+            let needle = format!("-{mode}");
+            if profile.contains(&needle) {
+                return Some(if venom {
+                    format!("{mode} venom")
+                } else {
+                    mode.to_string()
+                });
+            }
+        }
+    }
+    None
+}
+
+fn is_latest_version_axis_profile(profile: &str) -> bool {
+    profile.starts_with("solc-latest-") || profile.starts_with("vyper-latest-")
+}
+
+fn compiler_line(profile: &str) -> &'static str {
+    if profile.starts_with("solc-") {
+        "solc"
+    } else if profile.starts_with("vyper-") {
+        "vyper"
+    } else {
+        "unknown"
+    }
+}
+
+fn compiler_version_label(profile: &str) -> String {
+    if let Some(rest) = profile.strip_prefix("solc-") {
+        return rest
+            .split_once('-')
+            .map(|(version, _)| version.to_string())
+            .unwrap_or_else(|| "unknown".to_string());
+    }
+    if let Some(rest) = profile.strip_prefix("vyper-") {
+        return rest
+            .split_once('-')
+            .map(|(version, _)| version.to_string())
+            .unwrap_or_else(|| "unknown".to_string());
+    }
+    "unknown".to_string()
+}
+
+fn compiler_version_order(profile: &str) -> u64 {
+    match compiler_version_label(profile).as_str() {
+        "latest" if profile.starts_with("solc-") => 835,
+        "latest" if profile.starts_with("vyper-") => 430,
+        "0.8.30" => 830,
+        "0.5.0a1" => 500,
+        "0.4.0" => 400,
+        "0.3.10" => 310,
+        "0.2.16" => 216,
+        _ => 0,
+    }
 }
 
 #[derive(Debug, Default)]
@@ -3071,18 +3420,24 @@ fn render_methodology(
     let mut html = String::new();
     html.push_str("<section class=\"two\">");
     html.push_str("<div class=\"card\"><h3>Pinned Environment</h3><p class=\"small muted\">");
+    let toolchain_summary = toolchains
+        .compilers
+        .iter()
+        .map(|(key, toolchain)| {
+            format!(
+                "{} {} at <span class=\"mono\">{}</span> sha256 <span class=\"mono\">{}</span>",
+                escape(key),
+                escape(&toolchain.version),
+                escape(&toolchain.binary_path.display().to_string()),
+                escape(&toolchain.binary_sha256)
+            )
+        })
+        .collect::<Vec<_>>()
+        .join(". ");
     html.push_str(&format!(
-        "EVM fork {}. solc {} at <span class=\"mono\">{}</span> with sha256 <span class=\"mono\">{}</span>. Vyper {} at <span class=\"mono\">{}</span> with sha256 <span class=\"mono\">{}</span>. Vyper alpha {} at <span class=\"mono\">{}</span> with sha256 <span class=\"mono\">{}</span>. Host: {}. Foundry: {}.",
+        "Default runtime EVM fork {}. {}. Host: {}. Foundry: {}.",
         escape(&toolchains.evm_version),
-        escape(&toolchains.solc.version),
-        escape(&toolchains.solc.binary_path.display().to_string()),
-        escape(&toolchains.solc.binary_sha256),
-        escape(&toolchains.vyper.version),
-        escape(&toolchains.vyper.binary_path.display().to_string()),
-        escape(&toolchains.vyper.binary_sha256),
-        escape(&toolchains.vyper_alpha.version),
-        escape(&toolchains.vyper_alpha.binary_path.display().to_string()),
-        escape(&toolchains.vyper_alpha.binary_sha256),
+        toolchain_summary,
         escape(&str_at(manifest, "/environment/host/cpu").unwrap_or_default()),
         escape(&str_at(manifest, "/environment/tools/forge").unwrap_or_default())
     ));
@@ -3346,6 +3701,9 @@ fn profile_palette() -> Vec<(String, &'static str)> {
         (SOL_NOOPT_CODEGEN, "#93c5fd"),
         (SOL_CODEGEN_BASELINE, "#2563eb"),
         (SOL_VIAIR_CODEGEN, "#1e3a8a"),
+        ("solc-0.8.30-noopt", "#bfdbfe"),
+        ("solc-0.8.30-legacy-runs200", "#3b82f6"),
+        ("solc-0.8.30-viair-runs200", "#1d4ed8"),
         (VYPER_NONE_CODEGEN, "#86efac"),
         (VYPER_GAS_CODEGEN, "#16a34a"),
         (VYPER_CODESIZE_CODEGEN, "#166534"),
@@ -3358,6 +3716,16 @@ fn profile_palette() -> Vec<(String, &'static str)> {
         (VYPER_ALPHA_NONE_VENOM_CODEGEN, "#22d3ee"),
         (VYPER_ALPHA_GAS_VENOM_CODEGEN, "#0e7490"),
         (VYPER_ALPHA_CODESIZE_VENOM_CODEGEN, "#164e63"),
+        ("vyper-0.4.0-none", "#c4b5fd"),
+        ("vyper-0.4.0-gas", "#8b5cf6"),
+        ("vyper-0.4.0-codesize", "#5b21b6"),
+        ("vyper-0.4.0-none-venom", "#a78bfa"),
+        ("vyper-0.4.0-gas-venom", "#7c3aed"),
+        ("vyper-0.4.0-codesize-venom", "#4c1d95"),
+        ("vyper-0.3.10-none", "#fdba74"),
+        ("vyper-0.3.10-gas", "#ea580c"),
+        ("vyper-0.3.10-codesize", "#9a3412"),
+        ("vyper-0.2.16-default", "#6b7280"),
     ]
     .into_iter()
     .map(|(profile, color)| (profile_short(profile), color))
@@ -3390,11 +3758,21 @@ fn profile_color_encoding(hide_legend: bool) -> serde_json::Value {
 
 fn compiler_family(profile: &str) -> &'static str {
     if profile.starts_with("solc-") {
-        "solc"
+        if profile.starts_with("solc-0.8.30-") {
+            "solc 0.8.30"
+        } else {
+            "solc latest"
+        }
     } else if profile.starts_with("vyper-0.5.0a1-") {
         "Vyper 0.5.0a1"
+    } else if profile.starts_with("vyper-0.4.0-") {
+        "Vyper 0.4.0"
+    } else if profile.starts_with("vyper-0.3.10-") {
+        "Vyper 0.3.10"
+    } else if profile.starts_with("vyper-0.2.16-") {
+        "Vyper 0.2.16"
     } else if profile.starts_with("vyper-") {
-        "Vyper 0.4.3"
+        "Vyper latest"
     } else {
         "unknown"
     }
@@ -3456,7 +3834,7 @@ fn compiler_palette_legend() -> String {
     let groups = [
         ("solc", "#2563eb", "blue shades: noopt / legacy / viaIR"),
         (
-            "Vyper 0.4.3",
+            "Vyper latest",
             "#16a34a",
             "green shades: none / gas / codesize / Venom",
         ),
@@ -3464,6 +3842,11 @@ fn compiler_palette_legend() -> String {
             "Vyper 0.5.0a1",
             "#0891b2",
             "cyan shades: none / gas / codesize / Venom",
+        ),
+        (
+            "historical Vyper",
+            "#8b5cf6",
+            "purple/orange/gray shades: 0.4.0 / 0.3.10 / 0.2.16",
         ),
     ];
     let mut html = String::new();
@@ -3772,9 +4155,32 @@ fn profile_short(profile: &str) -> String {
         "vyper-0.5.0a1-none" => "vyper 0.5 none",
         "vyper-latest-none-venom" => "vyper none venom",
         "vyper-0.5.0a1-none-venom" => "vyper 0.5 none venom",
-        _ => profile,
+        _ => return profile_short_dynamic(profile),
     };
     label.to_string()
+}
+
+fn profile_short_dynamic(profile: &str) -> String {
+    if let Some(rest) = profile.strip_prefix("solc-") {
+        let version = compiler_version_label(profile);
+        let label = rest
+            .strip_prefix(&format!("{version}-"))
+            .unwrap_or(rest)
+            .replace("legacy-runs200", "legacy")
+            .replace("viair-runs200", "viaIR")
+            .replace("noopt", "noopt")
+            .replace('-', " ");
+        return format!("solc {version} {label}");
+    }
+    if let Some(rest) = profile.strip_prefix("vyper-") {
+        let version = compiler_version_label(profile);
+        let label = rest
+            .strip_prefix(&format!("{version}-"))
+            .unwrap_or(rest)
+            .replace('-', " ");
+        return format!("vyper {version} {label}");
+    }
+    profile.to_string()
 }
 
 fn signed(value: i64) -> String {

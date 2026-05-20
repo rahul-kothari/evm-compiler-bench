@@ -1,0 +1,8 @@
+id = "vyper-0.4.0-gas-venom"
+language = "vyper"
+compiler = "vyper-0.4.0"
+optimizer = true
+optimizer_mode = "gas"
+experimental_codegen = true
+source_variant = "vyper-0.4"
+evm_version = "cancun"

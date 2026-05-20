@@ -1,0 +1,8 @@
+id = "vyper-0.4.0-codesize-venom"
+language = "vyper"
+compiler = "vyper-0.4.0"
+optimizer = true
+optimizer_mode = "codesize"
+experimental_codegen = true
+source_variant = "vyper-0.4"
+evm_version = "cancun"

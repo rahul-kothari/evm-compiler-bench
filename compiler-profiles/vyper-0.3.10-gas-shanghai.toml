@@ -1,0 +1,7 @@
+id = "vyper-0.3.10-gas"
+language = "vyper"
+compiler = "vyper-0.3.10"
+optimizer = true
+optimizer_mode = "gas"
+source_variant = "vyper-0.3"
+evm_version = "shanghai"

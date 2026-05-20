@@ -1,0 +1,7 @@
+id = "vyper-0.4.0-none"
+language = "vyper"
+compiler = "vyper-0.4.0"
+optimizer = false
+optimizer_mode = "none"
+source_variant = "vyper-0.4"
+evm_version = "cancun"

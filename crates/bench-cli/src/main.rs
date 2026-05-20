@@ -159,24 +159,15 @@ fn main() -> Result<()> {
         Command::Toolchains { offline } => {
             let toolchains = resolve_toolchains(&root, offline)?;
             println!("evm_version={}", toolchains.evm_version);
-            println!(
-                "solc version={} path={} sha256={}",
-                toolchains.solc.version,
-                toolchains.solc.binary_path.display(),
-                toolchains.solc.binary_sha256
-            );
-            println!(
-                "vyper version={} path={} sha256={}",
-                toolchains.vyper.version,
-                toolchains.vyper.binary_path.display(),
-                toolchains.vyper.binary_sha256
-            );
-            println!(
-                "vyper_alpha version={} path={} sha256={}",
-                toolchains.vyper_alpha.version,
-                toolchains.vyper_alpha.binary_path.display(),
-                toolchains.vyper_alpha.binary_sha256
-            );
+            for (key, toolchain) in &toolchains.compilers {
+                println!(
+                    "{} version={} path={} sha256={}",
+                    key,
+                    toolchain.version,
+                    toolchain.binary_path.display(),
+                    toolchain.binary_sha256
+                );
+            }
         }
         Command::Generate { benchmark } => {
             let generated = generate_scale_suite(&root, benchmark.as_deref())?;

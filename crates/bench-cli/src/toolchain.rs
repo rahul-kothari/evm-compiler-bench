@@ -1,5 +1,5 @@
 use crate::{
-    models::{Toolchain, Toolchains},
+    models::{Language, Toolchain, Toolchains},
     util::{ensure_dir, require_success, run_measured, sha256_bytes, sha256_file},
 };
 use anyhow::{Context, Result, anyhow, bail};
@@ -15,9 +15,11 @@ use std::{
 const SOLC_INDEX_ROOT: &str = "https://binaries.soliditylang.org";
 const PYPI_VYPER_JSON: &str = "https://pypi.org/pypi/vyper/json";
 const VYPER_ALPHA_VERSION: &str = "0.5.0a1";
+const LEGACY_VYPER_PYTHON: &str = "3.11";
 const EVM_ORDER: &[&str] = &["osaka", "prague", "cancun", "shanghai", "paris", "london"];
 
 pub fn resolve_toolchains(root: &Path, offline: bool) -> Result<Toolchains> {
+    let compiler_refs = compiler_refs_from_profiles(root)?;
     let solc = resolve_solc(root, offline)?;
     let vyper = resolve_vyper(root, offline)?;
     let vyper_alpha = resolve_vyper_version(
@@ -28,10 +30,48 @@ pub fn resolve_toolchains(root: &Path, offline: bool) -> Result<Toolchains> {
         "alpha",
     )?;
     let evm_version = latest_shared_evm(&solc, &[&vyper, &vyper_alpha])?;
+    let mut compilers = BTreeMap::from([
+        ("solc".to_string(), solc.clone()),
+        ("vyper".to_string(), vyper.clone()),
+        ("vyper-0.5.0a1".to_string(), vyper_alpha.clone()),
+    ]);
+    for compiler_ref in compiler_refs {
+        if compilers.contains_key(&compiler_ref.compiler) {
+            continue;
+        }
+        let toolchain = match compiler_ref.language {
+            Language::Solidity => {
+                let Some(version) = compiler_ref.compiler.strip_prefix("solc-") else {
+                    bail!("unsupported solidity compiler {}", compiler_ref.compiler);
+                };
+                resolve_solc_version(
+                    root,
+                    offline,
+                    version,
+                    &env_var_for_version("EVM_BENCH_SOLC", version),
+                    "historical",
+                )?
+            }
+            Language::Vyper => {
+                let Some(version) = compiler_ref.compiler.strip_prefix("vyper-") else {
+                    bail!("unsupported vyper compiler {}", compiler_ref.compiler);
+                };
+                resolve_vyper_version(
+                    root,
+                    offline,
+                    version,
+                    &env_var_for_version("EVM_BENCH_VYPER", version),
+                    "historical",
+                )?
+            }
+        };
+        compilers.insert(compiler_ref.compiler, toolchain);
+    }
     Ok(Toolchains {
         solc,
         vyper,
         vyper_alpha,
+        compilers,
         evm_version,
     })
 }
@@ -41,21 +81,55 @@ fn resolve_solc(root: &Path, offline: bool) -> Result<Toolchain> {
         return resolve_path_toolchain("solc", env::var_os("EVM_BENCH_SOLC").map(PathBuf::from));
     }
     let index = fetch_solc_index()?;
-    let release_path = index.releases.get(&index.latest_release).with_context(|| {
-        format!(
-            "solc latest release {} missing from index",
-            index.latest_release
-        )
-    })?;
+    let latest_release = index.latest_release.clone();
+    resolve_solc_from_index(root, &latest_release, "EVM_BENCH_SOLC", "latest", index)
+}
+
+fn resolve_solc_version(
+    root: &Path,
+    offline: bool,
+    version: &str,
+    env_var: &str,
+    channel: &str,
+) -> Result<Toolchain> {
+    if let Some(local) =
+        local_toolchain_if_version("solc", env::var_os(env_var).map(PathBuf::from), version)?
+    {
+        return Ok(local);
+    }
+    if let Some(cached) = cached_solc_toolchain(root, version, channel)? {
+        return Ok(cached);
+    }
+    if offline {
+        bail!("cached solc {version} not found");
+    }
+    let index = fetch_solc_index()?;
+    resolve_solc_from_index(root, version, env_var, channel, index)
+}
+
+fn resolve_solc_from_index(
+    root: &Path,
+    version: &str,
+    env_var: &str,
+    channel: &str,
+    index: SolcIndex,
+) -> Result<Toolchain> {
+    if let Some(local) =
+        local_toolchain_if_version("solc", env::var_os(env_var).map(PathBuf::from), version)?
+    {
+        return Ok(local);
+    }
+    let release_path = index
+        .releases
+        .get(version)
+        .with_context(|| format!("solc release {version} missing from index"))?;
     let build = index
         .builds
         .iter()
         .find(|build| build.path == *release_path)
         .with_context(|| format!("solc build {release_path} missing from index"))?;
     let platform = solc_platform()?;
-    let target_dir = root
-        .join(".cache/toolchains/solc")
-        .join(&index.latest_release);
+    let target_dir = root.join(".cache/toolchains/solc").join(version);
     ensure_dir(&target_dir)?;
     let target = target_dir.join(&build.path);
     let source = format!("{SOLC_INDEX_ROOT}/{platform}/{}", build.path);
@@ -84,9 +158,49 @@ fn resolve_solc(root: &Path, offline: bool) -> Result<Toolchain> {
             ("resolver".to_string(), "solidity_binary_index".to_string()),
             ("index_root".to_string(), SOLC_INDEX_ROOT.to_string()),
             ("platform".to_string(), platform.to_string()),
-            ("release".to_string(), index.latest_release),
+            ("release".to_string(), version.to_string()),
+            ("channel".to_string(), channel.to_string()),
         ]),
     })
+}
+
+fn cached_solc_toolchain(root: &Path, version: &str, channel: &str) -> Result<Option<Toolchain>> {
+    let target_dir = root.join(".cache/toolchains/solc").join(version);
+    if !target_dir.exists() {
+        return Ok(None);
+    }
+    let mut entries = fs::read_dir(&target_dir)?
+        .filter_map(|entry| entry.ok().map(|entry| entry.path()))
+        .filter(|path| path.is_file())
+        .collect::<Vec<_>>();
+    entries.sort();
+    let Some(binary_path) = entries.into_iter().next() else {
+        return Ok(None);
+    };
+    let version_output = command_stdout(Command::new(&binary_path).arg("--version"))?;
+    let actual_version = parse_solc_version(&version_output)?;
+    if actual_version != version {
+        bail!(
+            "cached solc at {} has version {actual_version}, expected {version}",
+            binary_path.display()
+        );
+    }
+    Ok(Some(Toolchain {
+        name: "solc".to_string(),
+        version: actual_version,
+        binary_sha256: sha256_file(&binary_path)?,
+        binary_path,
+        download_source: format!("{SOLC_INDEX_ROOT}/"),
+        version_output,
+        metadata: BTreeMap::from([
+            (
+                "resolver".to_string(),
+                "solidity_binary_index_cache".to_string(),
+            ),
+            ("release".to_string(), version.to_string()),
+            ("channel".to_string(), channel.to_string()),
+        ]),
+    }))
 }
 
 fn resolve_vyper(root: &Path, offline: bool) -> Result<Toolchain> {
@@ -112,6 +226,11 @@ fn resolve_vyper_version(
 
     let venv = root.join(".cache/toolchains/vyper").join(version);
     let binary = venv.join(bin_dir()).join(binary_name("vyper"));
+    let legacy_python = legacy_vyper_python(version);
+    if binary.exists() && legacy_python.is_some() && !cached_vyper_uses_legacy_python(&venv) {
+        fs::remove_dir_all(&venv)
+            .with_context(|| format!("refreshing legacy vyper venv {}", venv.display()))?;
+    }
     if binary.exists() {
         return cached_vyper_toolchain(&binary, version, channel);
     }
@@ -120,27 +239,50 @@ fn resolve_vyper_version(
     }
     if !binary.exists() {
         ensure_dir(&venv)?;
-        require_success(
-            run_measured(Command::new("uv").arg("venv").arg(&venv), None)?,
-            "uv venv",
-        )?;
+        let mut venv_command = Command::new("uv");
+        venv_command.arg("venv").arg(&venv);
+        if let Some(python) = legacy_python {
+            venv_command.arg("--python").arg(python);
+        }
+        require_success(run_measured(&mut venv_command, None)?, "uv venv")?;
         let python = venv.join(bin_dir()).join(binary_name("python"));
+        let mut install_command = Command::new("uv");
+        install_command
+            .arg("pip")
+            .arg("install")
+            .arg("--python")
+            .arg(&python)
+            .arg("--prerelease")
+            .arg("allow")
+            .arg(format!("vyper=={version}"));
+        if needs_setuptools_pin(version) {
+            install_command.arg("setuptools==80.9.0");
+        }
         require_success(
-            run_measured(
-                Command::new("uv")
-                    .arg("pip")
-                    .arg("install")
-                    .arg("--python")
-                    .arg(&python)
-                    .arg("--prerelease")
-                    .arg("allow")
-                    .arg(format!("vyper=={version}")),
-                None,
-            )?,
+            run_measured(&mut install_command, None)?,
             "uv pip install vyper",
         )?;
     }
     cached_vyper_toolchain(&binary, version, channel)
+}
+
+fn legacy_vyper_python(version: &str) -> Option<&'static str> {
+    if version_tuple_loose(version).is_some_and(|tuple| tuple < (0, 4, 0)) {
+        Some(LEGACY_VYPER_PYTHON)
+    } else {
+        None
+    }
+}
+
+fn needs_setuptools_pin(version: &str) -> bool {
+    version_tuple_loose(version).is_some_and(|tuple| tuple < (0, 3, 0))
+}
+
+fn cached_vyper_uses_legacy_python(venv: &Path) -> bool {
+    let python = venv.join(bin_dir()).join(binary_name("python"));
+    command_stdout(Command::new(&python).arg("--version"))
+        .ok()
+        .is_some_and(|version| version.contains("Python 3.11"))
 }
 
 fn cached_vyper_toolchain(binary: &Path, version: &str, channel: &str) -> Result<Toolchain> {
@@ -283,6 +425,53 @@ fn stable_version_tuple(version: &str) -> Option<(u64, u64, u64)> {
         return None;
     }
     Some((major, minor, patch))
+}
+
+fn version_tuple_loose(version: &str) -> Option<(u64, u64, u64)> {
+    let alpha_index = version
+        .char_indices()
+        .find_map(|(index, ch)| ch.is_ascii_alphabetic().then_some(index));
+    let core = alpha_index.map_or(version, |index| &version[..index]);
+    stable_version_tuple(core)
+}
+
+#[derive(Debug, Deserialize)]
+struct ProfileCompilerRef {
+    language: Language,
+    compiler: String,
+}
+
+fn compiler_refs_from_profiles(root: &Path) -> Result<Vec<ProfileCompilerRef>> {
+    let mut refs = Vec::new();
+    let profiles_dir = root.join("compiler-profiles");
+    if !profiles_dir.exists() {
+        return Ok(refs);
+    }
+    for entry in fs::read_dir(profiles_dir)? {
+        let entry = entry?;
+        if entry.path().extension().and_then(|ext| ext.to_str()) != Some("toml") {
+            continue;
+        }
+        let text = fs::read_to_string(entry.path())?;
+        let compiler_ref: ProfileCompilerRef =
+            toml::from_str(&text).with_context(|| format!("parsing {}", entry.path().display()))?;
+        refs.push(compiler_ref);
+    }
+    Ok(refs)
+}
+
+fn env_var_for_version(prefix: &str, version: &str) -> String {
+    let suffix = version
+        .chars()
+        .map(|ch| {
+            if ch.is_ascii_alphanumeric() {
+                ch.to_ascii_uppercase()
+            } else {
+                '_'
+            }
+        })
+        .collect::<String>();
+    format!("{prefix}_{suffix}")
 }
 
 fn command_stdout(command: &mut Command) -> Result<String> {

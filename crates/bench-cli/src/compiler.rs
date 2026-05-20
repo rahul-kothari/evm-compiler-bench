@@ -7,7 +7,11 @@ use crate::{
 };
 use anyhow::{Context, Result, bail};
 use serde_json::json;
-use std::{env, fs, path::Path, process::Command};
+use std::{
+    env, fs,
+    path::{Path, PathBuf},
+    process::Command,
+};
 
 const DEFAULT_COMPILE_SAMPLES: usize = 3;
 
@@ -22,13 +26,12 @@ pub fn compile_all(
     for benchmark in benchmarks {
         for profile in &profiles {
             let toolchain = toolchain_for_profile(toolchains, profile)?;
+            let evm_version = effective_evm_version(profile, toolchains);
             let result = match profile.language {
                 Language::Solidity => {
-                    compile_solidity(root, benchmark, profile, toolchain, &toolchains.evm_version)
+                    compile_solidity(root, benchmark, profile, toolchain, &evm_version)
                 }
-                Language::Vyper => {
-                    compile_vyper(root, benchmark, profile, toolchain, &toolchains.evm_version)
-                }
+                Language::Vyper => compile_vyper(root, benchmark, profile, toolchain, &evm_version),
             };
             match result {
                 Ok(artifact) => artifacts.push(artifact),
@@ -37,7 +40,7 @@ pub fn compile_all(
                     benchmark,
                     profile,
                     toolchain,
-                    &toolchains.evm_version,
+                    &evm_version,
                     error.to_string(),
                 )?),
             }
@@ -54,21 +57,22 @@ fn toolchain_for_profile<'a>(
     toolchains: &'a Toolchains,
     profile: &CompilerProfile,
 ) -> Result<&'a Toolchain> {
-    match profile.language {
-        Language::Solidity if profile.compiler == "solc" => Ok(&toolchains.solc),
-        Language::Solidity => bail!(
-            "profile {} has unsupported solidity compiler {}",
-            profile.id,
-            profile.compiler
-        ),
-        Language::Vyper => match profile.compiler.as_str() {
-            "vyper" => Ok(&toolchains.vyper),
-            "vyper-0.5.0a1" => Ok(&toolchains.vyper_alpha),
-            other => bail!(
-                "profile {} has unsupported vyper compiler {other}",
-                profile.id
-            ),
-        },
+    toolchains
+        .compilers
+        .get(&profile.compiler)
+        .with_context(|| {
+            format!(
+                "profile {} references unresolved compiler {}",
+                profile.id, profile.compiler
+            )
+        })
+}
+
+fn effective_evm_version(profile: &CompilerProfile, toolchains: &Toolchains) -> String {
+    if profile.evm_version == "latest-shared" {
+        toolchains.evm_version.clone()
+    } else {
+        profile.evm_version.clone()
     }
 }
 
@@ -214,14 +218,14 @@ fn solidity_compiler_settings(profile: &CompilerProfile, evm_version: &str) -> s
 }
 
 fn vyper_compiler_settings(profile: &CompilerProfile, evm_version: &str) -> serde_json::Value {
-    let optimizer_mode = profile.optimizer_mode.as_deref().unwrap_or("gas");
     json!({
         "evmVersion": evm_version,
         "compiler": profile.compiler,
         "metadataMode": profile.metadata_mode.as_str(),
         "bytecodeMetadata": profile.metadata_mode == MetadataMode::On,
-        "optimize": optimizer_mode,
-        "experimentalCodegen": profile.experimental_codegen
+        "optimize": profile.optimizer_mode.as_deref().unwrap_or("default"),
+        "experimentalCodegen": profile.experimental_codegen,
+        "sourceVariant": profile.source_variant.as_deref().unwrap_or("default")
     })
 }
 
@@ -232,8 +236,7 @@ fn compile_vyper(
     vyper: &Toolchain,
     evm_version: &str,
 ) -> Result<CompiledArtifact> {
-    let source_path = root.join(&benchmark.vyper_path);
-    let optimizer_mode = profile.optimizer_mode.as_deref().unwrap_or("gas");
+    let source_path = source_path_for_profile(root, benchmark, profile)?;
     let measured = repeat_compile_samples(
         || {
             let mut command = Command::new(&vyper.binary_path);
@@ -241,10 +244,13 @@ fn compile_vyper(
                 .arg("-f")
                 .arg("abi,bytecode,bytecode_runtime")
                 .arg("--evm-version")
-                .arg(evm_version)
-                .arg("-O")
-                .arg(optimizer_mode);
-            if profile.metadata_mode == MetadataMode::Off {
+                .arg(evm_version);
+            if let Some(optimizer_mode) = profile.optimizer_mode.as_deref() {
+                for arg in vyper_optimizer_args(vyper, optimizer_mode) {
+                    command.arg(arg);
+                }
+            }
+            if profile.metadata_mode == MetadataMode::Off && vyper_supports_metadata_arg(vyper) {
                 command.arg(vyper_disable_metadata_arg(vyper));
             }
             if profile.experimental_codegen {
@@ -283,12 +289,211 @@ fn compile_vyper(
     )
 }
 
+fn vyper_optimizer_args(vyper: &Toolchain, optimizer_mode: &str) -> Vec<String> {
+    if vyper_legacy_minor(vyper) < Some(3) {
+        return Vec::new();
+    }
+    if vyper_legacy_minor(vyper) == Some(3) {
+        return vec!["--optimize".to_string(), optimizer_mode.to_string()];
+    }
+    vec!["-O".to_string(), optimizer_mode.to_string()]
+}
+
+fn vyper_supports_metadata_arg(vyper: &Toolchain) -> bool {
+    vyper_legacy_minor(vyper) >= Some(3)
+}
+
 fn vyper_disable_metadata_arg(vyper: &Toolchain) -> &'static str {
     if vyper.version.starts_with("0.5.") {
         "--disable-bytecode-metadata"
     } else {
         "--no-bytecode-metadata"
     }
+}
+
+fn vyper_legacy_minor(vyper: &Toolchain) -> Option<u64> {
+    let mut parts = vyper.version.split('.');
+    let major = parts.next()?.parse::<u64>().ok()?;
+    let minor = parts.next()?.parse::<u64>().ok()?;
+    if major == 0 { Some(minor) } else { Some(99) }
+}
+
+fn source_path_for_profile(
+    root: &Path,
+    benchmark: &Benchmark,
+    profile: &CompilerProfile,
+) -> Result<PathBuf> {
+    match profile.language {
+        Language::Solidity => Ok(root.join(&benchmark.solidity_path)),
+        Language::Vyper => {
+            let source_path = root.join(&benchmark.vyper_path);
+            let Some(variant) = profile.source_variant.as_deref() else {
+                return Ok(source_path);
+            };
+            let source = fs::read_to_string(&source_path)?;
+            let transformed = transform_vyper_source(&source, variant)
+                .with_context(|| format!("applying source variant {variant}"))?;
+            let variant_path = root
+                .join("target/bench-source-variants")
+                .join(variant)
+                .join(&benchmark.vyper_path);
+            if let Some(parent) = variant_path.parent() {
+                fs::create_dir_all(parent)?;
+            }
+            fs::write(&variant_path, transformed)?;
+            Ok(variant_path)
+        }
+    }
+}
+
+fn transform_vyper_source(source: &str, variant: &str) -> Result<String> {
+    let source = match variant {
+        "vyper-0.4" => {
+            let source = source.replace(
+                "# pragma version >=0.4.3,<0.6.0",
+                "# pragma version >=0.4.0,<0.5.0",
+            );
+            rewrite_vyper_event_logs(&source)
+        }
+        "vyper-0.3" => {
+            let mut source = source.replace(
+                "# pragma version >=0.4.3,<0.6.0",
+                "# pragma version >=0.3.10,<0.4.0",
+            );
+            source = source.replace("@deploy", "@external");
+            source = source.replace("//", "/");
+            source = source.replace("abi_encode(", "_abi_encode(");
+            source = rewrite_typed_for_loops(&source);
+            rewrite_vyper_event_logs(&source)
+        }
+        "vyper-0.2" => {
+            let mut source = source.replace(
+                "# pragma version >=0.4.3,<0.6.0",
+                "# pragma version >=0.2.16,<0.3.0",
+            );
+            source = source.replace("@deploy", "@external");
+            source = source.replace("//", "/");
+            source = source.replace("abi_encode(", "_abi_encode(");
+            source = source.replace("public(immutable(String[32]))", "public(String[32])");
+            source = source.replace("public(immutable(String[8]))", "public(String[8])");
+            source = source.replace("public(immutable(uint8))", "public(uint256)");
+            source = source.replace("    name = ", "    self.name = ");
+            source = source.replace("    symbol = ", "    self.symbol = ");
+            source = source.replace("    decimals = ", "    self.decimals = ");
+            source = rewrite_typed_for_loops(&source);
+            rewrite_vyper_event_logs(&source)
+        }
+        other => bail!("unknown Vyper source variant {other}"),
+    };
+    Ok(source)
+}
+
+fn rewrite_typed_for_loops(source: &str) -> String {
+    source
+        .lines()
+        .map(|line| {
+            let Some(for_start) = line.find("for ") else {
+                return line.to_string();
+            };
+            let prefix = &line[..for_start];
+            let rest = &line[for_start + 4..];
+            let Some(colon_index) = rest.find(':') else {
+                return line.to_string();
+            };
+            let Some(in_index) = rest.find(" in ") else {
+                return line.to_string();
+            };
+            if colon_index > in_index {
+                return line.to_string();
+            }
+            format!(
+                "{prefix}for {} in {}",
+                rest[..colon_index].trim(),
+                &rest[in_index + 4..]
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+fn rewrite_vyper_event_logs(source: &str) -> String {
+    source
+        .lines()
+        .map(rewrite_vyper_event_log_line)
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+fn rewrite_vyper_event_log_line(line: &str) -> String {
+    let Some(log_index) = line.find("log ") else {
+        return line.to_string();
+    };
+    let Some(open_index) = line[log_index..].find('(').map(|index| log_index + index) else {
+        return line.to_string();
+    };
+    if !line.trim_end().ends_with(')') {
+        return line.to_string();
+    }
+    let Some(close_index) = line.rfind(')') else {
+        return line.to_string();
+    };
+    let args = &line[open_index + 1..close_index];
+    if !args.contains('=') {
+        return line.to_string();
+    }
+    let values = strip_keyword_args(args);
+    format!(
+        "{}log {}({})",
+        &line[..log_index],
+        line[log_index + 4..open_index].trim(),
+        values.join(", ")
+    )
+}
+
+fn strip_keyword_args(args: &str) -> Vec<String> {
+    split_top_level_args(args)
+        .into_iter()
+        .map(|arg| {
+            let mut depth = 0i32;
+            for (index, ch) in arg.char_indices() {
+                match ch {
+                    '(' | '[' | '{' => depth += 1,
+                    ')' | ']' | '}' => depth -= 1,
+                    '=' if depth == 0 => return arg[index + 1..].trim().to_string(),
+                    _ => {}
+                }
+            }
+            arg.trim().to_string()
+        })
+        .filter(|arg| !arg.is_empty())
+        .collect()
+}
+
+fn split_top_level_args(args: &str) -> Vec<String> {
+    let mut parts = Vec::new();
+    let mut current = String::new();
+    let mut depth = 0i32;
+    for ch in args.chars() {
+        match ch {
+            '(' | '[' | '{' => {
+                depth += 1;
+                current.push(ch);
+            }
+            ')' | ']' | '}' => {
+                depth -= 1;
+                current.push(ch);
+            }
+            ',' if depth == 0 => {
+                parts.push(current.trim().to_string());
+                current.clear();
+            }
+            _ => current.push(ch),
+        }
+    }
+    if !current.trim().is_empty() {
+        parts.push(current.trim().to_string());
+    }
+    parts
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -310,7 +515,7 @@ fn artifact(
     let language = profile.language;
     Ok(CompiledArtifact {
         benchmark_id: benchmark.id.clone(),
-        implementation_id: format!("{}/handwritten/v1", language.as_str()),
+        implementation_id: implementation_id(profile),
         suite: benchmark.suite,
         family: benchmark.family.clone(),
         parameter_name: benchmark.parameter_name.clone(),
@@ -399,10 +604,7 @@ fn compile_failure(
     error: String,
 ) -> Result<CompileFailure> {
     let language = profile.language;
-    let source_path = match language {
-        Language::Solidity => root.join(&benchmark.solidity_path),
-        Language::Vyper => root.join(&benchmark.vyper_path),
-    };
+    let source_path = source_path_for_profile(root, benchmark, profile)?;
     let source = fs::read(&source_path)?;
     let compiler_settings = match language {
         Language::Solidity => solidity_compiler_settings(profile, evm_version),
@@ -410,7 +612,7 @@ fn compile_failure(
     };
     Ok(CompileFailure {
         benchmark_id: benchmark.id.clone(),
-        implementation_id: format!("{}/handwritten/v1", language.as_str()),
+        implementation_id: implementation_id(profile),
         suite: benchmark.suite,
         family: benchmark.family.clone(),
         parameter_name: benchmark.parameter_name.clone(),
@@ -429,6 +631,13 @@ fn compile_failure(
         source_hash: sha256_bytes(&source),
         error,
     })
+}
+
+fn implementation_id(profile: &CompilerProfile) -> String {
+    match profile.source_variant.as_deref() {
+        Some(variant) => format!("{}/handwritten/{variant}", profile.language.as_str()),
+        None => format!("{}/handwritten/v1", profile.language.as_str()),
+    }
 }
 
 fn bytecode_metrics(creation: &str, runtime: &str) -> Result<BytecodeMetrics> {
@@ -451,7 +660,7 @@ fn bytecode_metrics(creation: &str, runtime: &str) -> Result<BytecodeMetrics> {
 
 #[cfg(test)]
 mod tests {
-    use super::bytecode_metrics;
+    use super::{bytecode_metrics, transform_vyper_source};
 
     #[test]
     fn computes_bytecode_metrics() {
@@ -459,5 +668,16 @@ mod tests {
         assert_eq!(metrics.creation_bytes, 5);
         assert_eq!(metrics.runtime_bytes, 4);
         assert_eq!(metrics.code_deposit_gas, 800);
+    }
+
+    #[test]
+    fn rewrites_vyper_03_compatibility_syntax() {
+        let source = "# pragma version >=0.4.3,<0.6.0\n\n@deploy\ndef __init__():\n    log Transfer(sender=empty(address), receiver=msg.sender, value=1)\n\n@external\n@view\ndef f(xs: DynArray[uint256, 4]) -> bytes32:\n    for item: uint256 in xs:\n        pass\n    return keccak256(abi_encode(4 // 2))\n";
+        let rewritten = transform_vyper_source(source, "vyper-0.3").unwrap();
+        assert!(rewritten.contains("# pragma version >=0.3.10,<0.4.0"));
+        assert!(rewritten.contains("@external\ndef __init__"));
+        assert!(rewritten.contains("log Transfer(empty(address), msg.sender, 1)"));
+        assert!(rewritten.contains("for item in xs:"));
+        assert!(rewritten.contains("_abi_encode(4 / 2)"));
     }
 }
