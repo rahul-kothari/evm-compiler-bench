@@ -2,11 +2,11 @@ use anyhow::{Context, Result, bail};
 use sha2::{Digest, Sha256};
 use std::{
     fs,
-    io::{Read, Write},
+    io::{IsTerminal, Read, Write},
     path::Path,
     process::{Command, Output, Stdio},
     thread,
-    time::Instant,
+    time::{Duration, Instant},
 };
 
 use crate::models::CommandStats;
@@ -129,6 +129,77 @@ fn looks_like_solc_or_vyper_metadata(metadata: &[u8]) -> bool {
 
 pub fn ensure_dir(path: &Path) -> Result<()> {
     fs::create_dir_all(path).with_context(|| format!("creating {}", path.display()))
+}
+
+pub struct Progress {
+    label: String,
+    total: usize,
+    last_emit: Instant,
+    started: Instant,
+    tty: bool,
+    emitted: bool,
+}
+
+impl Progress {
+    pub fn new(label: impl Into<String>, total: usize) -> Self {
+        let mut progress = Self {
+            label: label.into(),
+            total,
+            last_emit: Instant::now(),
+            started: Instant::now(),
+            tty: std::io::stderr().is_terminal(),
+            emitted: false,
+        };
+        progress.emit(0, "starting");
+        progress
+    }
+
+    pub fn update(&mut self, completed: usize, detail: impl AsRef<str>) {
+        if self.should_emit(completed) {
+            self.emit(completed, detail.as_ref());
+        }
+    }
+
+    pub fn update_active(&mut self, completed: usize, detail: impl AsRef<str>) {
+        if self.tty || self.should_emit(completed) {
+            self.emit(completed, detail.as_ref());
+        }
+    }
+
+    pub fn finish(&mut self, detail: impl AsRef<str>) {
+        self.emit(self.total, detail.as_ref());
+        if self.tty {
+            eprintln!();
+        }
+    }
+
+    fn should_emit(&self, completed: usize) -> bool {
+        self.tty
+            || !self.emitted
+            || completed == self.total
+            || self.last_emit.elapsed() >= Duration::from_secs(2)
+    }
+
+    fn emit(&mut self, completed: usize, detail: &str) {
+        let percent = if self.total == 0 {
+            100.0
+        } else {
+            (completed as f64 / self.total as f64) * 100.0
+        };
+        let elapsed = self.started.elapsed().as_secs();
+        let line = format!(
+            "{}: {}/{} ({percent:5.1}%) {} [{}s]",
+            self.label, completed, self.total, detail, elapsed
+        );
+        if self.tty {
+            eprint!("\r{line}");
+            let _ = std::io::stderr().flush();
+        } else {
+            eprintln!("{line}");
+        }
+        self.last_emit = Instant::now();
+        self.emitted = true;
+    }
 }
 
 #[derive(Clone, Copy)]

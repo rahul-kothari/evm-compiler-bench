@@ -1,12 +1,12 @@
 use crate::{
     models::{Language, Toolchain, Toolchains},
-    util::{ensure_dir, require_success, run_measured, sha256_bytes, sha256_file},
+    util::{Progress, ensure_dir, require_success, run_measured, sha256_bytes, sha256_file},
 };
 use anyhow::{Context, Result, anyhow, bail};
 use regex::Regex;
 use serde::Deserialize;
 use std::{
-    collections::BTreeMap,
+    collections::{BTreeMap, BTreeSet},
     env, fs,
     path::{Path, PathBuf},
     process::Command,
@@ -20,8 +20,19 @@ const EVM_ORDER: &[&str] = &["osaka", "prague", "cancun", "shanghai", "paris", "
 
 pub fn resolve_toolchains(root: &Path, offline: bool) -> Result<Toolchains> {
     let compiler_refs = compiler_refs_from_profiles(root)?;
+    let extra_compilers: BTreeSet<_> = compiler_refs
+        .iter()
+        .map(|compiler_ref| compiler_ref.compiler.clone())
+        .filter(|compiler| !matches!(compiler.as_str(), "solc" | "vyper" | "vyper-0.5.0a1"))
+        .collect();
+    let mut progress = Progress::new("toolchains", 3 + extra_compilers.len());
+    progress.update_active(0, "resolving latest solc");
     let solc = resolve_solc(root, offline)?;
+    progress.update(1, format!("resolved solc {}", solc.version));
+    progress.update_active(1, "resolving latest vyper");
     let vyper = resolve_vyper(root, offline)?;
+    progress.update(2, format!("resolved vyper {}", vyper.version));
+    progress.update_active(2, format!("resolving vyper {VYPER_ALPHA_VERSION}"));
     let vyper_alpha = resolve_vyper_version(
         root,
         offline,
@@ -29,16 +40,19 @@ pub fn resolve_toolchains(root: &Path, offline: bool) -> Result<Toolchains> {
         "EVM_BENCH_VYPER_0_5_0A1",
         "alpha",
     )?;
+    progress.update(3, format!("resolved vyper alpha {}", vyper_alpha.version));
     let evm_version = latest_shared_evm(&solc, &[&vyper, &vyper_alpha])?;
     let mut compilers = BTreeMap::from([
         ("solc".to_string(), solc.clone()),
         ("vyper".to_string(), vyper.clone()),
         ("vyper-0.5.0a1".to_string(), vyper_alpha.clone()),
     ]);
+    let mut resolved = 3usize;
     for compiler_ref in compiler_refs {
         if compilers.contains_key(&compiler_ref.compiler) {
             continue;
         }
+        progress.update_active(resolved, format!("resolving {}", compiler_ref.compiler));
         let toolchain = match compiler_ref.language {
             Language::Solidity => {
                 let Some(version) = compiler_ref.compiler.strip_prefix("solc-") else {
@@ -65,8 +79,18 @@ pub fn resolve_toolchains(root: &Path, offline: bool) -> Result<Toolchains> {
                 )?
             }
         };
+        resolved += 1;
+        progress.update(
+            resolved,
+            format!("resolved {} {}", compiler_ref.compiler, toolchain.version),
+        );
         compilers.insert(compiler_ref.compiler, toolchain);
     }
+    progress.finish(format!(
+        "resolved {} compilers; shared EVM {}",
+        compilers.len(),
+        evm_version
+    ));
     Ok(Toolchains {
         solc,
         vyper,

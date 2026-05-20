@@ -5,7 +5,7 @@ use crate::{
         CompileSet, CompiledArtifact, CompilerProfile, Language, MetadataMode, Toolchain,
         Toolchains,
     },
-    util::{byte_len, require_success, run_measured, sha256_bytes, stripped_cbor_len},
+    util::{Progress, byte_len, require_success, run_measured, sha256_bytes, stripped_cbor_len},
 };
 use anyhow::{Context, Result, bail};
 use serde::{Deserialize, Serialize};
@@ -25,10 +25,18 @@ pub fn compile_all(
     use_cache: bool,
 ) -> Result<CompileSet> {
     let profiles = load_profiles(root)?;
+    let total_attempts = benchmarks.len() * profiles.len();
+    let mut progress = Progress::new("compile", total_attempts);
+    let mut attempted = 0usize;
+    let mut cache_hits = 0usize;
+    let mut cache_misses = 0usize;
+    let mut cache_stale = 0usize;
+    let mut cache_disabled = 0usize;
     let mut artifacts = Vec::new();
     let mut failures = Vec::new();
     for benchmark in benchmarks {
         for profile in &profiles {
+            attempted += 1;
             let toolchain = toolchain_for_profile(toolchains, profile)?;
             let evm_version = effective_evm_version(profile, toolchains);
             let cache_input =
@@ -48,6 +56,8 @@ pub fn compile_all(
                     &cache_input.fingerprint,
                 )? {
                     CacheLookup::Hit(mut cached) => {
+                        cache_hits += 1;
+                        let failed = matches!(cached, CachedCompileResult::Failure(_));
                         match &mut cached {
                             CachedCompileResult::Artifact(artifact) => {
                                 artifact.cache = CacheInfo::hit(&cache_input.key);
@@ -60,10 +70,28 @@ pub fn compile_all(
                             CachedCompileResult::Artifact(artifact) => artifacts.push(artifact),
                             CachedCompileResult::Failure(failure) => failures.push(failure),
                         }
+                        progress.update(
+                            attempted,
+                            format!(
+                                "cache hit {} {}{}",
+                                benchmark.id,
+                                profile.id,
+                                if failed { " compile_error" } else { "" }
+                            ),
+                        );
                         continue;
                     }
                     CacheLookup::Miss(info) => {
-                        compile_and_record(
+                        let cache_status = info.status.clone();
+                        match cache_status.as_str() {
+                            "stale" => cache_stale += 1,
+                            _ => cache_misses += 1,
+                        }
+                        progress.update_active(
+                            attempted.saturating_sub(1),
+                            format!("compiling {} {} ({cache_status})", benchmark.id, profile.id),
+                        );
+                        let ok = compile_and_record(
                             root,
                             benchmark,
                             profile,
@@ -73,10 +101,23 @@ pub fn compile_all(
                             &mut artifacts,
                             &mut failures,
                         )?;
+                        progress.update(
+                            attempted,
+                            format!(
+                                "{cache_status} {} {}",
+                                benchmark.id,
+                                if ok { "ok" } else { "compile_error" }
+                            ),
+                        );
                     }
                 }
             } else {
-                compile_and_record(
+                cache_disabled += 1;
+                progress.update_active(
+                    attempted.saturating_sub(1),
+                    format!("compiling {} {} (cache disabled)", benchmark.id, profile.id),
+                );
+                let ok = compile_and_record(
                     root,
                     benchmark,
                     profile,
@@ -86,9 +127,27 @@ pub fn compile_all(
                     &mut artifacts,
                     &mut failures,
                 )?;
+                progress.update(
+                    attempted,
+                    format!(
+                        "disabled {} {} {}",
+                        benchmark.id,
+                        profile.id,
+                        if ok { "ok" } else { "compile_error" }
+                    ),
+                );
             }
         }
     }
+    progress.finish(format!(
+        "done: {} artifacts, {} failures; cache hit={}, miss={}, stale={}, disabled={}",
+        artifacts.len(),
+        failures.len(),
+        cache_hits,
+        cache_misses,
+        cache_stale,
+        cache_disabled
+    ));
     Ok(CompileSet {
         profiles,
         artifacts,
@@ -119,7 +178,7 @@ fn compile_and_record(
     cache_state: Option<(CompileCacheInput, CacheInfo)>,
     artifacts: &mut Vec<CompiledArtifact>,
     failures: &mut Vec<CompileFailure>,
-) -> Result<()> {
+) -> Result<bool> {
     let result = match profile.language {
         Language::Solidity => compile_solidity(root, benchmark, profile, toolchain, evm_version),
         Language::Vyper => compile_vyper(root, benchmark, profile, toolchain, evm_version),
@@ -142,6 +201,7 @@ fn compile_and_record(
                 )?;
             }
             artifacts.push(artifact);
+            Ok(true)
         }
         Err(error) => {
             let mut failure = compile_failure(
@@ -164,9 +224,9 @@ fn compile_and_record(
                 )?;
             }
             failures.push(failure);
+            Ok(false)
         }
     }
-    Ok(())
 }
 
 fn toolchain_for_profile<'a>(

@@ -5,7 +5,7 @@ use crate::{
         Scenario,
     },
     scenarios::ScenarioCatalog,
-    util::{ensure_dir, require_success, run_measured, sha256_bytes},
+    util::{Progress, ensure_dir, require_success, run_measured, sha256_bytes},
 };
 use anyhow::{Context, Result, bail};
 use serde_json::json;
@@ -32,9 +32,10 @@ pub fn run_foundry(
     }
     let expected_cache = gas_cache_inputs(root, evm_version, compiled, scenarios, use_cache)?;
     if use_cache {
+        let mut progress = Progress::new("gas cache", expected_cache.len());
         let mut cached = Vec::with_capacity(expected_cache.len());
         let mut all_hit = true;
-        for input in expected_cache.values() {
+        for (index, input) in expected_cache.values().enumerate() {
             match cache::lookup::<GasRecord>(
                 root,
                 "gas",
@@ -45,20 +46,35 @@ pub fn run_foundry(
                 CacheLookup::Hit(mut record) => {
                     record.cache = CacheInfo::hit(&input.key);
                     cached.push(record);
+                    progress.update(index + 1, "hit");
                 }
                 CacheLookup::Miss(_) => {
                     all_hit = false;
+                    progress.update(index + 1, "miss; Foundry run required");
                     break;
                 }
             }
         }
         if all_hit {
+            progress.finish(format!("loaded {} rows from cache", cached.len()));
             write_raw_gas_records(root, &cached)?;
             return Ok(cached);
         }
+        progress.finish("cache incomplete; running Foundry");
+    } else {
+        eprintln!(
+            "gas: cache disabled; running Foundry for {} expected rows",
+            expected_cache.len()
+        );
     }
     let test_path = root.join("foundry/test/GeneratedBench.t.sol");
+    eprintln!(
+        "foundry: generating gas test for {} artifacts and {} expected rows",
+        compiled.artifacts.len(),
+        expected_cache.len()
+    );
     fs::write(&test_path, generate_test(compiled, scenarios)?)?;
+    eprintln!("foundry: running generated gas tests on EVM {evm_version}");
     require_success(
         run_measured(
             Command::new("forge")
@@ -91,6 +107,7 @@ pub fn run_foundry(
     }
     annotate_and_store_gas_records(root, &mut records, &expected_cache, use_cache)?;
     write_raw_gas_records(root, &records)?;
+    eprintln!("foundry: recorded {} gas rows", records.len());
     Ok(records)
 }
 

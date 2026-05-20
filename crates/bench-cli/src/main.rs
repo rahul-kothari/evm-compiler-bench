@@ -82,12 +82,20 @@ fn main() -> Result<()> {
             benchmark,
             no_cache,
         } => {
+            eprintln!("pipeline: resolving toolchains");
             let toolchains = resolve_toolchains(&root, offline)?;
+            eprintln!("pipeline: generating scale suite");
             let generated = generate_scale_suite(&root, benchmark.as_deref())?;
             let benchmarks = all_benchmarks(generated.benchmarks.clone(), benchmark.as_deref());
+            eprintln!(
+                "pipeline: compiling {} benchmarks across profile matrix",
+                benchmarks.len()
+            );
             let compiled = compile_all(&root, &toolchains, &benchmarks, !no_cache)?;
+            eprintln!("pipeline: loading scenarios");
             let scenarios =
                 load_scenario_catalog(&root, benchmark.as_deref(), &generated.scenarios)?;
+            eprintln!("pipeline: measuring gas");
             let gas_records = run_foundry(
                 &root,
                 &toolchains.evm_version,
@@ -95,6 +103,7 @@ fn main() -> Result<()> {
                 &scenarios,
                 !no_cache,
             )?;
+            eprintln!("pipeline: writing normalized data and reports");
             let report = write_outputs(
                 &root,
                 &toolchains,
@@ -146,9 +155,15 @@ fn main() -> Result<()> {
             benchmark,
             no_cache,
         } => {
+            eprintln!("pipeline: resolving toolchains");
             let toolchains = resolve_toolchains(&root, offline)?;
+            eprintln!("pipeline: generating scale suite");
             let generated = generate_scale_suite(&root, benchmark.as_deref())?;
             let benchmarks = all_benchmarks(generated.benchmarks, benchmark.as_deref());
+            eprintln!(
+                "pipeline: compiling {} benchmarks across profile matrix",
+                benchmarks.len()
+            );
             let compiled = compile_all(&root, &toolchains, &benchmarks, !no_cache)?;
             println!(
                 "compiled {} artifacts with {} failures across {} profiles for EVM {}",
