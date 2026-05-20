@@ -219,6 +219,8 @@ pub struct CompilerProfile {
     #[serde(default)]
     pub optimizer_mode: Option<String>,
     #[serde(default)]
+    pub experimental_codegen: bool,
+    #[serde(default)]
     pub via_ir: bool,
     #[serde(default = "default_metadata_mode")]
     pub metadata_mode: MetadataMode,

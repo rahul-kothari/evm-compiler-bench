@@ -208,7 +208,8 @@ fn vyper_compiler_settings(profile: &CompilerProfile, evm_version: &str) -> serd
         "evmVersion": evm_version,
         "metadataMode": profile.metadata_mode.as_str(),
         "bytecodeMetadata": profile.metadata_mode == MetadataMode::On,
-        "optimize": optimizer_mode
+        "optimize": optimizer_mode,
+        "experimentalCodegen": profile.experimental_codegen
     })
 }
 
@@ -233,6 +234,9 @@ fn compile_vyper(
                 .arg(optimizer_mode);
             if profile.metadata_mode == MetadataMode::Off {
                 command.arg("--no-bytecode-metadata");
+            }
+            if profile.experimental_codegen {
+                command.arg("--experimental-codegen");
             }
             command.arg(&source_path);
             command

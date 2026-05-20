@@ -1,0 +1,7 @@
+id = "vyper-latest-venom"
+language = "vyper"
+compiler = "vyper"
+optimizer = true
+optimizer_mode = "gas"
+experimental_codegen = true
+evm_version = "latest-shared"

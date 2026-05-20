@@ -21,18 +21,21 @@ const SOL_CODEGEN_BASELINE: &str = "solc-latest-legacy-runs200-metadata-off";
 const SOL_NOOPT_CODEGEN: &str = "solc-latest-noopt-metadata-off";
 const SOL_VIAIR_CODEGEN: &str = "solc-latest-viair-runs200-metadata-off";
 const VYPER_GAS_CODEGEN: &str = "vyper-latest-gas-metadata-off";
+const VYPER_VENOM_CODEGEN: &str = "vyper-latest-venom-metadata-off";
 const VYPER_CODESIZE_CODEGEN: &str = "vyper-latest-codesize-metadata-off";
 const VYPER_NONE_CODEGEN: &str = "vyper-latest-none-metadata-off";
-const PRIMARY_CODEGEN_PROFILES: [&str; 4] = [
+const PRIMARY_CODEGEN_PROFILES: [&str; 5] = [
     SOL_CODEGEN_BASELINE,
     SOL_VIAIR_CODEGEN,
     VYPER_GAS_CODEGEN,
+    VYPER_VENOM_CODEGEN,
     VYPER_CODESIZE_CODEGEN,
 ];
 const SOL_CODEGEN_PROFILES: [&str; 3] =
     [SOL_CODEGEN_BASELINE, SOL_VIAIR_CODEGEN, SOL_NOOPT_CODEGEN];
-const VYPER_CODEGEN_PROFILES: [&str; 3] = [
+const VYPER_CODEGEN_PROFILES: [&str; 4] = [
     VYPER_GAS_CODEGEN,
+    VYPER_VENOM_CODEGEN,
     VYPER_CODESIZE_CODEGEN,
     VYPER_NONE_CODEGEN,
 ];
@@ -714,7 +717,7 @@ fn render_overview(rows: &[serde_json::Value], summary: &ReportSummary) -> Strin
     let mut html = String::new();
     html.push_str("<section class=\"hero brief\"><div>");
     html.push_str("<div class=\"pill info\">Eval brief</div>");
-    html.push_str("<p class=\"lede\">This report is a validity-bounded compiler-profile evaluation. It varies optimizer/profile and generated scale size across pinned solc, Vyper, and Prague EVM settings. Compiler metadata is disabled for the active comparison matrix. It is not a global language ranking and it is not production transaction gas.</p>");
+    html.push_str("<p class=\"lede\">This report is a validity-bounded compiler-profile evaluation. It varies optimizer/profile, Vyper's experimental Venom codegen path, and generated scale size across pinned solc, Vyper, and Prague EVM settings. Compiler metadata is disabled for the active comparison matrix. It is not a global language ranking and it is not production transaction gas.</p>");
     html.push_str(&render_scope_cards(rows, summary));
     html.push_str(&render_coverage_strip(rows));
     html.push_str(&render_signature_findings(rows, summary));
@@ -939,7 +942,11 @@ fn render_fixed_suite_brief(rows: &[serde_json::Value]) -> String {
         "fixed",
         "vyper",
         VYPER_GAS_CODEGEN,
-        &[VYPER_CODESIZE_CODEGEN, VYPER_NONE_CODEGEN],
+        &[
+            VYPER_VENOM_CODEGEN,
+            VYPER_CODESIZE_CODEGEN,
+            VYPER_NONE_CODEGEN,
+        ],
     );
     let mut sol_changed = sol_deltas.clone();
     sol_changed.sort_by(|left, right| {
@@ -959,11 +966,18 @@ fn render_fixed_suite_brief(rows: &[serde_json::Value]) -> String {
             .partial_cmp(&left.ratio.ln().abs())
             .unwrap_or(std::cmp::Ordering::Equal)
     });
-    let mut cross_language =
-        collect_scenario_deltas(rows, "fixed", &[VYPER_GAS_CODEGEN, VYPER_CODESIZE_CODEGEN])
-            .into_iter()
-            .filter(|delta| delta.profile.starts_with("vyper-"))
-            .collect::<Vec<_>>();
+    let mut cross_language = collect_scenario_deltas(
+        rows,
+        "fixed",
+        &[
+            VYPER_GAS_CODEGEN,
+            VYPER_VENOM_CODEGEN,
+            VYPER_CODESIZE_CODEGEN,
+        ],
+    )
+    .into_iter()
+    .filter(|delta| delta.profile.starts_with("vyper-"))
+    .collect::<Vec<_>>();
     cross_language.sort_by(|left, right| {
         right
             .ratio
@@ -1044,7 +1058,7 @@ fn render_fixed_suite_brief(rows: &[serde_json::Value]) -> String {
 fn render_profile_brief(rows: &[serde_json::Value]) -> String {
     let mut html = String::new();
     html.push_str("<p class=\"answer\">What do the main compiler profiles buy or cost?</p>");
-    html.push_str("<p class=\"section-lede\">The default profile view compares the production-relevant codegen profiles first. Noopt diagnostics remain available in the full profile table below.</p>");
+    html.push_str("<p class=\"section-lede\">The default profile view compares the main codegen profiles first, including Vyper's experimental Venom path. Noopt diagnostics remain available in the full profile table below.</p>");
     html.push_str(&render_profile_tradeoff_table(
         rows,
         Some(&PRIMARY_CODEGEN_PROFILES),
@@ -1262,6 +1276,7 @@ fn render_fixed_scenario_ratios(rows: &[serde_json::Value]) -> String {
     let selected_profiles = [
         SOL_VIAIR_CODEGEN,
         SOL_NOOPT_CODEGEN,
+        VYPER_VENOM_CODEGEN,
         VYPER_CODESIZE_CODEGEN,
         VYPER_NONE_CODEGEN,
     ];
@@ -1808,7 +1823,12 @@ fn render_real_derived_summary(rows: &[serde_json::Value]) -> String {
     let deltas = collect_scenario_deltas(
         rows,
         BenchmarkSuite::RealDerived.as_str(),
-        &[SOL_VIAIR_CODEGEN, VYPER_GAS_CODEGEN, VYPER_CODESIZE_CODEGEN],
+        &[
+            SOL_VIAIR_CODEGEN,
+            VYPER_GAS_CODEGEN,
+            VYPER_VENOM_CODEGEN,
+            VYPER_CODESIZE_CODEGEN,
+        ],
     );
     let mut cheaper = deltas
         .iter()
@@ -2015,7 +2035,12 @@ fn render_real_model_profile_summary(rows: &[&serde_json::Value]) -> String {
 }
 
 fn render_real_derived_scenario_ratios(rows: &[&serde_json::Value]) -> String {
-    let selected_profiles = [SOL_VIAIR_CODEGEN, VYPER_GAS_CODEGEN, VYPER_CODESIZE_CODEGEN];
+    let selected_profiles = [
+        SOL_VIAIR_CODEGEN,
+        VYPER_GAS_CODEGEN,
+        VYPER_VENOM_CODEGEN,
+        VYPER_CODESIZE_CODEGEN,
+    ];
     let mut baseline = BTreeMap::new();
     let mut values: BTreeMap<String, BTreeMap<String, u64>> = BTreeMap::new();
     let mut labels = BTreeMap::new();
@@ -2217,6 +2242,7 @@ fn render_fixed_benchmark_summary(rows: &[serde_json::Value]) -> String {
         SOL_VIAIR_CODEGEN,
         SOL_NOOPT_CODEGEN,
         VYPER_GAS_CODEGEN,
+        VYPER_VENOM_CODEGEN,
         VYPER_CODESIZE_CODEGEN,
         VYPER_NONE_CODEGEN,
     ];
@@ -2573,6 +2599,7 @@ fn scale_family_svg(by_profile: &BTreeMap<String, BTreeMap<u64, ScaleCurveAggreg
         SOL_VIAIR_CODEGEN,
         SOL_NOOPT_CODEGEN,
         VYPER_GAS_CODEGEN,
+        VYPER_VENOM_CODEGEN,
         VYPER_CODESIZE_CODEGEN,
         VYPER_NONE_CODEGEN,
     ]
@@ -2620,7 +2647,7 @@ fn render_methodology(
         escape(&str_at(manifest, "/environment/tools/forge").unwrap_or_default())
     ));
     html.push_str("</p></div>");
-    html.push_str("<div class=\"card\"><h3>Limitations</h3><p class=\"small muted\">Gas is Foundry internal-call gas, not measured transaction gas. Compile timing is host-specific with three wall-time samples per successful artifact. Peak RSS is a single coarse sample. Cross-language behavioral equivalence is fuzz+property checked only where the correctness heatmap says so. Compiler bytecode metadata is disabled for the active matrix, so metadata overhead is intentionally outside the measured comparison surface.");
+    html.push_str("<div class=\"card\"><h3>Limitations</h3><p class=\"small muted\">Gas is Foundry internal-call gas, not measured transaction gas. Compile timing is host-specific with three wall-time samples per successful artifact. Peak RSS is a single coarse sample. Cross-language behavioral equivalence is fuzz+property checked only where the correctness heatmap says so. Compiler bytecode metadata is disabled for the active matrix, so metadata overhead is intentionally outside the measured comparison surface. The <span class=\"mono\">vyper venom</span> profile uses <span class=\"mono\">--experimental-codegen</span>; treat its failures and wins as experimental codegen evidence, not production-default Vyper behavior.");
     html.push_str("</p></div></section>");
     html.push_str("<details><summary>Show profile settings JSON</summary><pre class=\"small\">");
     html.push_str(&escape(
@@ -2881,6 +2908,7 @@ fn profile_color(profile: &str) -> &'static str {
         "solc-latest-viair-runs200" => "#7c3aed",
         "solc-latest-noopt" => "#b91c1c",
         "vyper-latest-gas" => "#0f8a5f",
+        "vyper-latest-venom" => "#0891b2",
         "vyper-latest-codesize" => "#b45309",
         "vyper-latest-none" => "#64748b",
         _ => "#111827",
@@ -3177,6 +3205,7 @@ fn profile_short(profile: &str) -> String {
         "solc-latest-viair-runs200" => "solc viaIR",
         "solc-latest-noopt" => "solc noopt",
         "vyper-latest-gas" => "vyper gas",
+        "vyper-latest-venom" => "vyper venom",
         "vyper-latest-codesize" => "vyper codesize",
         "vyper-latest-none" => "vyper none",
         _ => profile,
