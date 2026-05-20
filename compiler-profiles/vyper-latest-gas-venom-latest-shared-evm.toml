@@ -1,4 +1,4 @@
-id = "vyper-latest-venom"
+id = "vyper-latest-gas-venom"
 language = "vyper"
 compiler = "vyper"
 optimizer = true

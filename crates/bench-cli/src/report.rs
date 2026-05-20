@@ -21,31 +21,61 @@ const SOL_CODEGEN_BASELINE: &str = "solc-latest-legacy-runs200-metadata-off";
 const SOL_NOOPT_CODEGEN: &str = "solc-latest-noopt-metadata-off";
 const SOL_VIAIR_CODEGEN: &str = "solc-latest-viair-runs200-metadata-off";
 const VYPER_GAS_CODEGEN: &str = "vyper-latest-gas-metadata-off";
-const VYPER_VENOM_CODEGEN: &str = "vyper-latest-venom-metadata-off";
+const VYPER_GAS_VENOM_CODEGEN: &str = "vyper-latest-gas-venom-metadata-off";
 const VYPER_CODESIZE_CODEGEN: &str = "vyper-latest-codesize-metadata-off";
+const VYPER_CODESIZE_VENOM_CODEGEN: &str = "vyper-latest-codesize-venom-metadata-off";
 const VYPER_NONE_CODEGEN: &str = "vyper-latest-none-metadata-off";
+const VYPER_NONE_VENOM_CODEGEN: &str = "vyper-latest-none-venom-metadata-off";
 const VYPER_ALPHA_GAS_CODEGEN: &str = "vyper-0.5.0a1-gas-metadata-off";
+const VYPER_ALPHA_GAS_VENOM_CODEGEN: &str = "vyper-0.5.0a1-gas-venom-metadata-off";
 const VYPER_ALPHA_CODESIZE_CODEGEN: &str = "vyper-0.5.0a1-codesize-metadata-off";
+const VYPER_ALPHA_CODESIZE_VENOM_CODEGEN: &str = "vyper-0.5.0a1-codesize-venom-metadata-off";
 const VYPER_ALPHA_NONE_CODEGEN: &str = "vyper-0.5.0a1-none-metadata-off";
-const PRIMARY_CODEGEN_PROFILES: [&str; 7] = [
+const VYPER_ALPHA_NONE_VENOM_CODEGEN: &str = "vyper-0.5.0a1-none-venom-metadata-off";
+const PRIMARY_CODEGEN_PROFILES: [&str; 14] = [
     SOL_CODEGEN_BASELINE,
     SOL_VIAIR_CODEGEN,
+    VYPER_NONE_CODEGEN,
     VYPER_GAS_CODEGEN,
-    VYPER_ALPHA_GAS_CODEGEN,
-    VYPER_VENOM_CODEGEN,
     VYPER_CODESIZE_CODEGEN,
+    VYPER_NONE_VENOM_CODEGEN,
+    VYPER_GAS_VENOM_CODEGEN,
+    VYPER_CODESIZE_VENOM_CODEGEN,
+    VYPER_ALPHA_NONE_CODEGEN,
+    VYPER_ALPHA_GAS_CODEGEN,
     VYPER_ALPHA_CODESIZE_CODEGEN,
+    VYPER_ALPHA_NONE_VENOM_CODEGEN,
+    VYPER_ALPHA_GAS_VENOM_CODEGEN,
+    VYPER_ALPHA_CODESIZE_VENOM_CODEGEN,
 ];
 const SOL_CODEGEN_PROFILES: [&str; 3] =
     [SOL_CODEGEN_BASELINE, SOL_VIAIR_CODEGEN, SOL_NOOPT_CODEGEN];
-const VYPER_CODEGEN_PROFILES: [&str; 7] = [
-    VYPER_GAS_CODEGEN,
-    VYPER_ALPHA_GAS_CODEGEN,
-    VYPER_VENOM_CODEGEN,
-    VYPER_CODESIZE_CODEGEN,
-    VYPER_ALPHA_CODESIZE_CODEGEN,
+const VYPER_CODEGEN_PROFILES: [&str; 12] = [
     VYPER_NONE_CODEGEN,
+    VYPER_GAS_CODEGEN,
+    VYPER_CODESIZE_CODEGEN,
+    VYPER_NONE_VENOM_CODEGEN,
+    VYPER_GAS_VENOM_CODEGEN,
+    VYPER_CODESIZE_VENOM_CODEGEN,
     VYPER_ALPHA_NONE_CODEGEN,
+    VYPER_ALPHA_GAS_CODEGEN,
+    VYPER_ALPHA_CODESIZE_CODEGEN,
+    VYPER_ALPHA_NONE_VENOM_CODEGEN,
+    VYPER_ALPHA_GAS_VENOM_CODEGEN,
+    VYPER_ALPHA_CODESIZE_VENOM_CODEGEN,
+];
+const VYPER_DELTA_PROFILES: [&str; 11] = [
+    VYPER_NONE_CODEGEN,
+    VYPER_CODESIZE_CODEGEN,
+    VYPER_NONE_VENOM_CODEGEN,
+    VYPER_GAS_VENOM_CODEGEN,
+    VYPER_CODESIZE_VENOM_CODEGEN,
+    VYPER_ALPHA_NONE_CODEGEN,
+    VYPER_ALPHA_GAS_CODEGEN,
+    VYPER_ALPHA_CODESIZE_CODEGEN,
+    VYPER_ALPHA_NONE_VENOM_CODEGEN,
+    VYPER_ALPHA_GAS_VENOM_CODEGEN,
+    VYPER_ALPHA_CODESIZE_VENOM_CODEGEN,
 ];
 
 pub struct ReportPaths {
@@ -985,14 +1015,7 @@ fn render_fixed_suite_brief(rows: &[serde_json::Value]) -> String {
         "fixed",
         "vyper",
         VYPER_GAS_CODEGEN,
-        &[
-            VYPER_ALPHA_GAS_CODEGEN,
-            VYPER_VENOM_CODEGEN,
-            VYPER_CODESIZE_CODEGEN,
-            VYPER_ALPHA_CODESIZE_CODEGEN,
-            VYPER_NONE_CODEGEN,
-            VYPER_ALPHA_NONE_CODEGEN,
-        ],
+        &VYPER_DELTA_PROFILES,
     );
     let mut sol_changed = sol_deltas.clone();
     sol_changed.sort_by(|left, right| {
@@ -1018,9 +1041,16 @@ fn render_fixed_suite_brief(rows: &[serde_json::Value]) -> String {
         &[
             VYPER_GAS_CODEGEN,
             VYPER_ALPHA_GAS_CODEGEN,
-            VYPER_VENOM_CODEGEN,
+            VYPER_GAS_VENOM_CODEGEN,
+            VYPER_ALPHA_GAS_VENOM_CODEGEN,
             VYPER_CODESIZE_CODEGEN,
             VYPER_ALPHA_CODESIZE_CODEGEN,
+            VYPER_CODESIZE_VENOM_CODEGEN,
+            VYPER_ALPHA_CODESIZE_VENOM_CODEGEN,
+            VYPER_NONE_CODEGEN,
+            VYPER_ALPHA_NONE_CODEGEN,
+            VYPER_NONE_VENOM_CODEGEN,
+            VYPER_ALPHA_NONE_VENOM_CODEGEN,
         ],
     )
     .into_iter()
@@ -1106,7 +1136,7 @@ fn render_fixed_suite_brief(rows: &[serde_json::Value]) -> String {
 fn render_profile_brief(rows: &[serde_json::Value]) -> String {
     let mut html = String::new();
     html.push_str("<p class=\"answer\">What do the main compiler profiles buy or cost?</p>");
-    html.push_str("<p class=\"section-lede\">The default profile view compares the main codegen profiles first, including Vyper 0.5.0a1 alpha and Vyper's experimental Venom path. Noopt diagnostics remain available in the full profile table below.</p>");
+    html.push_str("<p class=\"section-lede\">The default profile view compares Solidity legacy/viaIR against the full Vyper matrix: stable and 0.5.0a1 alpha, each crossed with none/gas/codesize optimization and Venom on/off. Solidity noopt diagnostics remain available in the full profile table below.</p>");
     html.push_str(&render_profile_tradeoff_table(
         rows,
         Some(&PRIMARY_CODEGEN_PROFILES),
@@ -1325,11 +1355,16 @@ fn render_fixed_scenario_ratios(rows: &[serde_json::Value]) -> String {
         SOL_VIAIR_CODEGEN,
         SOL_NOOPT_CODEGEN,
         VYPER_ALPHA_GAS_CODEGEN,
-        VYPER_VENOM_CODEGEN,
+        VYPER_GAS_VENOM_CODEGEN,
+        VYPER_ALPHA_GAS_VENOM_CODEGEN,
         VYPER_CODESIZE_CODEGEN,
         VYPER_ALPHA_CODESIZE_CODEGEN,
+        VYPER_CODESIZE_VENOM_CODEGEN,
+        VYPER_ALPHA_CODESIZE_VENOM_CODEGEN,
         VYPER_NONE_CODEGEN,
         VYPER_ALPHA_NONE_CODEGEN,
+        VYPER_NONE_VENOM_CODEGEN,
+        VYPER_ALPHA_NONE_VENOM_CODEGEN,
     ];
     let mut baseline = BTreeMap::new();
     let mut values: BTreeMap<String, BTreeMap<String, u64>> = BTreeMap::new();
@@ -1878,9 +1913,16 @@ fn render_real_derived_summary(rows: &[serde_json::Value]) -> String {
             SOL_VIAIR_CODEGEN,
             VYPER_GAS_CODEGEN,
             VYPER_ALPHA_GAS_CODEGEN,
-            VYPER_VENOM_CODEGEN,
+            VYPER_GAS_VENOM_CODEGEN,
+            VYPER_ALPHA_GAS_VENOM_CODEGEN,
             VYPER_CODESIZE_CODEGEN,
             VYPER_ALPHA_CODESIZE_CODEGEN,
+            VYPER_CODESIZE_VENOM_CODEGEN,
+            VYPER_ALPHA_CODESIZE_VENOM_CODEGEN,
+            VYPER_NONE_CODEGEN,
+            VYPER_ALPHA_NONE_CODEGEN,
+            VYPER_NONE_VENOM_CODEGEN,
+            VYPER_ALPHA_NONE_VENOM_CODEGEN,
         ],
     );
     let mut cheaper = deltas
@@ -2092,9 +2134,16 @@ fn render_real_derived_scenario_ratios(rows: &[&serde_json::Value]) -> String {
         SOL_VIAIR_CODEGEN,
         VYPER_GAS_CODEGEN,
         VYPER_ALPHA_GAS_CODEGEN,
-        VYPER_VENOM_CODEGEN,
+        VYPER_GAS_VENOM_CODEGEN,
+        VYPER_ALPHA_GAS_VENOM_CODEGEN,
         VYPER_CODESIZE_CODEGEN,
         VYPER_ALPHA_CODESIZE_CODEGEN,
+        VYPER_CODESIZE_VENOM_CODEGEN,
+        VYPER_ALPHA_CODESIZE_VENOM_CODEGEN,
+        VYPER_NONE_CODEGEN,
+        VYPER_ALPHA_NONE_CODEGEN,
+        VYPER_NONE_VENOM_CODEGEN,
+        VYPER_ALPHA_NONE_VENOM_CODEGEN,
     ];
     let mut baseline = BTreeMap::new();
     let mut values: BTreeMap<String, BTreeMap<String, u64>> = BTreeMap::new();
@@ -2298,11 +2347,16 @@ fn render_fixed_benchmark_summary(rows: &[serde_json::Value]) -> String {
         SOL_NOOPT_CODEGEN,
         VYPER_GAS_CODEGEN,
         VYPER_ALPHA_GAS_CODEGEN,
-        VYPER_VENOM_CODEGEN,
+        VYPER_GAS_VENOM_CODEGEN,
+        VYPER_ALPHA_GAS_VENOM_CODEGEN,
         VYPER_CODESIZE_CODEGEN,
         VYPER_ALPHA_CODESIZE_CODEGEN,
+        VYPER_CODESIZE_VENOM_CODEGEN,
+        VYPER_ALPHA_CODESIZE_VENOM_CODEGEN,
         VYPER_NONE_CODEGEN,
         VYPER_ALPHA_NONE_CODEGEN,
+        VYPER_NONE_VENOM_CODEGEN,
+        VYPER_ALPHA_NONE_VENOM_CODEGEN,
     ];
     let mut html = String::new();
     html.push_str("<h3>Per-Benchmark Snapshot</h3>");
@@ -2533,11 +2587,7 @@ fn render_scale_curve_panels(rows: &[serde_json::Value]) -> String {
             continue;
         }
         let profile = str_at(row, "/profile_id").unwrap_or_default();
-        if !PRIMARY_CODEGEN_PROFILES.contains(&profile.as_str())
-            && profile != SOL_NOOPT_CODEGEN
-            && profile != VYPER_NONE_CODEGEN
-            && profile != VYPER_ALPHA_NONE_CODEGEN
-        {
+        if !PRIMARY_CODEGEN_PROFILES.contains(&profile.as_str()) && profile != SOL_NOOPT_CODEGEN {
             continue;
         }
         let family = str_at(row, "/family").unwrap_or_default();
@@ -2659,11 +2709,16 @@ fn scale_family_svg(by_profile: &BTreeMap<String, BTreeMap<u64, ScaleCurveAggreg
         SOL_NOOPT_CODEGEN,
         VYPER_GAS_CODEGEN,
         VYPER_ALPHA_GAS_CODEGEN,
-        VYPER_VENOM_CODEGEN,
+        VYPER_GAS_VENOM_CODEGEN,
+        VYPER_ALPHA_GAS_VENOM_CODEGEN,
         VYPER_CODESIZE_CODEGEN,
         VYPER_ALPHA_CODESIZE_CODEGEN,
+        VYPER_CODESIZE_VENOM_CODEGEN,
+        VYPER_ALPHA_CODESIZE_VENOM_CODEGEN,
         VYPER_NONE_CODEGEN,
         VYPER_ALPHA_NONE_CODEGEN,
+        VYPER_NONE_VENOM_CODEGEN,
+        VYPER_ALPHA_NONE_VENOM_CODEGEN,
     ]
     .iter()
     .enumerate()
@@ -2712,7 +2767,7 @@ fn render_methodology(
         escape(&str_at(manifest, "/environment/tools/forge").unwrap_or_default())
     ));
     html.push_str("</p></div>");
-    html.push_str("<div class=\"card\"><h3>Limitations</h3><p class=\"small muted\">Gas is Foundry internal-call gas, not measured transaction gas. Compile timing is host-specific with three wall-time samples per successful artifact. Peak RSS is a single coarse sample. Cross-language behavioral equivalence is fuzz+property checked only where the correctness heatmap says so. Compiler bytecode metadata is disabled for the active matrix, so metadata overhead is intentionally outside the measured comparison surface. Vyper 0.5.0a1 is a pre-release compiler. The <span class=\"mono\">vyper venom</span> profile uses <span class=\"mono\">--experimental-codegen</span>; treat its failures and wins as experimental codegen evidence, not production-default Vyper behavior.");
+    html.push_str("<div class=\"card\"><h3>Limitations</h3><p class=\"small muted\">Gas is Foundry internal-call gas, not measured transaction gas. Compile timing is host-specific with three wall-time samples per successful artifact. Peak RSS is a single coarse sample. Cross-language behavioral equivalence is fuzz+property checked only where the correctness heatmap says so. Compiler bytecode metadata is disabled for the active matrix, so metadata overhead is intentionally outside the measured comparison surface. Vyper 0.5.0a1 is a pre-release compiler. Vyper Venom variants use <span class=\"mono\">--experimental-codegen</span>; treat their failures and wins as experimental codegen evidence, not production-default Vyper behavior.");
     html.push_str("</p></div></section>");
     html.push_str("<details><summary>Show profile settings JSON</summary><pre class=\"small\">");
     html.push_str(&escape(
@@ -2974,11 +3029,16 @@ fn profile_color(profile: &str) -> &'static str {
         "solc-latest-noopt" => "#b91c1c",
         "vyper-latest-gas" => "#0f8a5f",
         "vyper-0.5.0a1-gas" => "#14b8a6",
-        "vyper-latest-venom" => "#0891b2",
+        "vyper-latest-gas-venom" => "#0891b2",
+        "vyper-0.5.0a1-gas-venom" => "#06b6d4",
         "vyper-latest-codesize" => "#b45309",
         "vyper-0.5.0a1-codesize" => "#f59e0b",
+        "vyper-latest-codesize-venom" => "#a16207",
+        "vyper-0.5.0a1-codesize-venom" => "#d97706",
         "vyper-latest-none" => "#64748b",
         "vyper-0.5.0a1-none" => "#94a3b8",
+        "vyper-latest-none-venom" => "#475569",
+        "vyper-0.5.0a1-none-venom" => "#64748b",
         _ => "#111827",
     }
 }
@@ -3274,11 +3334,16 @@ fn profile_short(profile: &str) -> String {
         "solc-latest-noopt" => "solc noopt",
         "vyper-latest-gas" => "vyper gas",
         "vyper-0.5.0a1-gas" => "vyper 0.5 gas",
-        "vyper-latest-venom" => "vyper venom",
+        "vyper-latest-gas-venom" => "vyper gas venom",
+        "vyper-0.5.0a1-gas-venom" => "vyper 0.5 gas venom",
         "vyper-latest-codesize" => "vyper codesize",
         "vyper-0.5.0a1-codesize" => "vyper 0.5 codesize",
+        "vyper-latest-codesize-venom" => "vyper codesize venom",
+        "vyper-0.5.0a1-codesize-venom" => "vyper 0.5 codesize venom",
         "vyper-latest-none" => "vyper none",
         "vyper-0.5.0a1-none" => "vyper 0.5 none",
+        "vyper-latest-none-venom" => "vyper none venom",
+        "vyper-0.5.0a1-none-venom" => "vyper 0.5 none venom",
         _ => profile,
     };
     label.to_string()
