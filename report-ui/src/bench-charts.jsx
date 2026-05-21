@@ -28,7 +28,10 @@ import React from "react";
     const data = rows.slice(0, limit);
     if (!data.length) return React.createElement('div', { className: 'placeholder' }, 'No comparable scenarios.');
 
-    const padL = 280, padR = 60, padT = 16, padB = 24;
+    const compact = width < 560;
+    const padL = compact ? Math.max(112, Math.min(170, Math.floor(width * 0.44))) : 280;
+    const padR = compact ? 36 : 60;
+    const padT = 16, padB = 24;
     const innerW = Math.max(120, width - padL - padR);
     const rowH = Math.max(8, Math.min(18, (height - padT - padB) / data.length));
     const h = Math.max(120, padT + padB + rowH * data.length);
@@ -66,13 +69,14 @@ import React from "react";
           const bw = Math.abs(xScale(d.deltaPct));
           const xs = d.deltaPct >= 0 ? xZero : xZero - bw;
           const tone = d.deltaPct < -2 ? 'var(--accent)' : d.deltaPct > 2 ? 'var(--bad)' : 'var(--fg-4)';
+          const labelLimit = compact ? 22 : 44;
           return React.createElement('g', { key: 'b'+i },
             // label
             React.createElement('text', {
               x: padL - 8, y: y + rowH - 4,
               fontSize: 10.5, fontFamily: 'var(--mono)',
               fill: 'var(--fg-2)', textAnchor: 'end',
-            }, d.label.length > 44 ? d.label.slice(0,42) + '…' : d.label),
+            }, d.label.length > labelLimit ? d.label.slice(0, labelLimit - 2) + '…' : d.label),
             React.createElement('rect', {
               x: xs, y, width: Math.max(bw, 0.6), height: rowH - 2, fill: tone,
             }),

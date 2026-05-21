@@ -634,7 +634,7 @@ function Comparator({ profileA, profileB, setProfileA, setProfileB }) {
     ),
 
     // Distribution + suite breakdown
-    React.createElement('div', { style: { marginTop: '24px', display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: '20px' } },
+    React.createElement('div', { className: 'compare-detail-grid' },
       React.createElement('div', { className: 'card no-pad' },
         React.createElement('div', { style: { padding: '20px 24px 4px 24px' } },
           React.createElement('div', { className: 'card-head' },
@@ -653,7 +653,7 @@ function Comparator({ profileA, profileB, setProfileA, setProfileB }) {
           React.createElement(ScenarioDeltaChart, { rows: cmp, height: Math.min(2200, Math.max(200, cmp.length * 14 + 30)), limit: 120 })
         )
       ),
-      React.createElement('div', { style: { display: 'flex', flexDirection: 'column', gap: '20px' } },
+      React.createElement('div', { className: 'compare-detail-side' },
         React.createElement(BySuiteCard, { rows: cmp }),
         React.createElement(MoversCard, { rows: cmp }),
       )

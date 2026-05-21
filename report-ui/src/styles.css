@@ -96,9 +96,10 @@ button { font: inherit; color: inherit; background: none; border: none; cursor: 
 /* ---------- Layout ---------- */
 
 .shell {
+  width: 100%;
   max-width: 1320px;
   margin: 0 auto;
-  padding: 0 32px;
+  padding: 0 clamp(20px, 3.4vw, 32px);
 }
 
 .section {
@@ -338,6 +339,7 @@ button { font: inherit; color: inherit; background: none; border: none; cursor: 
   background: var(--bg-elev);
   border: 1px solid var(--line);
   padding: 24px;
+  min-width: 0;
 }
 .card.no-pad { padding: 0; }
 .card-head {
@@ -554,6 +556,20 @@ select.knob option { background: var(--bg-elev); color: var(--fg); }
   color: var(--fg-3);
   margin-top: 10px;
   letter-spacing: 0.04em;
+}
+
+.compare-detail-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
+  gap: 20px;
+  margin-top: 24px;
+}
+
+.compare-detail-side {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  min-width: 0;
 }
 
 /* WTL Bar */
@@ -971,7 +987,7 @@ select.knob option { background: var(--bg-elev); color: var(--fg); }
 }
 
 @media (max-width: 720px) {
-  .shell { padding: 0 18px; }
+  body .shell { padding: 0 20px; }
   .topbar {
     flex-wrap: wrap;
     gap: 14px 20px;
@@ -993,6 +1009,7 @@ select.knob option { background: var(--bg-elev); color: var(--fg); }
     white-space: normal;
   }
   .compare-bar { grid-template-columns: 1fr; position: static; }
+  .compare-detail-grid { grid-template-columns: 1fr; }
   .compare-vs, .compare-divider { display: none; }
   .compare-meta { border-left: 0; border-top: 1px solid var(--line); }
   .stories .story { grid-column: span 12; border-right: 0; }
@@ -1001,4 +1018,28 @@ select.knob option { background: var(--bg-elev); color: var(--fg); }
   .hero-strip { grid-template-columns: 1fr; }
   .hero-strip > div { border-right: 0; padding-left: 0 !important; }
   .distro-row { grid-template-columns: 130px 1fr 60px; }
+  body .failure-main,
+  body .compiler-failure-top {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 4px;
+  }
+  body .failure-meta,
+  body .compiler-count {
+    text-align: left;
+    white-space: normal;
+  }
+  .tbl { font-size: 11px; }
+  .tbl th,
+  .tbl td { padding: 8px; }
+  .tbl th { white-space: normal; }
+}
+
+@media (max-width: 420px) {
+  .card { padding: 20px; }
+  .distro-row {
+    grid-template-columns: minmax(0, 1fr) 56px;
+    gap: 10px;
+  }
+  .distro-track { display: none; }
 }
