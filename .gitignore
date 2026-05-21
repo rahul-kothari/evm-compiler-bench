@@ -1,5 +1,6 @@
 /target/
 /.cache/
+/.wrangler/
 /foundry/cache/
 /foundry/out/
 /foundry/test/GeneratedBench.t.sol

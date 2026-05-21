@@ -30,4 +30,13 @@ just publish-results
 immutable run artifacts under `evm-compiler-bench/runs/{run_id}/`, and updates
 `evm-compiler-bench/latest.json` in R2.
 
+The publish command uses remote R2, so Wrangler must be authenticated locally:
+
+```sh
+wrangler login
+```
+
+Alternatively, set `CLOUDFLARE_API_TOKEN` to a token with permission to write
+objects to the `evm-compilers` bucket.
+
 Do not commit generated result blobs or built static assets.

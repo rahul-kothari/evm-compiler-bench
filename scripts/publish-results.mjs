@@ -115,6 +115,7 @@ function uploadObject(name, item, cacheControl) {
     "object",
     "put",
     `${bucket}/${item.key}`,
+    "--remote",
     "--file",
     item.file,
     "--content-type",
