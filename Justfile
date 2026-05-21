@@ -8,7 +8,12 @@ prepare-publish:
     node scripts/publish-results.mjs
 
 publish-results:
-    node scripts/publish-results.mjs --upload --deploy
+    node scripts/publish-results.mjs --upload
+
+deploy-site:
+    npm --prefix report-ui ci
+    npm --prefix report-ui run build
+    wrangler deploy
 
 # Create a shareable source + reports archive without local toolchain/build caches.
 zip out="":
