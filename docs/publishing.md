@@ -26,9 +26,10 @@ cargo run --release -- validate
 just publish-results
 ```
 
-`just publish-results` compresses the current files under `results/`, uploads
-immutable run artifacts under `evm-compiler-bench/runs/{run_id}/`, and updates
-`evm-compiler-bench/latest.json` in R2.
+`just publish-results` uploads the current files under `results/` as immutable
+run artifacts under `evm-compiler-bench/runs/{run_id}/`, and updates
+`evm-compiler-bench/latest.json` in R2. Result JSON is stored uncompressed in R2;
+Cloudflare handles HTTP compression for browser requests.
 
 The publish command uses remote R2, so Wrangler must be authenticated locally:
 

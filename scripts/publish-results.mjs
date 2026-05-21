@@ -30,10 +30,10 @@ const publishDir = join(root, "target/publish", runId);
 mkdirSync(publishDir, { recursive: true });
 
 const artifacts = {
-  report_model: artifact("report-model.json", paths.reportModel, "application/json; charset=utf-8", true),
-  results: artifact("results.json", paths.results, "application/json; charset=utf-8", true),
+  report_model: artifact("report-model.json", paths.reportModel, "application/json; charset=utf-8", false),
+  results: artifact("results.json", paths.results, "application/json; charset=utf-8", false),
   run_manifest: artifact("run-manifest.json", paths.runManifest, "application/json; charset=utf-8", false),
-  foundry_gas: artifact("foundry-gas.jsonl", paths.foundryGas, "application/x-ndjson; charset=utf-8", true),
+  foundry_gas: artifact("foundry-gas.jsonl", paths.foundryGas, "application/x-ndjson; charset=utf-8", false),
 };
 
 const publishManifest = {

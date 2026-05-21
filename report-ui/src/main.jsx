@@ -13,8 +13,11 @@ async function loadReportData() {
 
   const latest = await loadPublishManifest();
   const publishedModel = latest?.artifacts?.report_model;
+  const publishedVersion = publishedModel?.encoded_sha256
+    || publishedModel?.sha256
+    || latest?.published_at;
   const publishedPath = publishedModel?.path
-    ? `${publishedModel.path}${publishedModel.sha256 ? `?sha=${publishedModel.sha256}` : ""}`
+    ? `${publishedModel.path}${publishedVersion ? `?v=${publishedVersion}` : ""}`
     : null;
   const candidates = [
     configured,
