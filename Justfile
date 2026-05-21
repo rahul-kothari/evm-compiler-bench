@@ -64,13 +64,16 @@ zip-design out="":
     cp "$root/report-ui/tsconfig.json" "$tmp/$kit/report-ui/"
     cp "$root/report-ui/vite.config.ts" "$tmp/$kit/report-ui/"
     cp -R "$root/report-ui/src" "$tmp/$kit/report-ui/"
-    cp "$root/results/normalized/report-model.json" "$tmp/$kit/results/normalized/"
+    node "$root/report-ui/scripts/make-design-model.mjs" \
+      "$root/results/normalized/report-model.json" \
+      "$tmp/$kit/results/normalized/report-model.json"
     cp "$root/results/normalized/run-manifest.json" "$tmp/$kit/results/normalized/"
 
     printf '%s\n' \
       '# EVM Compiler Bench Design Kit' \
       '' \
       'This archive contains only the report frontend source plus enough data to render it.' \
+      'The included report-model.json is pruned for design-tool upload limits and is not the full evidence model.' \
       '' \
       'Run:' \
       '' \
