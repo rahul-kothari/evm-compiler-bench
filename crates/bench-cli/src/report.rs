@@ -240,10 +240,6 @@ fn write_static_report_ui(
     copy_dir_contents(&dist_dir, reports_dir)?;
     let model_json = serde_json::to_string(model)?;
     fs::write(reports_dir.join("report-model.json"), &model_json)?;
-    fs::write(
-        reports_dir.join("report-data.js"),
-        format!("window.__EVM_BENCH_REPORT_DATA = {model_json};\n"),
-    )?;
     Ok(())
 }
 

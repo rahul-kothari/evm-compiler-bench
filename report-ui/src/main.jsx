@@ -1,8 +1,72 @@
 import React, { useState, useMemo } from "react";
 import { createRoot } from "react-dom/client";
 import "./styles.css";
-import "./bench-data.js";
-import "./bench-charts.jsx";
+
+async function loadReportData() {
+  if (window.__BENCH_DATA || window.__EVM_BENCH_REPORT_DATA) return;
+
+  const params = new URLSearchParams(window.location.search);
+  const configured = params.get("data")
+    || window.__EVM_BENCH_DATA_URL
+    || document.querySelector('meta[name="evm-bench-data"]')?.content
+    || import.meta.env.VITE_BENCH_DATA_URL;
+  const candidates = [
+    configured,
+    "./report-model.json",
+    "/report-model.json",
+  ].filter(Boolean);
+
+  const errors = [];
+  for (const candidate of candidates) {
+    try {
+      const response = await fetch(candidate, { cache: "no-cache" });
+      if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
+      const text = await response.text();
+      if (text.trimStart().startsWith("<")) {
+        throw new Error("received HTML instead of JSON");
+      }
+      window.__EVM_BENCH_REPORT_DATA = JSON.parse(text);
+      window.__EVM_BENCH_DATA_SOURCE = candidate;
+      break;
+    } catch (error) {
+      errors.push(`${candidate}: ${error.message}`);
+    }
+  }
+
+  if (!window.__EVM_BENCH_REPORT_DATA) {
+    throw new Error(`Failed to load report data. Tried ${errors.join("; ")}`);
+  }
+
+  try {
+    const response = await fetch("./latest.json", { cache: "no-cache" });
+    if (response.ok) {
+      window.__EVM_BENCH_PUBLISH_MANIFEST = await response.json();
+    }
+  } catch {
+    // Local generated reports do not need a publish manifest.
+  }
+}
+
+function renderLoadError(error) {
+  createRoot(document.getElementById("root")).render(
+    React.createElement("main", { className: "shell hero" },
+      React.createElement("div", { className: "load-error" },
+        React.createElement("strong", null, "Failed to load report data"),
+        React.createElement("pre", null, error.message)
+      )
+    )
+  );
+}
+
+try {
+  await loadReportData();
+} catch (error) {
+  renderLoadError(error);
+  throw error;
+}
+
+await import("./bench-data.js");
+await import("./bench-charts.jsx");
 
 const Bench = window.Bench;
 const BenchCharts = window.BenchCharts;
@@ -858,6 +922,10 @@ function SectionReliability() {
 }
 
 function SectionMethodology() {
+  const source = window.__EVM_BENCH_DATA_SOURCE || "./report-model.json";
+  const published = !!window.__EVM_BENCH_PUBLISH_MANIFEST;
+  const dataRoot = published || source.startsWith("/") ? "/" : "../normalized/";
+  const rawRoot = published || source.startsWith("/") ? "/" : "../raw/";
   return React.createElement('section', { id: 'methodology', className: 'shell section' },
     React.createElement('div', { className: 'section-head' },
       React.createElement('div', null,
@@ -869,10 +937,10 @@ function SectionMethodology() {
     ),
     React.createElement(Methodology),
     React.createElement('div', { style: { marginTop: '28px', display: 'flex', gap: '24px', flexWrap: 'wrap', fontFamily: 'var(--mono)', fontSize: '12px', color: 'var(--fg-2)' } },
-      React.createElement('a', { href: './report-model.json' }, 'report-model.json'),
-      React.createElement('a', { href: '../normalized/results.json' }, 'results.json'),
-      React.createElement('a', { href: '../normalized/run-manifest.json' }, 'run-manifest.json'),
-      React.createElement('a', { href: '../raw/foundry-gas.jsonl' }, 'foundry-gas.jsonl'),
+      React.createElement('a', { href: source }, 'report-model.json'),
+      React.createElement('a', { href: `${dataRoot}results.json` }, 'results.json'),
+      React.createElement('a', { href: `${dataRoot}run-manifest.json` }, 'run-manifest.json'),
+      React.createElement('a', { href: `${rawRoot}foundry-gas.jsonl` }, 'foundry-gas.jsonl'),
     )
   );
 }

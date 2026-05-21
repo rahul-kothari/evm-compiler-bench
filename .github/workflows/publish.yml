@@ -1,0 +1,68 @@
+name: publish
+
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+concurrency:
+  group: publish-master
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  benchmark-and-publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      CF_R2_BUCKET: evm-compilers
+      CF_R2_PREFIX: evm-compiler-bench
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: report-ui/package-lock.json
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - uses: astral-sh/setup-uv@v5
+
+      - uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: stable
+
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+            .cache/toolchains
+            .cache/bench-cli
+            foundry/cache
+          key: publish-${{ runner.os }}-${{ hashFiles('Cargo.lock', 'compiler-profiles/*.toml', 'benches/**/*', 'foundry/foundry.toml') }}
+          restore-keys: |
+            publish-${{ runner.os }}-
+
+      - run: npm --prefix report-ui ci
+
+      - run: npm --prefix report-ui run build
+
+      - run: cargo run --release -- run
+
+      - run: cargo run --release -- validate
+
+      - run: npm install --global wrangler
+
+      - run: node scripts/publish-results.mjs --upload --deploy

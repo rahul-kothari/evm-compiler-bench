@@ -1,5 +1,15 @@
 set shell := ["zsh", "-cu"]
 
+build-report-ui:
+    npm --prefix report-ui ci
+    npm --prefix report-ui run build
+
+prepare-publish:
+    node scripts/publish-results.mjs
+
+publish-results:
+    node scripts/publish-results.mjs --upload --deploy
+
 # Create a shareable source + reports archive without local toolchain/build caches.
 zip out="":
     #!/usr/bin/env zsh

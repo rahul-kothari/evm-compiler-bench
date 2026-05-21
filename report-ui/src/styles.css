@@ -919,6 +919,24 @@ select.knob option { background: var(--bg-elev); color: var(--fg); }
   opacity: 0.4;
 }
 
+.load-error {
+  border: 1px solid var(--bad);
+  background: color-mix(in srgb, var(--bad) 10%, transparent);
+  color: var(--fg-1);
+  padding: 24px;
+}
+
+.load-error strong {
+  display: block;
+  margin-bottom: 12px;
+}
+
+.load-error pre {
+  margin: 0;
+  white-space: pre-wrap;
+  color: var(--fg-2);
+}
+
 /* Density variants */
 [data-density="compact"] .section { padding: 36px 0; }
 [data-density="compact"] .hero { padding: 48px 0 16px; }

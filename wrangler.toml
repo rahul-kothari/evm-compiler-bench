@@ -1,0 +1,12 @@
+name = "evm-compiler-bench"
+main = "worker/index.js"
+compatibility_date = "2026-05-21"
+
+[[r2_buckets]]
+binding = "RESULTS"
+bucket_name = "evm-compilers"
+
+[assets]
+directory = "report-ui/dist"
+binding = "ASSETS"
+not_found_handling = "single-page-application"
