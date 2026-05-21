@@ -10,8 +10,15 @@ async function loadReportData() {
     || window.__EVM_BENCH_DATA_URL
     || document.querySelector('meta[name="evm-bench-data"]')?.content
     || import.meta.env.VITE_BENCH_DATA_URL;
+
+  const latest = await loadPublishManifest();
+  const publishedModel = latest?.artifacts?.report_model;
+  const publishedPath = publishedModel?.path
+    ? `${publishedModel.path}${publishedModel.sha256 ? `?sha=${publishedModel.sha256}` : ""}`
+    : null;
   const candidates = [
     configured,
+    publishedPath,
     "./report-model.json",
     "/report-model.json",
   ].filter(Boolean);
@@ -36,14 +43,20 @@ async function loadReportData() {
   if (!window.__EVM_BENCH_REPORT_DATA) {
     throw new Error(`Failed to load report data. Tried ${errors.join("; ")}`);
   }
+}
 
+async function loadPublishManifest() {
+  if (window.__EVM_BENCH_PUBLISH_MANIFEST) return window.__EVM_BENCH_PUBLISH_MANIFEST;
   try {
     const response = await fetch("./latest.json", { cache: "no-cache" });
-    if (response.ok) {
-      window.__EVM_BENCH_PUBLISH_MANIFEST = await response.json();
-    }
+    if (!response.ok) return null;
+    const text = await response.text();
+    if (text.trimStart().startsWith("<")) return null;
+    window.__EVM_BENCH_PUBLISH_MANIFEST = JSON.parse(text);
+    return window.__EVM_BENCH_PUBLISH_MANIFEST;
   } catch {
     // Local generated reports do not need a publish manifest.
+    return null;
   }
 }
 

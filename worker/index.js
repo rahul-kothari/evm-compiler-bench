@@ -34,6 +34,10 @@ function objectResponse(object, cacheControl, artifact = {}) {
   }
   if (artifact.content_encoding) {
     headers.set("content-encoding", artifact.content_encoding);
+    headers.append("vary", "Accept-Encoding");
+    if (!cacheControl.includes("no-transform")) {
+      cacheControl = `${cacheControl}, no-transform`;
+    }
   }
   headers.set("etag", object.httpEtag);
   headers.set("cache-control", cacheControl);
@@ -54,12 +58,7 @@ async function serveArtifact(env, artifactName) {
   const object = await env.RESULTS.get(artifact.key);
   if (!object) return notFound(`Artifact missing from R2: ${artifact.key}`);
 
-  const immutable = artifact.key.includes("/runs/");
-  return objectResponse(
-    object,
-    immutable ? "public, max-age=31536000, immutable" : "public, max-age=60",
-    artifact,
-  );
+  return objectResponse(object, "public, max-age=60, must-revalidate", artifact);
 }
 
 async function serveRunObject(env, pathname) {
