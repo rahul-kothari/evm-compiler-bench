@@ -26,9 +26,15 @@ async function latestManifest(env) {
   return object.json();
 }
 
-function objectResponse(object, cacheControl) {
+function objectResponse(object, cacheControl, artifact = {}) {
   const headers = new Headers();
   object.writeHttpMetadata(headers);
+  if (artifact.content_type) {
+    headers.set("content-type", artifact.content_type);
+  }
+  if (artifact.content_encoding) {
+    headers.set("content-encoding", artifact.content_encoding);
+  }
   headers.set("etag", object.httpEtag);
   headers.set("cache-control", cacheControl);
   headers.set("x-r2-key", object.key);
@@ -52,14 +58,17 @@ async function serveArtifact(env, artifactName) {
   return objectResponse(
     object,
     immutable ? "public, max-age=31536000, immutable" : "public, max-age=60",
+    artifact,
   );
 }
 
 async function serveRunObject(env, pathname) {
+  const latest = await latestManifest(env);
   const key = `${R2_PREFIX}${pathname}`;
   const object = await env.RESULTS.get(key);
   if (!object) return notFound(`No R2 object at ${key}.`);
-  return objectResponse(object, "public, max-age=31536000, immutable");
+  const artifact = Object.values(latest?.artifacts ?? {}).find(item => item.key === key) ?? {};
+  return objectResponse(object, "public, max-age=31536000, immutable", artifact);
 }
 
 export default {
