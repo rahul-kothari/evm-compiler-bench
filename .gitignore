@@ -6,6 +6,7 @@
 /foundry/test/GeneratedBenchShard*.t.sol
 /report-ui/dist/
 /report-ui/node_modules/
+/report-ui/.vite/
 /results/raw/*
 !/results/raw/.gitkeep
 /results/normalized/*
