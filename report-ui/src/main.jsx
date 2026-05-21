@@ -615,7 +615,7 @@ function Comparator({ profileA, profileB, setProfileA, setProfileB }) {
       ),
       React.createElement('div', { className: 'stat' },
         React.createElement('div', { className: 'k' }, 'Win / Tie / Loss'),
-        React.createElement('div', { className: 'v tie tabular' },
+        React.createElement('div', { className: 'v tie tabular wtl-counts' },
           React.createElement('span', { style: { color: 'var(--accent)' } }, agg.cheaper),
           React.createElement('span', { style: { color: 'var(--fg-4)' } }, ' · ' + agg.tie + ' · '),
           React.createElement('span', { style: { color: 'var(--bad)' } }, agg.costlier),
