@@ -235,11 +235,10 @@ button { font: inherit; color: inherit; background: none; border: none; cursor: 
   border-bottom: 1px solid var(--line);
 }
 .hero-strip > div {
-  padding: 22px 24px 22px 0;
+  padding: 22px 24px;
   border-right: 1px solid var(--line);
 }
 .hero-strip > div:last-child { border-right: 0; }
-.hero-strip > div + div { padding-left: 24px; }
 .hero-strip .k {
   font-family: var(--mono);
   font-size: 10.5px;
@@ -1019,7 +1018,7 @@ select.knob option { background: var(--bg-elev); color: var(--fg); }
   .stat-row { grid-template-columns: 1fr; }
   .stat { border-right: 0; }
   .hero-strip { grid-template-columns: 1fr; }
-  .hero-strip > div { border-right: 0; padding-left: 0 !important; }
+  .hero-strip > div { border-right: 0; }
   .distro-row { grid-template-columns: 130px 1fr 60px; }
   body .failure-main,
   body .compiler-failure-top {
