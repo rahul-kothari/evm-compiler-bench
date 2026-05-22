@@ -172,11 +172,9 @@ function Hero() {
       ' a language leaderboard.'
     ),
     React.createElement('p', { className: 'hero-lede' },
-      'Seven thousand head-to-head measurements across ',
-      React.createElement('strong', null, s.profiles),
-      ' compiler configurations and ',
-      React.createElement('strong', null, s.benchmarks),
-      ' benchmarks. Same scenario, same state, same harness — only the compiler changes. Numbers below; methodology at the end.'
+      'Across ',
+      React.createElement('strong', null, s.ok_rows.toLocaleString()),
+      ' successful scenario measurements, latest Vyper gas beats solc viaIR on runtime gas, and Vyper with Venom pushes the result further: cheaper gas, as well as smaller runtime bytecode. The compiler profile choice is now a first-order performance decision.'
     ),
 
     React.createElement('div', { className: 'hero-strip' },
