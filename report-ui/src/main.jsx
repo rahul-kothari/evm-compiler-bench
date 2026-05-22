@@ -98,6 +98,7 @@ const SOL_LEGACY = 'solc-latest-legacy-runs200';
 const SOL_VIAIR = 'solc-latest-viair-runs200';
 const SOL_NOOPT = 'solc-latest-noopt';
 const SOL_0426_LEGACY = 'solc-0.4.26-legacy-runs200';
+const VYPER_0310_GAS = 'vyper-0.3.10-gas';
 const VYPER_GAS = 'vyper-latest-gas';
 const VYPER_GAS_VENOM = 'vyper-latest-gas-venom';
 
@@ -143,19 +144,12 @@ function TopBar() {
       ),
       React.createElement('nav', null,
         React.createElement('a', { href: '#findings' }, 'Findings'),
-        React.createElement('a', { href: '#suites' }, 'Suites'),
         React.createElement('a', { href: '#versions' }, 'Versions'),
         React.createElement('a', { href: '#compare' }, 'Compare'),
         React.createElement('a', { href: '#scale' }, 'Scale'),
         React.createElement('a', { href: '#configs' }, 'Configs'),
         React.createElement('a', { href: '#methodology' }, 'Methods'),
       ),
-      React.createElement('div', { className: 'right' },
-        React.createElement('span', null,
-          React.createElement('span', { className: 'pulse' }),
-          (Bench.D.manifest?.evm_version || '').toUpperCase() + ' EVM',
-        )
-      )
     )
   );
 }
@@ -186,9 +180,7 @@ function Hero() {
     React.createElement('p', { className: 'hero-lede' },
       'Across ',
       React.createElement('strong', null, s.ok_rows.toLocaleString()),
-      ` successful scenario measurements, ${vyperGas} is ${absDelta(HEADLINES.stableSolVsVyperGas.geomean)} lower runtime gas than ${solcLegacy}. Against ${solcViaIR}, ${vyperVenom} is ${absDelta(HEADLINES.solVsVyperVenomGas.geomean)} lower gas `,
-      React.createElement('strong', null, 'and'),
-      ` ${absDelta(HEADLINES.solVsVyperVenomSize.geomean)} smaller runtime bytecode than ${solcViaIR}. Explore the comprehensive breakdown below.`
+      ` successful scenario measurements, ${vyperGas} is ${absDelta(HEADLINES.stableSolVsVyperGas.geomean)} lower runtime gas than ${solcLegacy}. Against ${solcViaIR}, ${vyperVenom} is ${absDelta(HEADLINES.solVsVyperVenomGas.geomean)} lower gas and ${absDelta(HEADLINES.solVsVyperVenomSize.geomean)} smaller runtime bytecode than ${solcViaIR}. Explore the comprehensive breakdown below.`
     ),
 
     React.createElement('div', { className: 'hero-strip' },
@@ -233,7 +225,7 @@ function FindingsGrid() {
     {
       tag: 'Finding 01',
       span: 4,
-      headline: "Vyper beats solc's legacy pipeline on runtime gas.",
+      headline: 'Vyper gas beats solc legacy on runtime gas.',
       body: `Comparing stable, optimizer-enabled profiles, Vyper 0.4.3 is noticeably more efficient, using 9.6% less runtime gas than solc 0.8.35 legacy.`,
       stat: HEADLINES.stableSolVsVyperGas.geomean,
       statLabel: 'runtime gas (Vyper gas vs solc legacy)',
@@ -244,7 +236,7 @@ function FindingsGrid() {
     {
       tag: 'Finding 02',
       span: 4,
-      headline: 'Vyper + Venom delivers a rare double win over solc viaIR.',
+      headline: 'Vyper + Venom beats solc viaIR on both axes.',
       body: 'Usually, you trade bytecode size for gas savings. Against solc 0.8.35 viaIR, Vyper 0.4.3 with Venom codegen achieves both significant gas savings and a smaller footprint.',
       stat: HEADLINES.solVsVyperVenomGas.geomean,
       statLabel: 'runtime gas (Vyper Venom vs solc viaIR)',
@@ -255,7 +247,7 @@ function FindingsGrid() {
     {
       tag: 'Finding 03',
       span: 4,
-      headline: 'Venom is a strict upgrade for Vyper performance.',
+      headline: 'Venom makes Vyper smaller and cheaper.',
       body: 'Enabling --experimental-codegen ("Venom") in Vyper shrinks runtime bytecode, reduces runtime gas, and even cuts down compile times compared to legacy codegen.',
       stat: HEADLINES.venomSize.geomean,
       statLabel: 'runtime bytes vs Vyper legacy codegen',
@@ -266,7 +258,7 @@ function FindingsGrid() {
     {
       tag: 'Finding 04',
       span: 4,
-      headline: 'solc viaIR trades build time for execution efficiency.',
+      headline: 'viaIR buys gas and size with compile time.',
       body: 'Switching from solc 0.8.35 legacy to viaIR yields modest reductions in runtime gas and bytecode size, but comes with a massive 158% increase in compile time.',
       stat: HEADLINES.viaIRGas.geomean,
       statLabel: 'runtime gas vs solc legacy',
@@ -278,7 +270,7 @@ function FindingsGrid() {
     {
       tag: 'Finding 05',
       span: 4,
-      headline: 'Seven years of solc releases barely moved the needle.',
+      headline: 'Seven years of solc legacy barely move runtime gas.',
       body: 'Solc 0.4.26 was released in 2019. Compiling on the same legacy pipeline up to solc 0.8.35 results in a negligible 0.3% difference in runtime gas.',
       stat: HEADLINES.solEra.geomean,
       statLabel: 'runtime gas (solc 0.4.26 → 0.8.35 legacy)',
@@ -288,7 +280,7 @@ function FindingsGrid() {
     {
       tag: 'Finding 06',
       span: 4,
-      headline: 'The solc optimizer remains your biggest performance lever.',
+      headline: 'The optimizer is the biggest lever in the run.',
       body: 'Disabling the optimizer entirely in solc 0.8.35 triggers a massive 34.9% penalty to runtime gas: the single largest measured effect among all solc profile comparisons.',
       stat: HEADLINES.nooptGas.geomean,
       statLabel: 'runtime gas without optimizer',
@@ -302,10 +294,10 @@ function FindingsGrid() {
     React.createElement('div', { className: 'section-head' },
       React.createElement('div', null,
         React.createElement('div', { className: 'section-eyebrow' }, '§ 01 · Summary'),
-        React.createElement('div', { className: 'section-title' }, 'Summary findings.'),
+        React.createElement('div', { className: 'section-title' }, 'Six findings from this run.'),
         React.createElement('div', { className: 'section-sub' }, 'Each card reports a geometric-mean delta over comparable scenarios; card headers show the row count.')
       ),
-      React.createElement('div', { className: 'section-meta' }, 'Metric · Harness call gas + runtime bytes')
+      React.createElement('div', { className: 'section-meta' }, 'Primary: runtime gas · Secondary: runtime bytes')
     ),
     React.createElement('div', { className: 'stories' },
       cards.map((c, i) => {
@@ -567,27 +559,31 @@ function MetricToggle({ value, onChange }) {
   );
 }
 
-function Comparator({ profileA, profileB, setProfileA, setProfileB }) {
-  const def = Bench.D.defaults;
-  const [metric, setMetric] = useState(def.primary_metric || 'harness_call_gas');
-  const [suiteFilter, setSuiteFilter] = useState(new Set(['fixed','scale','real_derived']));
+function SectionMetricControl({ metric, setMetric }) {
+  return React.createElement('div', { className: 'section-metric-control' },
+    React.createElement('div', { className: 'metric-label' }, 'metric'),
+    React.createElement(MetricToggle, { value: metric, onChange: setMetric }),
+  );
+}
 
+function Comparator({ profileA, profileB, setProfileA, setProfileB, metric, setMetric }) {
   const cmp = useMemo(() =>
-    Bench.compareProfiles(Bench.D.rows, profileA, profileB, metric, suiteFilter),
-    [profileA, profileB, metric, suiteFilter]
+    Bench.compareProfiles(Bench.D.rows, profileA, profileB, metric),
+    [profileA, profileB, metric]
   );
   const tieBand = Bench.tieBandForMetric(metric);
   const agg = useMemo(() => Bench.summarize(cmp, tieBand), [cmp, tieBand]);
   const profA = Bench.profileById(profileA);
   const profB = Bench.profileById(profileB);
+  const compareTitle = `${Bench.profileLabel(profileB)} vs ${Bench.profileLabel(profileA)}.`;
 
   const presets = [
-    ['solc-latest-viair-runs200', 'vyper-latest-gas',         `${Bench.profileLabel('solc-latest-viair-runs200')} ↔ ${Bench.profileLabel('vyper-latest-gas')}`],
-    ['solc-latest-viair-runs200', 'vyper-latest-gas-venom',   `${Bench.profileLabel('solc-latest-viair-runs200')} ↔ ${Bench.profileLabel('vyper-latest-gas-venom')}`],
-    ['solc-latest-legacy-runs200','solc-latest-viair-runs200',`${Bench.profileLabel('solc-latest-legacy-runs200')} ↔ ${Bench.profileLabel('solc-latest-viair-runs200')}`],
-    ['vyper-latest-gas',          'vyper-latest-gas-venom',   `${Bench.profileLabel('vyper-latest-gas')} ↔ ${Bench.profileLabel('vyper-latest-gas-venom')}`],
-    ['solc-0.4.26-legacy-runs200','solc-latest-legacy-runs200',`${Bench.profileLabel('solc-0.4.26-legacy-runs200')} ↔ ${Bench.profileLabel('solc-latest-legacy-runs200')}`],
-    ['vyper-0.2.16-default',      'vyper-latest-gas',         `${Bench.profileLabel('vyper-0.2.16-default')} ↔ ${Bench.profileLabel('vyper-latest-gas')}`],
+    [SOL_LEGACY,       VYPER_GAS,       'Stable optimized'],
+    [SOL_VIAIR,        VYPER_GAS_VENOM, 'New codegen'],
+    [SOL_LEGACY,       SOL_VIAIR,       'solc backend switch'],
+    [VYPER_GAS,        VYPER_GAS_VENOM, 'Vyper backend switch'],
+    [SOL_0426_LEGACY,  SOL_LEGACY,      'solc version drift'],
+    [VYPER_0310_GAS,   VYPER_GAS,       'Vyper version drift'],
   ];
 
   const totalBuilt = (profA?.successful_artifacts ?? 0) + (profB?.successful_artifacts ?? 0);
@@ -596,43 +592,23 @@ function Comparator({ profileA, profileB, setProfileA, setProfileB }) {
   return React.createElement('section', { id: 'compare', className: 'shell section', 'data-screen-label': '04 Compare' },
     React.createElement('div', { className: 'section-head' },
       React.createElement('div', null,
-        React.createElement('div', { className: 'section-eyebrow' }, '§ 04 · Pick any two configurations'),
-        React.createElement('div', { className: 'section-title' }, 'Head-to-head (scenario by scenario).'),
+        React.createElement('div', { className: 'section-eyebrow' }, '§ 03 · Pick any two configurations'),
+        React.createElement('div', { className: 'section-title' }, compareTitle),
         React.createElement('div', { className: 'section-sub' }, 'Comparisons match on suite/benchmark/scenario/state — different compilers, identical surface. Negative deltas favor the compared profile.'),
       ),
-      React.createElement('div', { className: 'section-meta' }, `${metric === 'compile_wall_ms' ? 'tie band' : 'materiality band'} ±${(tieBand*100).toFixed(1)}%`)
+      React.createElement(SectionMetricControl, { metric, setMetric })
     ),
 
     React.createElement('div', { className: 'compare-bar' },
       React.createElement(ProfilePicker, { title: 'Baseline (A)', selected: profileA, onChange: setProfileA }),
       React.createElement('div', { className: 'compare-vs' }, 'VS'),
       React.createElement(ProfilePicker, { title: 'Compared (B)', selected: profileB, onChange: setProfileB }),
-      React.createElement('div', { className: 'compare-meta' },
-        React.createElement('div', null,
-          React.createElement('div', { style: { fontFamily: 'var(--mono)', fontSize: '10px', letterSpacing: '0.14em', textTransform: 'uppercase', color: 'var(--fg-4)', marginBottom: '8px' } }, 'Metric'),
-          React.createElement(MetricToggle, { value: metric, onChange: setMetric })
-        ),
-        React.createElement('div', null,
-          React.createElement('div', { style: { fontFamily: 'var(--mono)', fontSize: '10px', letterSpacing: '0.14em', textTransform: 'uppercase', color: 'var(--fg-4)', marginBottom: '8px' } }, 'Suites'),
-          React.createElement('div', { className: 'toggle' },
-            Object.keys(SUITES).map(s => React.createElement('button', {
-              key: s,
-              className: suiteFilter.has(s) ? 'on' : '',
-              onClick: () => {
-                const next = new Set(suiteFilter);
-                if (next.has(s) && next.size > 1) next.delete(s);
-                else next.add(s);
-                setSuiteFilter(next);
-              },
-            }, SUITES[s].label))
-          )
-        )
-      ),
     ),
 
     React.createElement('div', { className: 'presets' },
       presets.map(([a,b,label]) => React.createElement('button', {
         key: label, className: 'preset',
+        title: `${Bench.profileLabel(a)} ↔ ${Bench.profileLabel(b)}`,
         onClick: () => { setProfileA(a); setProfileB(b); },
       }, label))
     ),
@@ -987,68 +963,29 @@ function CompilerConfigurations() {
   );
 }
 
-// ============================================================
-// Section with metric/suite local control + scorecards + version chart
-// ============================================================
-function SectionSuites({ profileA, profileB }) {
-  const [metric, setMetric] = useState('harness_call_gas');
-  const metricName = METRICS.find(m => m.id === metric)?.short.toLowerCase() || 'selected metric';
-  return React.createElement('section', { id: 'suites', className: 'shell section', 'data-screen-label': '02 Suites' },
-    React.createElement('div', { className: 'section-head' },
-      React.createElement('div', null,
-        React.createElement('div', { className: 'section-eyebrow' }, '§ 02 · Suite-level deltas'),
-        React.createElement('div', { className: 'section-title' }, 'Suite-level comparison.'),
-        React.createElement('div', { className: 'section-sub' }, `Cards split the selected comparison by workload class. Negative deltas mean the compared profile is lower ${metricName} than the baseline.`)
-      ),
-      React.createElement('div', { style: { display: 'flex', gap: '14px', alignItems: 'center' } },
-        React.createElement('div', { style: { fontFamily: 'var(--mono)', fontSize: '10px', letterSpacing: '0.14em', textTransform: 'uppercase', color: 'var(--fg-4)' } }, 'metric'),
-        React.createElement(MetricToggle, { value: metric, onChange: setMetric }),
-      )
-    ),
-    React.createElement('div', { style: { display: 'flex', gap: '12px', marginBottom: '20px', fontFamily: 'var(--mono)', fontSize: '11px', color: 'var(--fg-3)', letterSpacing: '0.06em', alignItems: 'center', flexWrap: 'wrap' } },
-      React.createElement('span', null, 'Comparison: ',
-        React.createElement('span', { style: { color: 'var(--fg)' } }, Bench.profileLabel(profileB)),
-        ' vs ',
-        React.createElement('span', { style: { color: 'var(--fg)' } }, Bench.profileLabel(profileA)),
-      ),
-      React.createElement('span', { style: { color: 'var(--fg-4)' } }, '·'),
-      React.createElement('a', { href: '#compare', style: { color: 'var(--fg-3)' } }, 'change in comparator ↓')
-    ),
-    React.createElement(SuiteScorecards, { profileA, profileB, metric })
-  );
-}
-
-function SectionVersions() {
-  const [metric, setMetric] = useState('harness_call_gas');
+function SectionVersions({ metric, setMetric }) {
   return React.createElement('section', { id: 'versions', className: 'shell section' },
       React.createElement('div', { className: 'section-head' },
       React.createElement('div', null,
-        React.createElement('div', { className: 'section-eyebrow' }, '§ 03 · Versions over time'),
-        React.createElement('div', { className: 'section-title' }, 'Compiler versions (normalized to newest comparable config).'),
+        React.createElement('div', { className: 'section-eyebrow' }, '§ 02 · Versions over time'),
+        React.createElement('div', { className: 'section-title' }, 'Compiler versions.'),
         React.createElement('div', { className: 'section-sub' }, 'Each point is the geomean delta vs. the newest comparable profile. Lines near zero indicate small version-to-version changes. For chart continuity, Vyper 0.2 default is grouped with none because modern optimize modes did not exist yet.')
       ),
-      React.createElement('div', { style: { display: 'flex', gap: '14px', alignItems: 'center' } },
-        React.createElement('div', { style: { fontFamily: 'var(--mono)', fontSize: '10px', letterSpacing: '0.14em', textTransform: 'uppercase', color: 'var(--fg-4)' } }, 'metric'),
-        React.createElement(MetricToggle, { value: metric, onChange: setMetric }),
-      )
+      React.createElement(SectionMetricControl, { metric, setMetric })
     ),
     React.createElement(VersionEvolution, { metric })
   );
 }
 
-function SectionScale() {
-  const [metric, setMetric] = useState('harness_call_gas');
+function SectionScale({ metric, setMetric }) {
   return React.createElement('section', { id: 'scale', className: 'shell section' },
     React.createElement('div', { className: 'section-head' },
       React.createElement('div', null,
-        React.createElement('div', { className: 'section-eyebrow' }, '§ 05 · Cost vs. shape of the contract'),
+        React.createElement('div', { className: 'section-eyebrow' }, '§ 04 · Cost vs. shape of the contract'),
         React.createElement('div', { className: 'section-title' }, 'How the metric scales with structural N.'),
         React.createElement('div', { className: 'section-sub' }, 'In dispatch_N, Vyper selector dispatch stays nearly flat as function count grows, while solc viaIR rises with the selector surface. The other panels show how storage, ABI, loop, event, and external-call shapes scale.')
       ),
-      React.createElement('div', { style: { display: 'flex', gap: '14px', alignItems: 'center' } },
-        React.createElement('div', { style: { fontFamily: 'var(--mono)', fontSize: '10px', letterSpacing: '0.14em', textTransform: 'uppercase', color: 'var(--fg-4)' } }, 'metric'),
-        React.createElement(MetricToggle, { value: metric, onChange: setMetric }),
-      )
+      React.createElement(SectionMetricControl, { metric, setMetric })
     ),
     React.createElement(ScaleStrip, { metric })
   );
@@ -1058,7 +995,7 @@ function SectionReliability() {
   return React.createElement('section', { id: 'reliability', className: 'shell section' },
     React.createElement('div', { className: 'section-head' },
       React.createElement('div', null,
-        React.createElement('div', { className: 'section-eyebrow' }, '§ 06 · Reliability'),
+        React.createElement('div', { className: 'section-eyebrow' }, '§ 05 · Reliability'),
         React.createElement('div', { className: 'section-title' }, 'Compile failures are first-class data.'),
         React.createElement('div', { className: 'section-sub' }, 'Profile comparisons include both successful artifacts and the benchmark shapes each compiler failed to build. Tracked here per profile.')
       ),
@@ -1076,11 +1013,10 @@ function SectionMethodology() {
   return React.createElement('section', { id: 'methodology', className: 'shell section' },
     React.createElement('div', { className: 'section-head' },
       React.createElement('div', null,
-        React.createElement('div', { className: 'section-eyebrow' }, '§ 08 · How to read this'),
+        React.createElement('div', { className: 'section-eyebrow' }, '§ 07 · How to read this'),
         React.createElement('div', { className: 'section-title' }, 'Methodology and caveats.'),
         React.createElement('div', { className: 'section-sub' }, 'A compact reference for units, aggregation, and scope behind the report numbers.')
-      ),
-      React.createElement('div', { className: 'section-meta' }, 'plus links to raw data ↓')
+      )
     ),
     React.createElement(Methodology),
     React.createElement('div', { className: 'raw-links-row' },
@@ -1103,9 +1039,12 @@ function SectionCompilerConfigurations() {
   return React.createElement('section', { id: 'configs', className: 'shell section' },
     React.createElement('div', { className: 'section-head' },
       React.createElement('div', null,
-        React.createElement('div', { className: 'section-eyebrow' }, '§ 07 · Compiler configurations'),
+        React.createElement('div', { className: 'section-eyebrow' }, '§ 06 · Compiler configurations'),
         React.createElement('div', { className: 'section-title' }, 'Compiler configurations.'),
-        React.createElement('div', { className: 'section-sub' }, 'A profile is a compiler version paired with exactly one codegen or optimizer mode. Vyper adds Venom as an independent switch.')
+        React.createElement('div', { className: 'section-sub' },
+          React.createElement('p', null, 'A profile is a compiler version paired with exactly one codegen or optimizer mode. Vyper adds Venom as an independent codegen switch.'),
+          React.createElement('p', null, "Optimization is not just a performance choice: Solidity's Yul/viaIR path and Vyper's experimental Venom pipeline have both had correctness bugs. Treat faster profiles as performance evidence, not automatic production guidance; pair them with version pinning, differential tests, and IR/bytecode review.")
+        )
       )
     ),
     React.createElement(CompilerConfigurations)
@@ -1121,14 +1060,14 @@ function App() {
   const defaultB = Bench.profileById(VYPER_GAS) ? VYPER_GAS : def.comparison_profile;
   const [profileA, setProfileA] = useState(defaultA);
   const [profileB, setProfileB] = useState(defaultB);
+  const [metric, setMetric] = useState(def.primary_metric || 'harness_call_gas');
   return React.createElement(React.Fragment, null,
     React.createElement(TopBar),
     React.createElement(Hero),
     React.createElement(FindingsGrid),
-    React.createElement(SectionSuites, { profileA, profileB }),
-    React.createElement(SectionVersions),
-    React.createElement(Comparator, { profileA, profileB, setProfileA, setProfileB }),
-    React.createElement(SectionScale),
+    React.createElement(Comparator, { profileA, profileB, setProfileA, setProfileB, metric, setMetric }),
+    React.createElement(SectionVersions, { metric, setMetric }),
+    React.createElement(SectionScale, { metric, setMetric }),
     React.createElement(SectionReliability),
     React.createElement(SectionCompilerConfigurations),
     React.createElement(SectionMethodology),
