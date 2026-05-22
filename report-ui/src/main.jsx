@@ -147,8 +147,7 @@ function TopBar() {
         React.createElement('span', null,
           React.createElement('span', { className: 'pulse' }),
           (Bench.D.manifest?.evm_version || '').toUpperCase() + ' EVM',
-        ),
-        React.createElement('span', { title: Bench.D.manifest?.run_id || '' }, 'run ' + (Bench.D.manifest?.run_id || '').slice(0, 8)),
+        )
       )
     )
   );
