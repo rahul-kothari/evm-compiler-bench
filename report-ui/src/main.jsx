@@ -898,7 +898,7 @@ function SectionVersions() {
       React.createElement('div', null,
         React.createElement('div', { className: 'section-eyebrow' }, '§ 03 · Versions over time'),
         React.createElement('div', { className: 'section-title' }, 'Compiler versions, normalized to "latest, comparable config".'),
-        React.createElement('div', { className: 'section-sub' }, 'Each point is the geomean delta vs. the latest comparable profile. Lines near zero mean the version moved the needle very little. Vyper 0.2 default is compared to latest gas because modern optimize modes did not exist yet.')
+        React.createElement('div', { className: 'section-sub' }, 'Each point is the geomean delta vs. the latest comparable profile. Lines near zero mean the version moved the needle very little. For chart continuity, Vyper 0.2 default is grouped with none because modern optimize modes did not exist yet.')
       ),
       React.createElement('div', { style: { display: 'flex', gap: '14px', alignItems: 'center' } },
         React.createElement('div', { style: { fontFamily: 'var(--mono)', fontSize: '10px', letterSpacing: '0.14em', textTransform: 'uppercase', color: 'var(--fg-4)' } }, 'metric'),

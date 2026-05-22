@@ -195,10 +195,15 @@
       if (config === 'noopt') return 'solc-latest-noopt';
     }
     if (p.language === 'vyper'){
-      if (config === 'default') return `vyper-latest-gas${venom}`;
+      if (config === 'default') return `vyper-latest-none${venom}`;
       return `vyper-latest-${config}${venom}`;
     }
     return undefined;
+  }
+
+  function versionAxisConfig(p){
+    const config = profileOptimizer(p);
+    return p.language === 'vyper' && config === 'default' ? 'none' : config;
   }
 
   function versionAxisRows(metric, suiteSet){
@@ -213,13 +218,13 @@
       if (!s.geomean) continue;
       out.push({
         language: p.language,
-        config: profileOptimizer(p),
+        config: versionAxisConfig(p),
         venom: !!p.experimental_codegen,
         profile: p.id,
         label: p.label,
         baseline,
         baselineLabel: baselineProfile?.label || baseline,
-        baselineConfig: baselineProfile ? profileOptimizer(baselineProfile) : undefined,
+        baselineConfig: baselineProfile ? versionAxisConfig(baselineProfile) : undefined,
         version: p.compiler_version,
         versionKey: profileVersionKey(p),
         deltaPct: (s.geomean - 1) * 100,
