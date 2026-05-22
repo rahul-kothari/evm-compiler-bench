@@ -107,6 +107,7 @@ button { font: inherit; color: inherit; background: none; border: none; cursor: 
   border-top: 1px solid var(--line);
 }
 .section:first-of-type { border-top: 0; }
+#findings { border-top: 0; }
 
 .section-head {
   display: flex;
@@ -1038,7 +1039,6 @@ select.knob option { background: var(--bg-elev); color: var(--fg); }
 @media (max-width: 720px) {
   .section {
     padding-block: 64px;
-    border-top: 0;
   }
   .section + .section {
     margin-top: 12px;
