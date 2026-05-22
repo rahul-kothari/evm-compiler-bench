@@ -1038,6 +1038,7 @@ select.knob option { background: var(--bg-elev); color: var(--fg); }
 @media (max-width: 720px) {
   .section {
     padding-block: 64px;
+    border-top: 0;
   }
   .section + .section {
     margin-top: 12px;
