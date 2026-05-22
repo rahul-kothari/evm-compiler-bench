@@ -966,7 +966,7 @@ select.knob option { background: var(--bg-elev); color: var(--fg); }
 [data-density="compact"] .suite-card { padding: 20px; }
 [data-density="compact"] .suite-card .big { font-size: 44px; }
 
-@media (max-width: 1100px) {
+@media (max-width: 959px) {
   .evo-grid { grid-template-columns: 1fr; }
   .evo-side { border-right: 0; border-bottom: 1px solid var(--line); }
   .evo-side:last-child { border-bottom: 0; }
@@ -979,7 +979,7 @@ select.knob option { background: var(--bg-elev); color: var(--fg); }
   .stat:nth-last-child(-n+2) { border-bottom: 0; }
 }
 
-@media (max-width: 960px) {
+@media (max-width: 959px) {
   body .shell { padding: 0 20px; }
   .topbar {
     flex-wrap: wrap;
