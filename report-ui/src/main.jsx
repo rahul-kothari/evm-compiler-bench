@@ -181,7 +181,7 @@ function Hero() {
     React.createElement('p', { className: 'hero-lede' },
       'Across ',
       React.createElement('strong', null, s.ok_rows.toLocaleString()),
-      ` successful scenario measurements, ${vyperGas} is ${absDelta(HEADLINES.stableSolVsVyperGas.geomean)} lower runtime gas than ${solcLegacy}. Against ${solcViaIR}, ${vyperVenom} is ${absDelta(HEADLINES.solVsVyperVenomGas.geomean)} lower gas and ${absDelta(HEADLINES.solVsVyperVenomSize.geomean)} smaller runtime bytecode than ${solcViaIR}. Explore the comprehensive breakdown below.`
+      ` successful scenario measurements, ${vyperGas} is ${absDelta(HEADLINES.stableSolVsVyperGas.geomean)} lower runtime gas than ${solcLegacy}. Against ${solcViaIR}, ${vyperVenom} is ${absDelta(HEADLINES.solVsVyperVenomGas.geomean)} lower gas and ${absDelta(HEADLINES.solVsVyperVenomSize.geomean)} smaller runtime bytecode. Explore the comprehensive breakdown below.`
     ),
 
     React.createElement('div', { className: 'hero-strip' },
