@@ -969,21 +969,13 @@ function SectionMethodology() {
       React.createElement('div', { className: 'section-meta' }, 'plus links to raw data ↓')
     ),
     React.createElement(Methodology),
-    React.createElement('div', { style: { marginTop: '28px', display: 'flex', gap: '24px', flexWrap: 'wrap', fontFamily: 'var(--mono)', fontSize: '12px', color: 'var(--fg-2)' } },
-      React.createElement('a', { href: source }, 'report-model.json'),
-      React.createElement('a', { href: `${dataRoot}results.json` }, 'results.json'),
-      React.createElement('a', { href: `${dataRoot}run-manifest.json` }, 'run-manifest.json'),
-      React.createElement('a', { href: `${rawRoot}foundry-gas.jsonl` }, 'foundry-gas.jsonl'),
-    )
-  );
-}
-
-// ============================================================
-// Footer
-// ============================================================
-function Footer() {
-  return React.createElement('div', { className: 'shell' },
-    React.createElement('div', { className: 'foot' },
+    React.createElement('div', { className: 'raw-links-row' },
+      React.createElement('div', { className: 'raw-links' },
+        React.createElement('a', { href: source }, 'report-model.json'),
+        React.createElement('a', { href: `${dataRoot}results.json` }, 'results.json'),
+        React.createElement('a', { href: `${dataRoot}run-manifest.json` }, 'run-manifest.json'),
+        React.createElement('a', { href: `${rawRoot}foundry-gas.jsonl` }, 'foundry-gas.jsonl'),
+      ),
       React.createElement('a', {
         href: 'https://github.com/banteg/evm-compiler-bench',
         rel: 'noreferrer',
@@ -1010,7 +1002,6 @@ function App() {
     React.createElement(SectionScale),
     React.createElement(SectionReliability),
     React.createElement(SectionMethodology),
-    React.createElement(Footer),
   );
 }
 

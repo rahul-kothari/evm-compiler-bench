@@ -923,18 +923,28 @@ select.knob option { background: var(--bg-elev); color: var(--fg); }
 .lang-pill.solidity .swatch { background: var(--solidity); }
 .lang-pill.vyper .swatch { background: var(--vyper); }
 
-.foot {
-  padding-block: 60px 80px;
-  color: var(--fg-4);
-  font-family: var(--mono);
-  font-size: 11px;
-  letter-spacing: 0.08em;
-  border-top: 1px solid var(--line);
-  margin-top: 80px;
+.raw-links-row {
+  margin-top: 28px;
   display: flex;
+  align-items: baseline;
   justify-content: space-between;
   gap: 24px;
   flex-wrap: wrap;
+  font-family: var(--mono);
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  color: var(--fg-2);
+}
+
+.raw-links {
+  display: flex;
+  gap: 24px;
+  flex-wrap: wrap;
+}
+
+.raw-links-row > a:last-child {
+  margin-left: auto;
+  color: var(--fg-3);
 }
 
 .subtle-grid {
