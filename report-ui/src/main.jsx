@@ -177,7 +177,9 @@ function Hero() {
     React.createElement('p', { className: 'hero-lede' },
       'Across ',
       React.createElement('strong', null, s.ok_rows.toLocaleString()),
-      ` successful scenario measurements, ${vyperGas} beats ${solcViaIR} on runtime gas, and ${vyperVenom} pushes the result further: cheaper gas, as well as smaller runtime bytecode. The compiler profile choice is now a first-order performance decision.`
+      ` successful scenario measurements, ${vyperGas} beats ${solcViaIR} on runtime gas, and ${vyperVenom} pushes the result further: cheaper gas `,
+      React.createElement('strong', null, 'and'),
+      ' smaller runtime bytecode. The compiler profile choice is now a first-order performance decision.'
     ),
 
     React.createElement('div', { className: 'hero-strip' },
@@ -222,7 +224,7 @@ function FindingsGrid() {
       tag: 'Finding 01',
       span: 4,
       headline: 'Venom is the rare switch that pays off everywhere.',
-      body: `Switching ${vyperGas} to --experimental-codegen ("Venom") shrinks runtime bytecode ~14% and gas ~5% — and still compiles faster than legacy. No tradeoff to weigh.`,
+      body: `Switching ${vyperGas} to --experimental-codegen ("Venom") shrinks runtime bytecode ~14% and gas ~5% — and still compiles faster than legacy.`,
       stat: HEADLINES.venomSize.geomean,
       statLabel: 'runtime bytes vs legacy codegen',
       altStat: HEADLINES.venomGas.geomean,
@@ -245,7 +247,7 @@ function FindingsGrid() {
       tag: 'Finding 03',
       span: 4,
       headline: 'Five years of solc releases barely touched runtime gas.',
-      body: 'Comparing solc 0.4.26 to solc 0.8.35 on the same legacy pipeline moves runtime gas by only +0.3%. The big jumps come from codegen mode, not version number.',
+      body: 'Comparing solc 0.4.26 to solc 0.8.35 on the same legacy pipeline moves runtime gas by only +0.3%.',
       stat: HEADLINES.solEra.geomean,
       statLabel: 'gas: solc 0.4.26 → 0.8.35 (legacy)',
       neutral: true,
@@ -266,7 +268,7 @@ function FindingsGrid() {
       tag: 'Finding 05',
       span: 4,
       headline: 'Pick your poison: cheaper to run, or cheaper to deploy.',
-      body: 'Vyper runs cheaper but deploys heavier. The pick is a runtime-cost vs. deployment-cost question, not a ranking.',
+      body: 'Vyper runs cheaper but deploys heavier. It is a runtime-cost vs. deployment-cost trade-off.',
       stat: HEADLINES.solVsVyperGas.geomean,
       statLabel: 'gas (Vyper vs solc)',
       altStat: HEADLINES.solVsVyperSize.geomean,
@@ -835,7 +837,7 @@ function Methodology() {
     {
       tag: 'A',
       title: 'Foundry internal-call harness gas',
-      body: 'Gas is measured via Foundry\'s internal-call harness, not signed transaction gas. That isolates compiler-generated code costs from intrinsic and calldata overhead.'
+      body: 'Gas is measured via Foundry\'s internal-call harness. That isolates compiler-generated runtime costs from intrinsic and calldata overhead.'
     },
     {
       tag: 'B',
@@ -845,12 +847,12 @@ function Methodology() {
     {
       tag: 'C',
       title: 'Geomean over comparable scenarios',
-      body: 'Each summary is a geometric mean of ratios B/A over scenarios where both profiles compiled. Missing scenarios are excluded — they\'re not zero.'
+      body: 'Each summary is a geometric mean of ratios B/A over scenarios where both profiles compiled. Missing scenarios are excluded from the comparison.'
     },
     {
       tag: 'D',
       title: 'Metric-specific bands',
-      body: 'Gas and bytecode use a ±0.5% materiality band for W/T/L counts. Compile time keeps a provisional ±2% noise band until a higher-sample timing run replaces it.'
+      body: 'Gas and bytecode use a ±0.5% materiality band for W/T/L counts. Compile time uses a ±2% noise band.'
     },
     {
       tag: 'E',
@@ -860,7 +862,7 @@ function Methodology() {
     {
       tag: 'F',
       title: 'Vyper Venom and 0.5.0a1',
-      body: 'Vyper "Venom" rows pass --experimental-codegen. Vyper 0.5.0a1 is pre-release. Both are reported alongside stable lines; neither is filtered out.'
+      body: 'Vyper "Venom" rows pass --experimental-codegen. Vyper 0.5.0a1 is pre-release.'
     },
   ];
   return React.createElement('div', { className: 'methods' },
@@ -927,7 +929,7 @@ function SectionScale() {
       React.createElement('div', null,
         React.createElement('div', { className: 'section-eyebrow' }, '§ 05 · Cost vs. shape of the contract'),
         React.createElement('div', { className: 'section-title' }, 'How the metric scales with structural N.'),
-        React.createElement('div', { className: 'section-sub' }, 'Each panel plots a structural axis (function count, storage slots, mapping depth, etc.) against the selected metric on a log-x axis. Compilers diverge most under unusual shape, not common ones.')
+        React.createElement('div', { className: 'section-sub' }, 'In dispatch_N, Vyper selector dispatch stays nearly flat as function count grows, while solc viaIR rises with the selector surface. The other panels show how storage, ABI, loop, event, and external-call shapes scale.')
       ),
       React.createElement('div', { style: { display: 'flex', gap: '14px', alignItems: 'center' } },
         React.createElement('div', { style: { fontFamily: 'var(--mono)', fontSize: '10px', letterSpacing: '0.14em', textTransform: 'uppercase', color: 'var(--fg-4)' } }, 'metric'),
@@ -944,7 +946,7 @@ function SectionReliability() {
       React.createElement('div', null,
         React.createElement('div', { className: 'section-eyebrow' }, '§ 06 · Reliability'),
         React.createElement('div', { className: 'section-title' }, 'Compile failures are first-class data.'),
-        React.createElement('div', { className: 'section-sub' }, 'A profile that drops scenarios isn\'t a faster profile — it\'s a less complete one. Tracked here per profile.')
+        React.createElement('div', { className: 'section-sub' }, 'Profile comparisons include both successful artifacts and the benchmark shapes each compiler failed to build. Tracked here per profile.')
       ),
       React.createElement('div', { className: 'section-meta' }, `${Bench.D.summary.compile_failures} compile failures · ${(Bench.D.summary.failed_artifacts/Bench.D.summary.attempted_artifacts*100).toFixed(2)}%`)
     ),
@@ -962,7 +964,7 @@ function SectionMethodology() {
       React.createElement('div', null,
         React.createElement('div', { className: 'section-eyebrow' }, '§ 07 · How to read this'),
         React.createElement('div', { className: 'section-title' }, 'Methodology and caveats.'),
-        React.createElement('div', { className: 'section-sub' }, 'Six notes that change how you read every number above. Read them.')
+        React.createElement('div', { className: 'section-sub' }, 'A compact reference for units, aggregation, and scope behind the report numbers.')
       ),
       React.createElement('div', { className: 'section-meta' }, 'plus links to raw data ↓')
     ),
