@@ -1,4 +1,5 @@
 const R2_PREFIX = "evm-compiler-bench";
+const HSTS = "max-age=31536000; includeSubDomains";
 
 const DATA_ROUTES = new Map([
   ["/latest.json", "latest"],
@@ -14,6 +15,28 @@ function jsonResponse(value, init = {}) {
   headers.set("content-type", "application/json; charset=utf-8");
   headers.set("cache-control", init.cacheControl || "public, max-age=60");
   return new Response(JSON.stringify(value), { ...init, headers });
+}
+
+function httpsRedirect(url) {
+  url.protocol = "https:";
+  return new Response(null, {
+    status: 308,
+    headers: {
+      "cache-control": "public, max-age=3600",
+      location: url.toString(),
+      "strict-transport-security": HSTS,
+    },
+  });
+}
+
+function withSecurityHeaders(response) {
+  const headers = new Headers(response.headers);
+  headers.set("strict-transport-security", HSTS);
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  });
 }
 
 function notFound(message) {
@@ -73,9 +96,15 @@ async function serveRunObject(env, pathname) {
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
+    if (url.protocol === "http:") {
+      return httpsRedirect(url);
+    }
+
     const route = DATA_ROUTES.get(url.pathname);
-    if (route) return serveArtifact(env, route);
-    if (url.pathname.startsWith("/runs/")) return serveRunObject(env, url.pathname);
-    return env.ASSETS.fetch(request);
+    if (route) return withSecurityHeaders(await serveArtifact(env, route));
+    if (url.pathname.startsWith("/runs/")) {
+      return withSecurityHeaders(await serveRunObject(env, url.pathname));
+    }
+    return withSecurityHeaders(await env.ASSETS.fetch(request));
   },
 };
