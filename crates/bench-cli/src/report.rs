@@ -270,11 +270,12 @@ fn report_model(
         "generated_at": Utc::now(),
         "defaults": {
             "primary_metric": "harness_call_gas",
-            "baseline_profile": SOL_VIAIR_CODEGEN,
+            "baseline_profile": SOL_CODEGEN_BASELINE,
             "comparison_profile": VYPER_GAS_CODEGEN,
             "tie_band": SCORECARD_TIE_BAND,
             "production_profiles": {
-                "solidity": SOL_VIAIR_CODEGEN,
+                "solidity": SOL_CODEGEN_BASELINE,
+                "solidity_viair": SOL_VIAIR_CODEGEN,
                 "vyper": VYPER_GAS_CODEGEN,
                 "vyper_experimental": VYPER_GAS_VENOM_CODEGEN,
                 "vyper_alpha": VYPER_ALPHA_GAS_CODEGEN
