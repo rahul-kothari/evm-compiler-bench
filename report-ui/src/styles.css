@@ -863,6 +863,7 @@ select.knob option { background: var(--bg-elev); color: var(--fg); }
   gap: 6px;
 }
 .chip {
+  background: transparent;
   border: 1px solid var(--line);
   color: var(--fg-2);
   display: inline-flex;
@@ -874,6 +875,14 @@ select.knob option { background: var(--bg-elev); color: var(--fg); }
 }
 .chip.muted {
   color: var(--fg-4);
+}
+.chip-toggle {
+  cursor: pointer;
+}
+.chip-toggle:hover,
+.chip-toggle:focus-visible {
+  border-color: var(--fg-3);
+  color: var(--fg-2);
 }
 
 .rel-row {

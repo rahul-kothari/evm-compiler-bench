@@ -726,11 +726,17 @@ function MoversCard({ rows }) {
 // Reliability
 // ============================================================
 function InlineList({ items, max = 6, formatter = x => x }) {
-  const shown = items.slice(0, max);
+  const [expanded, setExpanded] = useState(false);
+  const shown = expanded ? items : items.slice(0, max);
   const rest = items.length - shown.length;
   return React.createElement(React.Fragment, null,
-    shown.map(item => React.createElement('span', { key: item, className: 'chip' }, formatter(item))),
-    rest > 0 ? React.createElement('span', { className: 'chip muted' }, `+${rest} more`) : null
+    shown.map((item, index) => React.createElement('span', { key: `${item}-${index}`, className: 'chip' }, formatter(item))),
+    items.length > max ? React.createElement('button', {
+      type: 'button',
+      className: 'chip muted chip-toggle',
+      'aria-expanded': expanded ? 'true' : 'false',
+      onClick: () => setExpanded(value => !value),
+    }, expanded ? 'show less' : `+${rest} more`) : null
   );
 }
 
