@@ -195,6 +195,7 @@
       if (config === 'noopt') return 'solc-latest-noopt';
     }
     if (p.language === 'vyper'){
+      if (config === 'default') return `vyper-latest-gas${venom}`;
       return `vyper-latest-${config}${venom}`;
     }
     return undefined;
@@ -206,6 +207,7 @@
     for (const p of D.profiles){
       const baseline = latestBaselineProfile(p);
       if (!baseline || baseline === p.id || !ids.has(baseline)) continue;
+      const baselineProfile = D.profiles.find(candidate => candidate.id === baseline);
       const cmp = compareProfiles(D.rows, baseline, p.id, metric, suiteSet);
       const s = summarize(cmp);
       if (!s.geomean) continue;
@@ -215,6 +217,9 @@
         venom: !!p.experimental_codegen,
         profile: p.id,
         label: p.label,
+        baseline,
+        baselineLabel: baselineProfile?.label || baseline,
+        baselineConfig: baselineProfile ? profileOptimizer(baselineProfile) : undefined,
         version: p.compiler_version,
         versionKey: profileVersionKey(p),
         deltaPct: (s.geomean - 1) * 100,

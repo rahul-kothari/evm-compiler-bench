@@ -179,12 +179,13 @@ import React from "react";
             }),
             points.map((p, k) => {
               const i = allVersions.indexOf(p.versionKey);
+              const baseline = p.baselineLabel || `latest ${p.baselineConfig || cfg}`;
               return React.createElement('g', { key: 'p'+k },
                 React.createElement('circle', {
                   cx: xOf(i), cy: yOf(p.deltaPct), r: 3.5,
                   fill: 'var(--bg)', stroke: color, strokeWidth: 1.5,
                 }),
-                React.createElement('title', {}, `${p.label}\n${p.deltaPct.toFixed(2)}% vs latest ${cfg}`)
+                React.createElement('title', {}, `${p.label}\n${p.deltaPct.toFixed(2)}% vs ${baseline}`)
               );
             })
           );

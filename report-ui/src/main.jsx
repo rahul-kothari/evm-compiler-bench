@@ -382,7 +382,7 @@ function VersionEvolution({ metric }) {
         React.createElement('div', { className: 'evo-title' },
           React.createElement('span', { className: 'lang-vy' }, 'Vyper')
         ),
-        React.createElement('div', { className: 'evo-axis' }, 'Δ vs latest · same optimize')
+        React.createElement('div', { className: 'evo-axis' }, 'Δ vs latest · comparable optimize')
       ),
       React.createElement(EvolutionChart, { points, language: 'vyper', height: 240 })
     )
@@ -897,8 +897,8 @@ function SectionVersions() {
     React.createElement('div', { className: 'section-head' },
       React.createElement('div', null,
         React.createElement('div', { className: 'section-eyebrow' }, '§ 03 · Versions over time'),
-        React.createElement('div', { className: 'section-title' }, 'Compiler versions, normalized to "latest, same config".'),
-        React.createElement('div', { className: 'section-sub' }, 'Each point is the geomean delta vs. the latest profile sharing the same language and config. Lines near zero mean the version moved the needle very little. Codegen-mode switches (viaIR, Venom) live in different lines.')
+        React.createElement('div', { className: 'section-title' }, 'Compiler versions, normalized to "latest, comparable config".'),
+        React.createElement('div', { className: 'section-sub' }, 'Each point is the geomean delta vs. the latest comparable profile. Lines near zero mean the version moved the needle very little. Vyper 0.2 default is compared to latest gas because modern optimize modes did not exist yet.')
       ),
       React.createElement('div', { style: { display: 'flex', gap: '14px', alignItems: 'center' } },
         React.createElement('div', { style: { fontFamily: 'var(--mono)', fontSize: '10px', letterSpacing: '0.14em', textTransform: 'uppercase', color: 'var(--fg-4)' } }, 'metric'),
