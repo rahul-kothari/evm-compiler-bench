@@ -969,12 +969,13 @@ function SectionMethodology() {
 // Footer
 // ============================================================
 function Footer() {
-  const m = Bench.D.manifest;
   return React.createElement('div', { className: 'shell' },
     React.createElement('div', { className: 'foot' },
-      React.createElement('div', null, `EVM Compiler Bench · run ${m?.run_id || '—'}`),
-      React.createElement('div', null, `${m?.environment?.tools?.forge?.split('\n')[0] || ''}`),
-      React.createElement('div', null, `commit ${(m?.environment?.git?.commit || '').slice(0, 10)}${m?.environment?.git?.dirty ? ' · dirty' : ''}`),
+      React.createElement('a', {
+        href: 'https://github.com/banteg/evm-compiler-bench',
+        rel: 'noreferrer',
+        target: '_blank',
+      }, 'banteg/evm-compiler-bench'),
     )
   );
 }
