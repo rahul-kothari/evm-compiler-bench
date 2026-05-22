@@ -294,7 +294,7 @@ function FindingsGrid() {
       React.createElement('div', null,
         React.createElement('div', { className: 'section-eyebrow' }, '§ 01 · The answer at a glance'),
         React.createElement('div', { className: 'section-title' }, 'Six findings from the run.'),
-        React.createElement('div', { className: 'section-sub' }, 'Each headline is a geomean delta across the entire comparable scenario surface. Hover any number for the underlying sample size.')
+        React.createElement('div', { className: 'section-sub' }, 'Each headline is a geomean delta across the comparable scenario surface; card headers show the row count.')
       ),
       React.createElement('div', { className: 'section-meta' }, 'Metric · Harness call gas + runtime bytes')
     ),
