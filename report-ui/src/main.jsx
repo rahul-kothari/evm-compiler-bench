@@ -251,7 +251,7 @@ function FindingsGrid() {
       tag: 'Finding 04',
       span: 4,
       headline: 'The optimizer is the single biggest lever in the whole run.',
-      body: 'No optimizer vs latest viaIR is the largest gap in the report: about +35% gas from the noopt side and roughly 2× the runtime bytecode.',
+      body: 'Optimizer settings move these numbers more than anything else here: noopt costs about +35% gas and roughly 2× runtime bytecode versus latest viaIR.',
       stat: HEADLINES.nooptGas.geomean,
       statLabel: 'gas cost without optimizer',
       altStat: HEADLINES.nooptSize.geomean,
