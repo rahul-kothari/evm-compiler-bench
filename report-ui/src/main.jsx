@@ -297,8 +297,7 @@ function FindingsGrid() {
         React.createElement('div', { className: 'section-eyebrow' }, '§ 01 · Summary'),
         React.createElement('div', { className: 'section-title' }, 'Six findings from this run.'),
         React.createElement('div', { className: 'section-sub' }, 'Each card reports a geometric-mean delta over comparable scenarios; card headers show the row count.')
-      ),
-      React.createElement('div', { className: 'section-meta' }, 'Primary: runtime gas · Secondary: runtime bytes')
+      )
     ),
     React.createElement('div', { className: 'stories' },
       cards.map((c, i) => {
@@ -999,8 +998,7 @@ function SectionReliability() {
         React.createElement('div', { className: 'section-eyebrow' }, '§ 05 · Reliability'),
         React.createElement('div', { className: 'section-title' }, 'Compile failures are first-class data.'),
         React.createElement('div', { className: 'section-sub' }, 'Profile comparisons include both successful artifacts and the benchmark shapes each compiler failed to build. Tracked here per profile.')
-      ),
-      React.createElement('div', { className: 'section-meta' }, `${Bench.D.summary.compile_failures} compile failures · ${(Bench.D.summary.failed_artifacts/Bench.D.summary.attempted_artifacts*100).toFixed(2)}%`)
+      )
     ),
     React.createElement(ReliabilityPanel)
   );
