@@ -479,13 +479,15 @@ function ProfilePicker({ title, selected, onChange }) {
     React.createElement('div', { className: 'lbl' }, title),
     React.createElement('div', { className: 'knobs' },
       React.createElement('div', { className: 'knob-l' }, 'Lang'),
-      React.createElement('select', {
-        className: 'knob', value: knobs.language,
-        onChange: e => chooseLang(e.target.value),
-      },
-        React.createElement('option', { value: 'solidity' }, 'Solidity'),
-        React.createElement('option', { value: 'vyper' }, 'Vyper'),
-      ),
+      React.createElement(SegmentedControl, {
+        name: `${title}-language`,
+        value: knobs.language,
+        options: [
+          { value: 'solidity', label: 'Solidity' },
+          { value: 'vyper', label: 'Vyper' },
+        ],
+        onChange: chooseLang,
+      }),
       React.createElement('div', { className: 'knob-l' }, 'Version'),
       React.createElement('select', {
         className: 'knob', value: knobs.versionKey,
