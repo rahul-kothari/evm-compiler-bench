@@ -265,7 +265,7 @@ function FindingsGrid() {
       stat: HEADLINES.solVsVyperGas.geomean,
       statLabel: 'gas (Vyper vs solc)',
       altStat: HEADLINES.solVsVyperSize.geomean,
-      altLabel: 'bytes (Vyper vs solc)',
+      altLabel: 'runtime bytes',
       altInvert: false,
       count: HEADLINES.solVsVyperGas.count,
     },
@@ -277,7 +277,7 @@ function FindingsGrid() {
       stat: HEADLINES.solVsVyperVenomGas.geomean,
       statLabel: 'harness gas (Vyper Venom vs solc viaIR)',
       altStat: HEADLINES.solVsVyperVenomSize.geomean,
-      altLabel: 'runtime bytes (Vyper Venom vs solc viaIR)',
+      altLabel: 'runtime bytes',
       count: HEADLINES.solVsVyperVenomGas.count,
     },
   ];
