@@ -141,6 +141,7 @@ function TopBar() {
         React.createElement('a', { href: '#versions' }, 'Versions'),
         React.createElement('a', { href: '#compare' }, 'Compare'),
         React.createElement('a', { href: '#scale' }, 'Scale'),
+        React.createElement('a', { href: '#configs' }, 'Configs'),
         React.createElement('a', { href: '#methodology' }, 'Methods'),
       ),
       React.createElement('div', { className: 'right' },
@@ -438,6 +439,17 @@ function ScaleStrip({ metric }) {
 // ============================================================
 // Interactive Comparator
 // ============================================================
+const CONFIG_EXPLAINERS = {
+  'solidity:noopt': 'Optimizer disabled; useful as a control, not a production setting.',
+  'solidity:legacy': 'Solidity legacy EVM codegen with optimizer runs=200.',
+  'solidity:viaIR': 'Solidity through the IR/Yul pipeline; often better optimized, slower to compile.',
+  'vyper:none': 'Vyper optimizer disabled.',
+  'vyper:default': 'Historical Vyper default where explicit optimize modes were not available.',
+  'vyper:gas': 'Vyper optimizer mode tuned for runtime gas.',
+  'vyper:codesize': 'Vyper optimizer mode tuned for smaller bytecode.',
+  venom: 'Experimental Vyper backend; orthogonal to the optimizer mode above.',
+};
+
 function SegmentedControl({ name, value, options, onChange }) {
   return React.createElement('fieldset', { className: 'segmented' },
     React.createElement('legend', { className: 'sr-only' }, name),
@@ -507,7 +519,11 @@ function ProfilePicker({ title, selected, onChange }) {
       React.createElement(SegmentedControl, {
         name: `${title}-optimizer`,
         value: knobs.optimizer,
-        options: facets.optimizers.map(o => ({ value: o, label: o })),
+        options: facets.optimizers.map(o => ({
+          value: o,
+          label: o,
+          title: CONFIG_EXPLAINERS[`${knobs.language}:${o}`] || '',
+        })),
         onChange: optimizer => choose({ optimizer }),
       }),
       knobs.language === 'vyper' && facets.supportsExperimental ? React.createElement(React.Fragment, null,
@@ -521,7 +537,7 @@ function ProfilePicker({ title, selected, onChange }) {
               value: 'on',
               label: 'on',
               disabled: !venomAvailable && !knobs.experimental,
-              title: venomAvailable ? '' : 'No Venom build for this version/config',
+              title: venomAvailable ? CONFIG_EXPLAINERS.venom : 'No Venom build for this version/config',
             },
           ],
           onChange: experimental => choose({ experimental: experimental === 'on' }),
@@ -874,6 +890,95 @@ function Methodology() {
   );
 }
 
+function CompilerConfigurations() {
+  const compilerMeta = (language, modes) => {
+    const profiles = Bench.D.profiles.filter(p => p.language === language);
+    const versions = new Set(profiles.map(p => p.compiler_version || Bench.profileVersionLabel(p)));
+    return {
+      profiles: profiles.length,
+      versions: versions.size,
+      modes: modes.length,
+      venom: profiles.filter(p => p.experimental_codegen).length,
+    };
+  };
+  const compilerConfigs = [
+    {
+      key: 'solidity',
+      compiler: 'Solidity',
+      engine: 'solc',
+      axis: 'Codegen axis',
+      meta: compilerMeta('solidity', ['noopt', 'legacy', 'viaIR']),
+      modes: [
+        ['noopt', '--no-optimize', CONFIG_EXPLAINERS['solidity:noopt']],
+        ['legacy', '--optimize=200', CONFIG_EXPLAINERS['solidity:legacy']],
+        ['viaIR', '--via-ir', CONFIG_EXPLAINERS['solidity:viaIR']],
+      ],
+    },
+    {
+      key: 'vyper',
+      compiler: 'Vyper',
+      engine: '',
+      axis: 'Optimizer axis',
+      meta: compilerMeta('vyper', ['none', 'gas', 'codesize']),
+      modes: [
+        ['none', 'no optimizer', CONFIG_EXPLAINERS['vyper:none']],
+        ['gas', '--optimize gas', CONFIG_EXPLAINERS['vyper:gas']],
+        ['codesize', '--optimize codesize', CONFIG_EXPLAINERS['vyper:codesize']],
+      ],
+      independent: ['Venom', '--experimental-codegen', CONFIG_EXPLAINERS.venom],
+    },
+  ];
+  return React.createElement('div', { className: 'config-glossary' },
+    React.createElement('div', { className: 'compiler-config-grid' },
+      compilerConfigs.map(group => React.createElement('div', { key: group.key, className: `compiler-config ${group.key}` },
+        React.createElement('div', { className: 'compiler-config-head' },
+          React.createElement('div', null,
+            React.createElement('div', { className: 'config-label' }, 'Compiler'),
+            React.createElement('div', { className: 'compiler-name' },
+              React.createElement('span', { className: `lang-${group.key === 'solidity' ? 'sol' : 'vy'}` }, group.compiler),
+              group.engine ? React.createElement(React.Fragment, null, ' · ', group.engine) : null,
+            )
+          ),
+          React.createElement('div', { className: 'config-count' },
+            `${group.meta.versions} versions · ${group.meta.modes} modes · ${group.meta.profiles} profiles`
+          )
+        ),
+        React.createElement('div', { className: 'axis-row' },
+          React.createElement('span', null, group.axis),
+        ),
+        React.createElement('div', { className: 'mode-grid' },
+          group.modes.map(([name, flag, body]) => React.createElement('div', { key: name, className: 'config-mode' },
+            React.createElement('div', { className: 'mode-top' },
+              React.createElement('span', { className: 'mode-name' }, name),
+              React.createElement('span', { className: 'mode-flag' }, flag),
+            ),
+            React.createElement('div', { className: 'body' }, body),
+          ))
+        ),
+        group.independent ? React.createElement('div', { className: 'independent-switch' },
+          React.createElement('div', { className: 'axis-row' },
+            React.createElement('span', null, 'Codegen backend'),
+          ),
+          React.createElement('div', { className: 'switch-card' },
+            React.createElement('div', { className: 'mode-top' },
+              React.createElement('span', { className: 'mode-name' }, group.independent[0]),
+              React.createElement('span', { className: 'mode-flag accent' }, group.independent[1]),
+            ),
+            React.createElement('div', { className: 'body' }, group.independent[2]),
+            React.createElement('div', { className: 'switch-formula' },
+              React.createElement('span', null, 'none | gas | codesize'),
+              React.createElement('span', null, '×'),
+              React.createElement('span', null, 'venom: off | on'),
+              React.createElement('span', null, '='),
+              React.createElement('span', null, '6 configs / version'),
+            )
+          )
+        ) : null,
+      ))
+    )
+  );
+}
+
 // ============================================================
 // Section with metric/suite local control + scorecards + version chart
 // ============================================================
@@ -962,7 +1067,7 @@ function SectionMethodology() {
   return React.createElement('section', { id: 'methodology', className: 'shell section' },
     React.createElement('div', { className: 'section-head' },
       React.createElement('div', null,
-        React.createElement('div', { className: 'section-eyebrow' }, '§ 07 · How to read this'),
+        React.createElement('div', { className: 'section-eyebrow' }, '§ 08 · How to read this'),
         React.createElement('div', { className: 'section-title' }, 'Methodology and caveats.'),
         React.createElement('div', { className: 'section-sub' }, 'A compact reference for units, aggregation, and scope behind the report numbers.')
       ),
@@ -985,6 +1090,19 @@ function SectionMethodology() {
   );
 }
 
+function SectionCompilerConfigurations() {
+  return React.createElement('section', { id: 'configs', className: 'shell section' },
+    React.createElement('div', { className: 'section-head' },
+      React.createElement('div', null,
+        React.createElement('div', { className: 'section-eyebrow' }, '§ 07 · Compiler configurations'),
+        React.createElement('div', { className: 'section-title' }, 'Compiler configurations.'),
+        React.createElement('div', { className: 'section-sub' }, 'A profile is a compiler version paired with exactly one codegen or optimizer mode. Vyper adds Venom as an independent switch.')
+      )
+    ),
+    React.createElement(CompilerConfigurations)
+  );
+}
+
 // ============================================================
 // Root
 // ============================================================
@@ -1001,6 +1119,7 @@ function App() {
     React.createElement(Comparator, { profileA, profileB, setProfileA, setProfileB }),
     React.createElement(SectionScale),
     React.createElement(SectionReliability),
+    React.createElement(SectionCompilerConfigurations),
     React.createElement(SectionMethodology),
   );
 }

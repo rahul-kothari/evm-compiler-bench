@@ -805,6 +805,145 @@ select.knob option { background: var(--bg-elev); color: var(--fg); }
   color: var(--fg-2);
 }
 
+.config-glossary {
+  margin-top: 20px;
+  border: 1px solid var(--line);
+  background: var(--bg-elev);
+}
+.config-glossary-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 22px 28px;
+  border-bottom: 1px solid var(--line);
+}
+.config-glossary .ttl {
+  color: var(--fg);
+  font-size: 16px;
+  font-weight: 500;
+}
+.config-glossary .body {
+  color: var(--fg-3);
+  font-size: 13px;
+  line-height: 1.5;
+}
+.compiler-config-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.compiler-config {
+  border-right: 1px solid var(--line);
+  min-width: 0;
+  padding: 28px;
+}
+.compiler-config:last-child { border-right: 0; }
+.compiler-config-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 22px;
+  padding-bottom: 22px;
+  border-bottom: 1px solid var(--line);
+}
+.config-label,
+.axis-row {
+  color: var(--fg-4);
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+.compiler-name {
+  color: var(--fg);
+  font-size: 24px;
+  font-weight: 500;
+  margin-top: 4px;
+}
+.compiler-name .lang-sol { color: var(--solidity); }
+.compiler-name .lang-vy { color: var(--vyper); }
+.config-count {
+  color: var(--fg-4);
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-align: right;
+  text-transform: uppercase;
+}
+.axis-row {
+  margin-top: 24px;
+}
+.mode-grid {
+  display: block;
+  margin-top: 12px;
+}
+.config-mode {
+  min-width: 0;
+  padding: 10px 0;
+}
+.mode-top {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+.mode-name {
+  color: var(--fg);
+  font-family: var(--mono);
+  font-size: 15px;
+  font-weight: 600;
+}
+.mode-flag {
+  border: 0;
+  color: var(--fg-4);
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: 0.04em;
+  padding: 0;
+  width: fit-content;
+}
+.mode-flag.accent {
+  border-color: var(--line);
+  color: var(--fg-3);
+}
+.config-mode .body,
+.switch-card .body {
+  color: var(--fg-3);
+  font-size: 13px;
+  line-height: 1.55;
+}
+.config-mode .body {
+  padding-top: 1px;
+}
+.independent-switch {
+  margin-top: 24px;
+}
+.switch-card {
+  margin-top: 12px;
+  padding: 0;
+}
+.switch-formula {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+  color: var(--fg-3);
+  font-family: var(--mono);
+  font-size: 12px;
+}
+.switch-formula span {
+  border: 0;
+  padding: 0;
+}
+.switch-formula span:nth-child(2),
+.switch-formula span:nth-child(4) {
+  border: 0;
+  color: var(--fg-4);
+  padding-inline: 0;
+}
+
 /* ---------- Reliability ---------- */
 .reliability-grid {
   display: grid;
@@ -1020,6 +1159,12 @@ select.knob option { background: var(--bg-elev); color: var(--fg); }
     margin-top: 12px;
     white-space: normal;
   }
+  .config-glossary-head {
+    display: block;
+  }
+  .config-glossary-head .body {
+    margin-top: 6px;
+  }
   .compare-bar { grid-template-columns: 1fr; position: static; }
   .compare-detail-grid { grid-template-columns: 1fr; }
   .compare-vs, .compare-divider { display: none; }
@@ -1062,6 +1207,32 @@ select.knob option { background: var(--bg-elev); color: var(--fg); }
   }
   .stat-row { grid-template-columns: 1fr; }
   .stat { border-right: 0; }
+  .compiler-config-grid { grid-template-columns: 1fr; }
+  .compiler-config {
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+  }
+  .compiler-config:last-child {
+    border-bottom: 0;
+  }
+  .compiler-config-head {
+    display: block;
+  }
+  .config-count {
+    margin-top: 10px;
+    text-align: left;
+  }
+  .mode-grid {
+    display: block;
+  }
+  .config-mode {
+    grid-template-columns: 1fr;
+    gap: 10px;
+    border-bottom: 1px solid var(--line);
+  }
+  .config-mode:last-child {
+    border-bottom: 0;
+  }
   .hero-strip { grid-template-columns: 1fr; }
   .hero-strip > div {
     border-right: 0;
