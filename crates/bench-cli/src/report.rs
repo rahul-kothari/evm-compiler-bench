@@ -18,20 +18,10 @@ use std::{
 };
 
 const SOL_CODEGEN_BASELINE: &str = "solc-latest-legacy-runs200";
-const SOL_NOOPT_CODEGEN: &str = "solc-latest-noopt";
 const SOL_VIAIR_CODEGEN: &str = "solc-latest-viair-runs200";
 const VYPER_GAS_CODEGEN: &str = "vyper-latest-gas";
 const VYPER_GAS_VENOM_CODEGEN: &str = "vyper-latest-gas-venom";
-const VYPER_CODESIZE_CODEGEN: &str = "vyper-latest-codesize";
-const VYPER_CODESIZE_VENOM_CODEGEN: &str = "vyper-latest-codesize-venom";
-const VYPER_NONE_CODEGEN: &str = "vyper-latest-none";
-const VYPER_NONE_VENOM_CODEGEN: &str = "vyper-latest-none-venom";
 const VYPER_ALPHA_GAS_CODEGEN: &str = "vyper-0.5.0a1-gas";
-const VYPER_ALPHA_GAS_VENOM_CODEGEN: &str = "vyper-0.5.0a1-gas-venom";
-const VYPER_ALPHA_CODESIZE_CODEGEN: &str = "vyper-0.5.0a1-codesize";
-const VYPER_ALPHA_CODESIZE_VENOM_CODEGEN: &str = "vyper-0.5.0a1-codesize-venom";
-const VYPER_ALPHA_NONE_CODEGEN: &str = "vyper-0.5.0a1-none";
-const VYPER_ALPHA_NONE_VENOM_CODEGEN: &str = "vyper-0.5.0a1-none-venom";
 const SCORECARD_TIE_BAND: f64 = 0.02;
 
 pub struct ReportPaths {
@@ -382,7 +372,7 @@ impl ProfileReportSummary {
         let settings = row.pointer("/compiler/settings");
         Self {
             id: profile_id.to_string(),
-            label: profile_short(profile_id),
+            label: profile_label(row),
             language: str_at(row, "/language").unwrap_or_default(),
             compiler_name: str_at(row, "/compiler/name").unwrap_or_default(),
             compiler_version: str_at(row, "/compiler/version").unwrap_or_default(),
@@ -981,33 +971,22 @@ fn failure_links_by_benchmark(root: &Path) -> Result<BTreeMap<String, Vec<String
     Ok(links)
 }
 
-fn profile_short(profile: &str) -> String {
-    let label = match profile {
-        SOL_CODEGEN_BASELINE => "solc legacy",
-        SOL_VIAIR_CODEGEN => "solc viaIR",
-        SOL_NOOPT_CODEGEN => "solc noopt",
-        VYPER_NONE_CODEGEN => "vyper none",
-        VYPER_GAS_CODEGEN => "vyper gas",
-        VYPER_CODESIZE_CODEGEN => "vyper codesize",
-        VYPER_NONE_VENOM_CODEGEN => "vyper none venom",
-        VYPER_GAS_VENOM_CODEGEN => "vyper gas venom",
-        VYPER_CODESIZE_VENOM_CODEGEN => "vyper codesize venom",
-        VYPER_ALPHA_NONE_CODEGEN => "vyper 0.5 none",
-        VYPER_ALPHA_GAS_CODEGEN => "vyper 0.5 gas",
-        VYPER_ALPHA_CODESIZE_CODEGEN => "vyper 0.5 codesize",
-        VYPER_ALPHA_NONE_VENOM_CODEGEN => "vyper 0.5 none venom",
-        VYPER_ALPHA_GAS_VENOM_CODEGEN => "vyper 0.5 gas venom",
-        VYPER_ALPHA_CODESIZE_VENOM_CODEGEN => "vyper 0.5 codesize venom",
-        _ => {
-            return profile
-                .replace("solc-", "solc ")
-                .replace("vyper-", "vyper ")
-                .replace("legacy-runs200", "legacy")
-                .replace("viair-runs200", "viaIR")
-                .replace('-', " ");
-        }
+fn profile_label(row: &serde_json::Value) -> String {
+    let compiler = str_at(row, "/compiler/name")
+        .or_else(|| str_at(row, "/language"))
+        .unwrap_or_else(|| "compiler".to_string());
+    let version = str_at(row, "/compiler/version").unwrap_or_else(|| "unknown".to_string());
+    let optimizer = match profile_optimizer_label(row).as_str() {
+        "legacy optimizer" => "legacy".to_string(),
+        other => other.to_string(),
     };
-    label.to_string()
+    let venom = row
+        .pointer("/compiler/settings/experimentalCodegen")
+        .and_then(|value| value.as_bool())
+        .unwrap_or(false)
+        .then_some(" + Venom")
+        .unwrap_or("");
+    format!("{compiler} {version} {optimizer}{venom}")
 }
 
 fn artifact_key_from_row(row: &serde_json::Value) -> String {

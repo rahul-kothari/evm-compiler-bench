@@ -119,7 +119,16 @@
   function profileById(id){ return D.profiles.find(p => p.id === id); }
   function profileLabel(id){
     const p = profileById(id);
-    return p?.label ?? id;
+    return p ? profileDisplayLabel(p) : id;
+  }
+  function compilerDisplayName(p){
+    if (p.language === 'vyper' || p.compiler_name === 'vyper') return 'Vyper';
+    return p.compiler_name || (p.language === 'solidity' ? 'solc' : p.language);
+  }
+  function profileDisplayLabel(p){
+    const opt = profileOptimizer(p);
+    const venom = p.experimental_codegen ? ' + Venom' : '';
+    return `${compilerDisplayName(p)} ${p.compiler_version || profileVersionKey(p)} ${opt}${venom}`;
   }
   function profileVersionKey(p){
     const prefix = p.language === 'solidity' ? 'solc-latest-' : 'vyper-latest-';
@@ -128,8 +137,7 @@
   }
   function profileVersionLabel(p){
     const key = profileVersionKey(p);
-    if (key === 'latest') return `latest (${p.compiler_version})`;
-    return key;
+    return p.compiler_version || key;
   }
   function versionRank(v){
     if (v === 'latest') return Infinity;
@@ -235,9 +243,9 @@
         config: versionAxisConfig(p),
         venom: !!p.experimental_codegen,
         profile: p.id,
-        label: p.label,
+        label: profileDisplayLabel(p),
         baseline,
-        baselineLabel: baselineProfile?.label || baseline,
+        baselineLabel: baselineProfile ? profileDisplayLabel(baselineProfile) : baseline,
         baselineConfig: baselineProfile ? versionAxisConfig(baselineProfile) : undefined,
         version: p.compiler_version,
         versionKey: profileVersionKey(p),
@@ -344,7 +352,7 @@
   function profileCompactLabel(id){
     const p = profileById(id);
     if (!p) return id;
-    const version = profileVersionKey(p) === 'latest' ? 'latest' : p.compiler_version;
+    const version = p.compiler_version || profileVersionKey(p);
     const opt = profileOptimizer(p);
     const venom = p.experimental_codegen ? ' venom' : '';
     return `${version} ${opt}${venom}`;
@@ -419,6 +427,7 @@
     defaultOptimizerForVersion, profileOptionExists,
     versionAxisRows, latestBaselineProfile,
     failureGroups, failureCompilerGroups, failureReason, profileCompactLabel,
+    profileDisplayLabel,
     fmtDelta, fmtPct, fmtNum, deltaTone, pctTone, median,
   };
 })();

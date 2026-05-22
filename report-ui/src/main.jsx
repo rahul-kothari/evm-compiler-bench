@@ -160,6 +160,9 @@ function Hero() {
   const m = Bench.D.manifest;
   const s = Bench.D.summary;
   const gen = new Date(Bench.D.generated_at);
+  const solcViaIR = Bench.profileLabel('solc-latest-viair-runs200');
+  const vyperGas = Bench.profileLabel('vyper-latest-gas');
+  const vyperVenom = Bench.profileLabel('vyper-latest-gas-venom');
 
   return React.createElement('section', { className: 'shell hero' },
     React.createElement('div', { className: 'hero-eyebrow' },
@@ -174,7 +177,7 @@ function Hero() {
     React.createElement('p', { className: 'hero-lede' },
       'Across ',
       React.createElement('strong', null, s.ok_rows.toLocaleString()),
-      ' successful scenario measurements, latest Vyper gas beats solc viaIR on runtime gas, and Vyper with Venom pushes the result further: cheaper gas, as well as smaller runtime bytecode. The compiler profile choice is now a first-order performance decision.'
+      ` successful scenario measurements, ${vyperGas} beats ${solcViaIR} on runtime gas, and ${vyperVenom} pushes the result further: cheaper gas, as well as smaller runtime bytecode. The compiler profile choice is now a first-order performance decision.`
     ),
 
     React.createElement('div', { className: 'hero-strip' },
@@ -210,12 +213,16 @@ function Hero() {
 // Headline findings grid (the "answer at a glance")
 // ============================================================
 function FindingsGrid() {
+  const solcViaIR = Bench.profileLabel('solc-latest-viair-runs200');
+  const solcNoopt = Bench.profileLabel('solc-latest-noopt');
+  const vyperGas = Bench.profileLabel('vyper-latest-gas');
+  const vyperVenom = Bench.profileLabel('vyper-latest-gas-venom');
   const cards = [
     {
       tag: 'Finding 01',
       span: 4,
       headline: 'Venom is the rare switch that pays off everywhere.',
-      body: 'Switching latest Vyper to --experimental-codegen ("Venom") shrinks runtime bytecode ~14% and gas ~5% — and still compiles faster than legacy. No tradeoff to weigh.',
+      body: `Switching ${vyperGas} to --experimental-codegen ("Venom") shrinks runtime bytecode ~14% and gas ~5% — and still compiles faster than legacy. No tradeoff to weigh.`,
       stat: HEADLINES.venomSize.geomean,
       statLabel: 'runtime bytes vs legacy codegen',
       altStat: HEADLINES.venomGas.geomean,
@@ -238,9 +245,9 @@ function FindingsGrid() {
       tag: 'Finding 03',
       span: 4,
       headline: 'Five years of solc releases barely touched runtime gas.',
-      body: 'Comparing solc 0.4 to latest on the same legacy pipeline moves runtime gas by only +0.3%. The big jumps come from codegen mode, not version number.',
+      body: 'Comparing solc 0.4.26 to solc 0.8.35 on the same legacy pipeline moves runtime gas by only +0.3%. The big jumps come from codegen mode, not version number.',
       stat: HEADLINES.solEra.geomean,
-      statLabel: 'gas: solc 0.4 → latest (legacy)',
+      statLabel: 'gas: solc 0.4.26 → 0.8.35 (legacy)',
       neutral: true,
       count: HEADLINES.solEra.count,
     },
@@ -248,7 +255,7 @@ function FindingsGrid() {
       tag: 'Finding 04',
       span: 4,
       headline: 'The optimizer is the single biggest lever in the whole run.',
-      body: 'Optimizer settings move these numbers more than anything else here: noopt costs about +35% gas and roughly 2× runtime bytecode versus latest viaIR.',
+      body: `Optimizer settings move these numbers more than anything else here: ${solcNoopt} costs about +35% gas and roughly 2× runtime bytecode versus ${solcViaIR}.`,
       stat: HEADLINES.nooptGas.geomean,
       statLabel: 'gas cost without optimizer',
       altStat: HEADLINES.nooptSize.geomean,
@@ -271,7 +278,7 @@ function FindingsGrid() {
       tag: 'Finding 06',
       span: 4,
       headline: 'Turn on Venom and the tradeoff disappears — Vyper wins both.',
-      body: 'With Venom enabled, latest Vyper is cheaper than latest solc viaIR on harness gas and stripped runtime bytecode. Missing Venom compile rows are excluded, not counted as wins.',
+      body: `With Venom enabled, ${vyperVenom} is cheaper than ${solcViaIR} on harness gas and stripped runtime bytecode. Missing Venom compile rows are excluded, not counted as wins.`,
       stat: HEADLINES.solVsVyperVenomGas.geomean,
       statLabel: 'harness gas (Vyper Venom vs solc viaIR)',
       altStat: HEADLINES.solVsVyperVenomSize.geomean,
@@ -372,7 +379,7 @@ function VersionEvolution({ metric }) {
           React.createElement('span', { className: 'lang-sol' }, 'Solidity'),
           React.createElement('span', { style: { color: 'var(--fg-3)' } }, ' / solc')
         ),
-        React.createElement('div', { className: 'evo-axis' }, 'Δ vs latest · same codegen')
+        React.createElement('div', { className: 'evo-axis' }, 'Δ vs newest · same codegen')
       ),
       React.createElement(EvolutionChart, { points, language: 'solidity', height: 240 })
     ),
@@ -381,7 +388,7 @@ function VersionEvolution({ metric }) {
         React.createElement('div', { className: 'evo-title' },
           React.createElement('span', { className: 'lang-vy' }, 'Vyper')
         ),
-        React.createElement('div', { className: 'evo-axis' }, 'Δ vs latest · comparable optimize')
+        React.createElement('div', { className: 'evo-axis' }, 'Δ vs newest · comparable optimize')
       ),
       React.createElement(EvolutionChart, { points, language: 'vyper', height: 240 })
     )
@@ -520,7 +527,7 @@ function ProfilePicker({ title, selected, onChange }) {
       ) : null,
     ),
     React.createElement('div', { style: { marginTop: '12px', fontFamily: 'var(--mono)', fontSize: '10.5px', color: 'var(--fg-4)' } },
-      React.createElement('code', null, p.id))
+      React.createElement('code', { title: p.id }, Bench.profileLabel(p.id)))
   );
 }
 
@@ -549,12 +556,12 @@ function Comparator({ profileA, profileB, setProfileA, setProfileB }) {
   const profB = Bench.profileById(profileB);
 
   const presets = [
-    ['solc-latest-viair-runs200', 'vyper-latest-gas',         'solc viaIR ↔ Vyper gas'],
-    ['solc-latest-viair-runs200', 'vyper-latest-gas-venom',   'solc viaIR ↔ Vyper Venom'],
-    ['solc-latest-legacy-runs200','solc-latest-viair-runs200','solc legacy ↔ viaIR'],
-    ['vyper-latest-gas',          'vyper-latest-gas-venom',   'Vyper: legacy ↔ Venom'],
-    ['solc-0.4.26-legacy-runs200','solc-latest-legacy-runs200','solc 0.4 → latest'],
-    ['vyper-0.2.16-default',      'vyper-latest-gas',         'Vyper 0.2 → latest'],
+    ['solc-latest-viair-runs200', 'vyper-latest-gas',         `${Bench.profileLabel('solc-latest-viair-runs200')} ↔ ${Bench.profileLabel('vyper-latest-gas')}`],
+    ['solc-latest-viair-runs200', 'vyper-latest-gas-venom',   `${Bench.profileLabel('solc-latest-viair-runs200')} ↔ ${Bench.profileLabel('vyper-latest-gas-venom')}`],
+    ['solc-latest-legacy-runs200','solc-latest-viair-runs200',`${Bench.profileLabel('solc-latest-legacy-runs200')} ↔ ${Bench.profileLabel('solc-latest-viair-runs200')}`],
+    ['vyper-latest-gas',          'vyper-latest-gas-venom',   `${Bench.profileLabel('vyper-latest-gas')} ↔ ${Bench.profileLabel('vyper-latest-gas-venom')}`],
+    ['solc-0.4.26-legacy-runs200','solc-latest-legacy-runs200',`${Bench.profileLabel('solc-0.4.26-legacy-runs200')} ↔ ${Bench.profileLabel('solc-latest-legacy-runs200')}`],
+    ['vyper-0.2.16-default',      'vyper-latest-gas',         `${Bench.profileLabel('vyper-0.2.16-default')} ↔ ${Bench.profileLabel('vyper-latest-gas')}`],
   ];
 
   const totalBuilt = (profA?.successful_artifacts ?? 0) + (profB?.successful_artifacts ?? 0);
@@ -610,7 +617,7 @@ function Comparator({ profileA, profileB, setProfileA, setProfileB }) {
         React.createElement('div', { className: 'k' }, 'Geomean Δ'),
         React.createElement('div', { className: `v ${agg.geomean == null ? 'tie' : (agg.geomean < 1 - tieBand ? 'good' : agg.geomean > 1 + tieBand ? 'bad' : 'tie')}` },
           Bench.fmtDelta(agg.geomean)),
-        React.createElement('div', { className: 'sub' }, `${profB?.label || profileB} vs ${profA?.label || profileA}`)
+        React.createElement('div', { className: 'sub' }, `${Bench.profileLabel(profileB)} vs ${Bench.profileLabel(profileA)}`)
       ),
       React.createElement('div', { className: 'stat' },
         React.createElement('div', { className: 'k' }, 'Median Δ'),
@@ -870,8 +877,6 @@ function Methodology() {
 // ============================================================
 function SectionSuites({ profileA, profileB }) {
   const [metric, setMetric] = useState('harness_call_gas');
-  const profA = Bench.profileById(profileA);
-  const profB = Bench.profileById(profileB);
   return React.createElement('section', { id: 'suites', className: 'shell section', 'data-screen-label': '02 Suites' },
     React.createElement('div', { className: 'section-head' },
       React.createElement('div', null,
@@ -886,9 +891,9 @@ function SectionSuites({ profileA, profileB }) {
     ),
     React.createElement('div', { style: { display: 'flex', gap: '12px', marginBottom: '20px', fontFamily: 'var(--mono)', fontSize: '11px', color: 'var(--fg-3)', letterSpacing: '0.06em', alignItems: 'center', flexWrap: 'wrap' } },
       React.createElement('span', null, 'Showing ',
-        React.createElement('span', { style: { color: 'var(--fg)' } }, profB?.label || profileB),
+        React.createElement('span', { style: { color: 'var(--fg)' } }, Bench.profileLabel(profileB)),
         ' vs ',
-        React.createElement('span', { style: { color: 'var(--fg)' } }, profA?.label || profileA),
+        React.createElement('span', { style: { color: 'var(--fg)' } }, Bench.profileLabel(profileA)),
       ),
       React.createElement('span', { style: { color: 'var(--fg-4)' } }, '·'),
       React.createElement('a', { href: '#compare', style: { color: 'var(--fg-3)' } }, 'change in comparator ↓')
@@ -903,8 +908,8 @@ function SectionVersions() {
     React.createElement('div', { className: 'section-head' },
       React.createElement('div', null,
         React.createElement('div', { className: 'section-eyebrow' }, '§ 03 · Versions over time'),
-        React.createElement('div', { className: 'section-title' }, 'Compiler versions, normalized to "latest, comparable config".'),
-        React.createElement('div', { className: 'section-sub' }, 'Each point is the geomean delta vs. the latest comparable profile. Lines near zero mean the version moved the needle very little. For chart continuity, Vyper 0.2 default is grouped with none because modern optimize modes did not exist yet.')
+        React.createElement('div', { className: 'section-title' }, 'Compiler versions, normalized to newest comparable config.'),
+        React.createElement('div', { className: 'section-sub' }, 'Each point is the geomean delta vs. the newest comparable profile. Lines near zero mean the version moved the needle very little. For chart continuity, Vyper 0.2 default is grouped with none because modern optimize modes did not exist yet.')
       ),
       React.createElement('div', { style: { display: 'flex', gap: '14px', alignItems: 'center' } },
         React.createElement('div', { style: { fontFamily: 'var(--mono)', fontSize: '10px', letterSpacing: '0.14em', textTransform: 'uppercase', color: 'var(--fg-4)' } }, 'metric'),

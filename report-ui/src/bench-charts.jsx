@@ -101,6 +101,8 @@ import React from "react";
     // Stable version order
     const allVersions = [...new Set(pts.map(p => p.versionKey))]
       .sort((a,b) => Bench.versionRank(a) - Bench.versionRank(b));
+    const versionLabels = new Map();
+    for (const p of pts) versionLabels.set(p.versionKey, p.version);
     if (!allVersions.length) {
       return React.createElement('div', { ref, style: { padding: '32px 0', color: 'var(--fg-3)', fontFamily: 'var(--mono)', fontSize: 11 } }, 'No version data.');
     }
@@ -161,7 +163,7 @@ import React from "react";
           x: xOf(i), y: height - padB + 14,
           fontSize: 9.5, fontFamily: 'var(--mono)',
           fill: 'var(--fg-3)', textAnchor: 'middle',
-        }, v)),
+        }, versionLabels.get(v) || v)),
         // lines + points by config
         configs.map(cfg => {
           const points = byConfig.get(cfg)
@@ -179,7 +181,7 @@ import React from "react";
             }),
             points.map((p, k) => {
               const i = allVersions.indexOf(p.versionKey);
-              const baseline = p.baselineLabel || `latest ${p.baselineConfig || cfg}`;
+              const baseline = p.baselineLabel || `newest ${p.baselineConfig || cfg}`;
               return React.createElement('g', { key: 'p'+k },
                 React.createElement('circle', {
                   cx: xOf(i), cy: yOf(p.deltaPct), r: 3.5,
