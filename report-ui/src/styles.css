@@ -998,7 +998,7 @@ select.knob option { background: var(--bg-elev); color: var(--fg); }
 }
 
 @media (max-width: 959px) {
-  body .shell { padding: 0 20px; }
+  body .shell { padding-inline: 20px; }
   .topbar {
     flex-wrap: wrap;
     gap: 14px 20px;
@@ -1036,11 +1036,42 @@ select.knob option { background: var(--bg-elev); color: var(--fg); }
 }
 
 @media (max-width: 720px) {
-  .stories .story { grid-column: span 12; border-right: 0; }
+  .section {
+    padding-block: 64px;
+  }
+  .section + .section {
+    margin-top: 12px;
+  }
+  .stories .story,
+  .stories .story.span-6,
+  .stories .story.span-12 {
+    grid-column: span 12;
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+  }
+  .stories .story:nth-child(2n),
+  .stories .story:nth-child(3n) {
+    border-right: 0;
+  }
+  .stories .story:nth-last-child(-n+3) {
+    border-bottom: 1px solid var(--line);
+  }
+  .stories .story:last-child {
+    border-bottom: 0;
+  }
   .stat-row { grid-template-columns: 1fr; }
   .stat { border-right: 0; }
   .hero-strip { grid-template-columns: 1fr; }
-  .hero-strip > div { border-right: 0; }
+  .hero-strip > div {
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+  }
+  .hero-strip > div:nth-last-child(-n+2) {
+    border-bottom: 1px solid var(--line);
+  }
+  .hero-strip > div:last-child {
+    border-bottom: 0;
+  }
   .distro-row { grid-template-columns: 130px 1fr 60px; }
   body .failure-main,
   body .compiler-failure-top {
