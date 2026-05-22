@@ -929,7 +929,6 @@ select.knob option { background: var(--bg-elev); color: var(--fg); }
   font-family: var(--mono);
   font-size: 11px;
   letter-spacing: 0.08em;
-  text-transform: uppercase;
   border-top: 1px solid var(--line);
   margin-top: 80px;
   display: flex;
