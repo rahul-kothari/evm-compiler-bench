@@ -326,12 +326,13 @@ function SuiteScorecards({ profileA, profileB, metric }) {
     Bench.compareProfiles(Bench.D.rows, profileA, profileB, metric),
     [profileA, profileB, metric]
   );
-  const bySuite = useMemo(() => Bench.bySuite(rows), [rows]);
+  const tieBand = Bench.tieBandForMetric(metric);
+  const bySuite = useMemo(() => Bench.bySuite(rows, tieBand), [rows, tieBand]);
 
   return React.createElement('div', { className: 'suite-grid' },
     bySuite.map((s, i) => {
       const pct = s.geomean == null ? null : (s.geomean - 1) * 100;
-      const tone = pct == null ? 'tie' : pct < -2 ? 'good' : pct > 2 ? 'bad' : 'tie';
+      const tone = pct == null ? 'tie' : pct < -tieBand * 100 ? 'good' : pct > tieBand * 100 ? 'bad' : 'tie';
       const total = s.count || 1;
       return React.createElement('div', { key: i, className: 'suite-card' },
         React.createElement('div', { className: 'nm' }, SUITES[s.suite].label + ' Suite'),
@@ -544,7 +545,8 @@ function Comparator({ profileA, profileB, setProfileA, setProfileB }) {
     Bench.compareProfiles(Bench.D.rows, profileA, profileB, metric, suiteFilter),
     [profileA, profileB, metric, suiteFilter]
   );
-  const agg = useMemo(() => Bench.summarize(cmp), [cmp]);
+  const tieBand = Bench.tieBandForMetric(metric);
+  const agg = useMemo(() => Bench.summarize(cmp, tieBand), [cmp, tieBand]);
   const profA = Bench.profileById(profileA);
   const profB = Bench.profileById(profileB);
 
@@ -567,7 +569,7 @@ function Comparator({ profileA, profileB, setProfileA, setProfileB }) {
         React.createElement('div', { className: 'section-title' }, 'Head-to-head, scenario by scenario.'),
         React.createElement('div', { className: 'section-sub' }, 'Comparisons match on suite/benchmark/scenario/state — different compilers, identical surface. Negative deltas favor the compared profile.'),
       ),
-      React.createElement('div', { className: 'section-meta' }, `tie band ±${(Bench.D.defaults.tie_band*100).toFixed(0)}%`)
+      React.createElement('div', { className: 'section-meta' }, `${metric === 'compile_wall_ms' ? 'tie band' : 'materiality band'} ±${(tieBand*100).toFixed(1)}%`)
     ),
 
     React.createElement('div', { className: 'compare-bar' },
@@ -608,7 +610,7 @@ function Comparator({ profileA, profileB, setProfileA, setProfileB }) {
     React.createElement('div', { className: 'stat-row' },
       React.createElement('div', { className: 'stat' },
         React.createElement('div', { className: 'k' }, 'Geomean Δ'),
-        React.createElement('div', { className: `v ${agg.geomean == null ? 'tie' : (agg.geomean < 0.98 ? 'good' : agg.geomean > 1.02 ? 'bad' : 'tie')}` },
+        React.createElement('div', { className: `v ${agg.geomean == null ? 'tie' : (agg.geomean < 1 - tieBand ? 'good' : agg.geomean > 1 + tieBand ? 'bad' : 'tie')}` },
           Bench.fmtDelta(agg.geomean)),
         React.createElement('div', { className: 'sub' }, `${profB?.label || profileB} vs ${profA?.label || profileA}`)
       ),
@@ -658,15 +660,15 @@ function Comparator({ profileA, profileB, setProfileA, setProfileB }) {
         )
       ),
       React.createElement('div', { className: 'compare-detail-side' },
-        React.createElement(BySuiteCard, { rows: cmp }),
+        React.createElement(BySuiteCard, { rows: cmp, tieBand }),
         React.createElement(MoversCard, { rows: cmp }),
       )
     )
   );
 }
 
-function BySuiteCard({ rows }) {
-  const split = Bench.bySuite(rows);
+function BySuiteCard({ rows, tieBand }) {
+  const split = Bench.bySuite(rows, tieBand);
   return React.createElement('div', { className: 'card' },
     React.createElement('div', { className: 'card-head' },
       React.createElement('div', { className: 'card-title' }, 'By suite'),
@@ -683,7 +685,7 @@ function BySuiteCard({ rows }) {
       ),
       React.createElement('tbody', null,
         split.map(s => {
-          const tone = s.geomean == null ? 'tie' : s.geomean < 0.98 ? 'good' : s.geomean > 1.02 ? 'bad' : 'tie';
+          const tone = s.geomean == null ? 'tie' : s.geomean < 1 - tieBand ? 'good' : s.geomean > 1 + tieBand ? 'bad' : 'tie';
           return React.createElement('tr', { key: s.suite },
             React.createElement('td', null, SUITES[s.suite].label),
             React.createElement('td', { className: `num delta ${tone}` }, Bench.fmtDelta(s.geomean)),
@@ -836,8 +838,8 @@ function Methodology() {
     },
     {
       tag: 'D',
-      title: 'Tie band ±2%',
-      body: 'A 2% band around 1.0× is treated as a tie. The window covers measurement jitter and within-noise differences across versions.'
+      title: 'Metric-specific bands',
+      body: 'Gas and bytecode use a ±0.5% materiality band for W/T/L counts. Compile time keeps a provisional ±2% noise band until a higher-sample timing run replaces it.'
     },
     {
       tag: 'E',

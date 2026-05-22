@@ -74,7 +74,21 @@
     return out.sort((a,b) => Math.abs(b.deltaPct) - Math.abs(a.deltaPct));
   }
 
-  function summarize(rows, tieBand = 0.02){
+  function defaultTieBand(){
+    return D.defaults?.tie_band ?? 0.02;
+  }
+  function tieBandForMetric(metric){
+    switch(metric){
+      case 'harness_call_gas':
+      case 'internal_create_gas':
+      case 'runtime_bytes_stripped':
+        return 0.005;
+      default:
+        return defaultTieBand();
+    }
+  }
+
+  function summarize(rows, tieBand = defaultTieBand()){
     const ratios = rows.map(r => r.ratio).filter(r => r > 0);
     const geomean = ratios.length ? Math.exp(ratios.reduce((s,r)=>s+Math.log(r),0)/ratios.length) : null;
     let cheaper=0, tie=0, costlier=0;
@@ -398,7 +412,7 @@
     D,
     METRICS, SUITES,
     valueAt, scenarioKey, scenarioLabel,
-    compareProfiles, summarize, bySuite,
+    compareProfiles, summarize, bySuite, tieBandForMetric,
     profileById, profileLabel, profileKnobs, profileVersionKey, profileVersionLabel,
     profileOptimizer, resolveProfile, defaultProfileForLanguage,
     versionRank, optimizerRank, profileFacets, profilesByLang,
