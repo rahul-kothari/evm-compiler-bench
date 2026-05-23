@@ -20,6 +20,10 @@ Production Worker deployments use `BENCH_CHANNEL=prod`. Dev deployments use
 `BENCH_CHANNEL=dev`, either through the `dev` Wrangler environment or the
 Cloudflare branch environment variable for the `dev` branch.
 
+The Worker also treats `dev-evm-compiler-bench.banteeg.workers.dev` as the dev
+channel, so Cloudflare branch previews keep reading dev result data even when
+they inherit top-level production vars.
+
 ## Local Result Publish
 
 After a local benchmark run:

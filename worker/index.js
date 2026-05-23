@@ -1,5 +1,6 @@
 const DEFAULT_R2_PREFIX = "evm-compiler-bench";
 const DEFAULT_CHANNEL = "prod";
+const DEV_PREVIEW_HOST = "dev-evm-compiler-bench.banteeg.workers.dev";
 const HSTS = "max-age=31536000; includeSubDomains";
 
 const DATA_ROUTES = new Map([
@@ -44,9 +45,9 @@ function notFound(message) {
   return jsonResponse({ error: message }, { status: 404, cacheControl: "no-store" });
 }
 
-async function latestManifest(env) {
+async function latestManifest(env, url) {
   const prefix = r2Prefix(env);
-  const channel = resultChannel(env);
+  const channel = resultChannel(env, url);
   const object = await env.RESULTS.get(`${prefix}/channels/${channel}/latest.json`);
   if (object) return object.json();
 
@@ -77,8 +78,8 @@ function objectResponse(object, cacheControl, artifact = {}) {
   return new Response(object.body, { headers });
 }
 
-async function serveArtifact(env, artifactName) {
-  const latest = await latestManifest(env);
+async function serveArtifact(env, artifactName, url) {
+  const latest = await latestManifest(env, url);
   if (!latest) return notFound("No published benchmark run found.");
   if (artifactName === "latest") {
     return jsonResponse(latest, { cacheControl: "public, max-age=60" });
@@ -93,8 +94,8 @@ async function serveArtifact(env, artifactName) {
   return objectResponse(object, "public, max-age=60, must-revalidate", artifact);
 }
 
-async function serveRunObject(env, pathname) {
-  const latest = await latestManifest(env);
+async function serveRunObject(env, pathname, url) {
+  const latest = await latestManifest(env, url);
   const key = `${r2Prefix(env)}${pathname}`;
   const object = await env.RESULTS.get(key);
   if (!object) return notFound(`No R2 object at ${key}.`);
@@ -106,8 +107,16 @@ function r2Prefix(env) {
   return stripSlashes(env.R2_PREFIX || DEFAULT_R2_PREFIX);
 }
 
-function resultChannel(env) {
+function resultChannel(env, url) {
+  const hostChannel = channelFromHost(url);
+  if (hostChannel) return hostChannel;
   return normalizeChannel(env.BENCH_CHANNEL || env.EVM_BENCH_CHANNEL || DEFAULT_CHANNEL);
+}
+
+function channelFromHost(url) {
+  const host = url?.hostname?.toLowerCase();
+  if (host === DEV_PREVIEW_HOST) return "dev";
+  return null;
 }
 
 function stripSlashes(value) {
@@ -128,9 +137,9 @@ export default {
     }
 
     const route = DATA_ROUTES.get(url.pathname);
-    if (route) return withSecurityHeaders(await serveArtifact(env, route));
+    if (route) return withSecurityHeaders(await serveArtifact(env, route, url));
     if (url.pathname.startsWith("/runs/")) {
-      return withSecurityHeaders(await serveRunObject(env, url.pathname));
+      return withSecurityHeaders(await serveRunObject(env, url.pathname, url));
     }
     return withSecurityHeaders(await env.ASSETS.fetch(request));
   },
